@@ -306,32 +306,54 @@ const initializeDefaultConfigs = () => {
     setStoredData<InterestRateConfig[]>(STORAGE_KEYS.INTEREST_RATES, defaultInterest);
     defaultInterest.forEach((d) => syncToFirestore('interestRates', d.id, d));
   }
+
+  // Seed default admin if none exists so login is immediately accessible without registration
+  const admins = getStoredData<Admin[]>(STORAGE_KEYS.ADMINS, []);
+  if (admins.length === 0) {
+    const defaultAdmin: Admin = {
+      id: 'admin_default',
+      name: 'सुषांत भिशी व्यवस्थापक',
+      mobile: '9823056678',
+      email: 'sushant@gmail.com',
+      createdAt: new Date().toISOString(),
+    };
+    setStoredData(STORAGE_KEYS.ADMINS, [defaultAdmin]);
+    if (!localStorage.getItem('sb_admin_pass')) {
+      localStorage.setItem('sb_admin_pass', 'admin');
+    }
+    syncToFirestore('admins', defaultAdmin.id, defaultAdmin);
+  } else if (!localStorage.getItem('sb_admin_pass')) {
+    localStorage.setItem('sb_admin_pass', 'admin');
+  }
 };
 
 initializeDefaultConfigs();
 
 export const StorageService = {
   // Admin Operations
-  getAdmins: (): Admin[] => getStoredData<Admin[]>(STORAGE_KEYS.ADMINS, []),
-
-  hasAdmin: (): boolean => {
+  getAdmins: (): Admin[] => {
     const admins = getStoredData<Admin[]>(STORAGE_KEYS.ADMINS, []);
-    return admins.length > 0;
+    if (admins.length === 0) {
+      const defaultAdmin: Admin = {
+        id: 'admin_default',
+        name: 'सुषांत भिशी व्यवस्थापक',
+        mobile: '9823056678',
+        email: 'sushant@gmail.com',
+        createdAt: new Date().toISOString(),
+      };
+      setStoredData(STORAGE_KEYS.ADMINS, [defaultAdmin]);
+      if (!localStorage.getItem('sb_admin_pass')) {
+        localStorage.setItem('sb_admin_pass', 'admin');
+      }
+      return [defaultAdmin];
+    }
+    return admins;
   },
 
-  createAdmin: (admin: Omit<Admin, 'id' | 'createdAt'>): Admin => {
-    const admins = StorageService.getAdmins();
-    if (admins.length > 0) {
-      throw new Error('प्रशासक खाते आधीच अस्तित्वात आहे. फक्त एकच प्रशासक तयार करता येतो.');
-    }
-    const newAdmin: Admin = {
-      ...admin,
-      id: 'admin_' + Date.now(),
-      createdAt: new Date().toISOString(),
-    };
-    setStoredData(STORAGE_KEYS.ADMINS, [newAdmin]);
-    syncToFirestore('admins', newAdmin.id, newAdmin);
-    return newAdmin;
+  hasAdmin: (): boolean => true,
+
+  createAdmin: (_admin: Omit<Admin, 'id' | 'createdAt'>): Admin => {
+    throw new Error('नवीन प्रशासक नोंदणी बंद करण्यात आलेली आहे. थेट लॉगिन करा.');
   },
 
   updateAdmin: (id: string, updates: Partial<Admin>): Admin => {

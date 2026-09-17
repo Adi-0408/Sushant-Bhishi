@@ -1,11 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import {
-  UserCheck,
   Lock,
   Phone,
-  User,
-  Mail,
   ShieldCheck,
   CheckCircle2,
   Calendar,
@@ -15,26 +12,18 @@ import {
   EyeOff,
   ArrowRight,
   Sun,
-  Globe,
 } from 'lucide-react';
 
 export const LoginRegister: React.FC = () => {
-  const { hasAdminRegistered, login, registerAdmin } = useAuth();
+  const { login } = useAuth();
 
   // Login form state
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Register form state
-  const [name, setName] = useState('');
-  const [mobile, setMobile] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-
   const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+  const [successMsg] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [forgotPasswordMsg, setForgotPasswordMsg] = useState(false);
 
@@ -55,45 +44,6 @@ export const LoginRegister: React.FC = () => {
       }
     } catch {
       setError('प्रवेश करताना त्रुटी आली.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccessMsg('');
-
-    if (!name.trim() || !mobile.trim() || !email.trim() || !password) {
-      setError('कृपया सर्व आवश्यक माहिती भरा.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('पासवर्ड जुळत नाही. कृपया पासवर्ड पुन्हा तपासा.');
-      return;
-    }
-
-    if (mobile.length < 10) {
-      setError('मोबाईल क्रमांक चुकीचा आहे.');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      await registerAdmin({
-        name: name.trim(),
-        mobile: mobile.trim(),
-        email: email.trim(),
-        password,
-      });
-
-      setSuccessMsg('प्रशासकाचे खाते यशस्वीपणे तयार झाले आहे! कृपया आता आपला मोबाईल नंबर किंवा ईमेल आणि पासवर्ड टाकून प्रवेश करा.');
-      setLoginIdentifier(email.trim() || mobile.trim());
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'प्रशासक खाते तयार करताना त्रुटी आली.';
-      setError(message);
     } finally {
       setSubmitting(false);
     }
@@ -235,12 +185,10 @@ export const LoginRegister: React.FC = () => {
 
             <div className="mb-5">
               <h4 className="text-lg font-black text-slate-900">
-                {hasAdminRegistered ? 'प्रशासक प्रवेश' : 'प्रशासकाचे खाते तयार करा'}
+                प्रशासक प्रवेश
               </h4>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                {hasAdminRegistered
-                  ? 'आपल्या खात्यात लॉगिन करा आणि पुढे काम सुरू करा'
-                  : 'सिस्टीमचा पहिला प्रशासक तयार करा'}
+                आपल्या खात्यात लॉगिन करा आणि पुढे काम सुरू करा
               </p>
             </div>
 
@@ -257,186 +205,85 @@ export const LoginRegister: React.FC = () => {
               </div>
             )}
 
-            {!hasAdminRegistered ? (
-              /* Registration Form */
-              <form onSubmit={handleRegisterSubmit} className="space-y-4">
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center space-x-2">
-                  <ShieldCheck className="w-4 h-4 text-amber-700 flex-shrink-0" />
-                  <span>पहिली नोंदणी: सिस्टीमसाठी फक्त एकच प्रशासक तयार केला जाऊ शकतो.</span>
+            {/* Login Form */}
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-extrabold text-slate-800 mb-1">
+                  मोबाईल क्रमांक किंवा ईमेल <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={loginIdentifier}
+                    onChange={(e) => setLoginIdentifier(e.target.value)}
+                    placeholder="उदा. ९८२३०५६६७८ किंवा sushant@gmail.com"
+                    className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/40"
+                  />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    प्रशासकाचे नाव <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <User className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
-                    <input
-                      type="text"
-                      required
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="उदा. सुषांत भिशी प्रशासक"
-                      className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/50"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    ईमेल आयडी <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="उदा. sushant@gmail.com"
-                      className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/50"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    मोबाईल क्रमांक <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
-                    <input
-                      type="tel"
-                      required
-                      maxLength={10}
-                      value={mobile}
-                      onChange={(e) => setMobile(e.target.value)}
-                      placeholder="उदा. ९८२३०५६६७८"
-                      className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/50"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      पासवर्ड <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="पासवर्ड"
-                      className="w-full px-3 py-3 rounded-2xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/50"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      पुन्हा लिहा <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="पुन्हा पासवर्ड"
-                      className="w-full px-3 py-3 rounded-2xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/50"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full py-3.5 min-h-[44px] rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-sm transition-colors shadow-md flex items-center justify-center space-x-2 touch-target cursor-pointer"
-                >
-                  <UserCheck className="w-4 h-4" />
-                  <span>{submitting ? 'जतन होत आहे...' : 'खाते तयार करा'}</span>
-                </button>
-              </form>
-            ) : (
-              /* Login Form (Matching exact screenshot design) */
-              <form onSubmit={handleLoginSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-extrabold text-slate-800 mb-1">
-                    मोबाईल क्रमांक किंवा ईमेल <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
-                    <input
-                      type="text"
-                      required
-                      value={loginIdentifier}
-                      onChange={(e) => setLoginIdentifier(e.target.value)}
-                      placeholder="उदा. ९८२३०५६६७८ किंवा ईमेल"
-                      className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/40"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-extrabold text-slate-800 mb-1">
-                    पासवर्ड <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder="पासवर्ड टाका"
-                      className="w-full pl-10 pr-10 py-3 rounded-2xl border border-slate-200 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/40"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-2 top-2 p-2 text-slate-400 hover:text-slate-600 touch-target flex items-center justify-center cursor-pointer"
-                      aria-label="पासवर्ड दाखवा/लपवा"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex justify-end">
+              <div>
+                <label className="block text-xs font-extrabold text-slate-800 mb-1">
+                  पासवर्ड <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="पासवर्ड टाका"
+                    className="w-full pl-10 pr-10 py-3 rounded-2xl border border-slate-200 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/40"
+                  />
                   <button
                     type="button"
-                    onClick={() => setForgotPasswordMsg(true)}
-                    className="text-[11px] font-bold text-emerald-700 hover:underline"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-2 p-2 text-slate-400 hover:text-slate-600 touch-target flex items-center justify-center cursor-pointer"
+                    aria-label="पासवर्ड दाखवा/लपवा"
                   >
-                    पासवर्ड विसरलात?
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+              </div>
 
-                {forgotPasswordMsg && (
-                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs font-semibold">
-                    💡 पासवर्ड विसरल्यास प्रशासक JSON बॅकअप किंवा लोकल स्टोरेजद्वारे रिसेट करू शकतात.
-                  </div>
-                )}
-
-                {/* Primary Action Button (Exact Emerald Button from image) */}
+              <div className="flex justify-end">
                 <button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full py-3.5 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-sm transition-all shadow-md flex items-center justify-center space-x-2 cursor-pointer"
+                  type="button"
+                  onClick={() => setForgotPasswordMsg(!forgotPasswordMsg)}
+                  className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
                 >
-                  <span>{submitting ? 'तपासत आहे...' : 'प्रवेश करा'}</span>
-                  <ArrowRight className="w-4 h-4" />
+                  पासवर्ड विसरलात?
                 </button>
+              </div>
 
-                {/* Security Footer Notice (Exact Box from image) */}
-                <div className="mt-5 p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-100 text-slate-700 text-[11px] font-bold flex items-start space-x-3">
-                  <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <span className="text-slate-900 font-extrabold block">फक्त अधिकृत प्रशासकांनाच प्रवेश आहे.</span>
-                    <span className="text-slate-500 font-medium">खातेदारांसाठी स्वतंत्र लॉगिन नाही.</span>
-                  </div>
+              {forgotPasswordMsg && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs font-semibold">
+                  💡 डिफॉल्ट पासवर्ड <strong className="font-mono">admin</strong> आहे. आपण प्रोफाइल विभागात जाऊन पासवर्ड बदलू शकता.
                 </div>
-              </form>
-            )}
+              )}
+
+              {/* Primary Action Button */}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-3.5 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-sm transition-all shadow-md flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+              >
+                <span>{submitting ? 'तपासत आहे...' : 'प्रवेश करा'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              {/* Security Footer Notice */}
+              <div className="mt-5 p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-100 text-slate-700 text-[11px] font-bold flex items-start space-x-3">
+                <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-slate-900 font-extrabold block">फक्त अधिकृत प्रशासकांनाच प्रवेश आहे.</span>
+                  <span className="text-slate-500 font-medium">नवीन नोंदणी बंद आहे. थेट लॉगिन करा.</span>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
 
