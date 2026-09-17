@@ -85,10 +85,10 @@ export const CustomerList: React.FC = () => {
     return true;
   });
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!customerToDelete) return;
     try {
-      StorageService.deleteCustomer(customerToDelete.id);
+      await StorageService.deleteCustomer(customerToDelete.id);
       showToast(language === 'EN' ? 'Customer deleted successfully.' : 'खातेदाराची माहिती यशस्वीपणे हटवली.', 'success');
       refreshData();
       setCustomerToDelete(null);

@@ -247,12 +247,16 @@ export const CustomerDetail: React.FC = () => {
     });
   };
 
-  const handleDeleteEntryConfirm = () => {
+  const handleDeleteEntryConfirm = async () => {
     if (!deleteConfirmEntry) return;
-    StorageService.deleteCollectionEntry(deleteConfirmEntry.id);
-    showToast('जमा नोंद हटवली.', 'success');
-    refreshData();
-    setDeleteConfirmEntry(null);
+    try {
+      await StorageService.deleteCollectionEntry(deleteConfirmEntry.id);
+      showToast('जमा नोंद हटवली.', 'success');
+      refreshData();
+      setDeleteConfirmEntry(null);
+    } catch {
+      showToast('नोंद हटवताना त्रुटी आली.', 'error');
+    }
   };
 
   const handleSendManualSms = () => {

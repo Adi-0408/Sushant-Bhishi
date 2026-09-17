@@ -100,16 +100,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const clearAllData = async () => {
-    try {
-      await StorageService.clearAllData();
-      refreshData();
-      showToast('सर्व डेटा यशस्वीपणे हटवला गेला.', 'info');
-    } catch (err: any) {
-      showToast('डेटा हटवताना त्रुटी आली: ' + (err?.message || 'अज्ञात त्रुटी'), 'error');
-    }
-  };
-
   useEffect(() => {
     refreshData();
 
@@ -133,6 +123,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const clearAllData = async () => {
+    try {
+      await StorageService.clearAllData();
+      refreshData();
+      showToast(language === 'EN' ? 'All data cleared successfully.' : 'सर्व डेटा यशस्वीपणे हटवला गेला.', 'success');
+    } catch (err: any) {
+      showToast(language === 'EN' ? 'Error clearing data: ' + err?.message : 'डेटा हटवताना त्रुटी आली: ' + err?.message, 'error');
+    }
   };
 
   return (

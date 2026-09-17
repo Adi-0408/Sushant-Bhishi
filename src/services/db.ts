@@ -5,7 +5,6 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
-  writeBatch,
   query,
   where,
   getDoc,
@@ -406,14 +405,13 @@ export const StorageService = {
     return customers[index];
   },
 
-  deleteCustomer: (id: string): void => {
+  deleteCustomer: async (id: string): Promise<void> => {
     const customers = StorageService.getCustomers();
     const customerToDelete = customers.find((c) => c.id === id);
     const remainingCustomers = customers.filter((c) => c.id !== id);
     setStoredData(STORAGE_KEYS.CUSTOMERS, remainingCustomers);
-    deleteFromFirestore('customers', id, customerToDelete);
 
-    // Delete associated collections and loans
+    // Delete associated collections and loans locally
     const collections = StorageService.getCollections();
     const toDeleteColls = collections.filter(
       (c) => c.customerId === id || (customerToDelete && String(c.accountNumber) === String(customerToDelete.accountNumber))
@@ -422,57 +420,85 @@ export const StorageService = {
       (c) => c.customerId !== id && (!customerToDelete || String(c.accountNumber) !== String(customerToDelete.accountNumber))
     );
     setStoredData(STORAGE_KEYS.COLLECTIONS, remainingColls);
-    toDeleteColls.forEach((c) => {
-      const enriched = {
-        ...c,
-        customerName: c.customerName || customerToDelete?.name,
-        accountNumber: c.accountNumber || customerToDelete?.accountNumber,
-      };
-      deleteFromFirestore('collections', c.id, enriched);
-    });
-
-    // Directly sweep Firestore 'collections', 'loans', and 'loanPayments' to remove any leftover documents for this customer
-    if (customerToDelete) {
-      (async () => {
-        try {
-          const qCust = query(collection(db, 'collections'), where('customerId', '==', id));
-          const snapCust = await getDocs(qCust);
-          snapCust.forEach((d: any) => deleteDoc(d.ref).catch(() => {}));
-
-          if (customerToDelete.accountNumber) {
-            const qAcc = query(collection(db, 'collections'), where('accountNumber', '==', String(customerToDelete.accountNumber)));
-            const snapAcc = await getDocs(qAcc);
-            snapAcc.forEach((d: any) => deleteDoc(d.ref).catch(() => {}));
-          }
-
-          const qLoans = query(collection(db, 'loans'), where('customerId', '==', id));
-          const snapLoans = await getDocs(qLoans);
-          snapLoans.forEach((d: any) => deleteDoc(d.ref).catch(() => {}));
-
-          const qPayments = query(collection(db, 'loanPayments'), where('customerId', '==', id));
-          const snapPayments = await getDocs(qPayments);
-          snapPayments.forEach((d: any) => deleteDoc(d.ref).catch(() => {}));
-        } catch (e) {
-          console.warn('Firestore sweep note for deleted customer collections/loans/payments:', e);
-        }
-      })();
-    }
 
     const loans = StorageService.getLoans();
     const toDeleteLoans = loans.filter((l) => l.customerId === id);
     const remainingLoans = loans.filter((l) => l.customerId !== id);
     setStoredData(STORAGE_KEYS.LOANS, remainingLoans);
-    toDeleteLoans.forEach((l) => {
-      const enriched = {
-        ...l,
-        customerName: l.customerName || customerToDelete?.name,
-        accountNumber: l.accountNumber || customerToDelete?.accountNumber,
-      };
-      deleteFromFirestore('loans', l.id, enriched);
-    });
 
     const payments = StorageService.getLoanPayments().filter((p) => p.customerId !== id);
     setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, payments);
+
+    // Completely and immediately purge from Firestore
+    try {
+      const deletePromises: Promise<any>[] = [];
+
+      // 1. Delete customer document by ID and readable doc ID
+      deletePromises.push(deleteDoc(doc(db, 'customers', id)).catch(() => {}));
+      if (customerToDelete) {
+        const readableDocId = getFirestoreDocId('customers', id, customerToDelete);
+        if (readableDocId !== id) {
+          deletePromises.push(deleteDoc(doc(db, 'customers', readableDocId)).catch(() => {}));
+        }
+        if (customerToDelete.accountNumber) {
+          const qAcc = query(collection(db, 'customers'), where('accountNumber', '==', String(customerToDelete.accountNumber)));
+          const snapAcc = await getDocs(qAcc);
+          snapAcc.forEach((d: any) => deletePromises.push(deleteDoc(d.ref).catch(() => {})));
+        }
+      }
+      const qCustId = query(collection(db, 'customers'), where('id', '==', id));
+      const snapCustId = await getDocs(qCustId);
+      snapCustId.forEach((d: any) => deletePromises.push(deleteDoc(d.ref).catch(() => {})));
+
+      // 2. Delete all collections for this customer from Firestore
+      for (const c of toDeleteColls) {
+        const enriched = {
+          ...c,
+          customerName: c.customerName || customerToDelete?.name,
+          accountNumber: c.accountNumber || customerToDelete?.accountNumber,
+        };
+        const readableCollId = getFirestoreDocId('collections', c.id, enriched);
+        deletePromises.push(deleteDoc(doc(db, 'collections', readableCollId)).catch(() => {}));
+        if (readableCollId !== c.id) {
+          deletePromises.push(deleteDoc(doc(db, 'collections', c.id)).catch(() => {}));
+        }
+      }
+      const qColCust = query(collection(db, 'collections'), where('customerId', '==', id));
+      const snapColCust = await getDocs(qColCust);
+      snapColCust.forEach((d: any) => deletePromises.push(deleteDoc(d.ref).catch(() => {})));
+
+      if (customerToDelete?.accountNumber) {
+        const qColAcc = query(collection(db, 'collections'), where('accountNumber', '==', String(customerToDelete.accountNumber)));
+        const snapColAcc = await getDocs(qColAcc);
+        snapColAcc.forEach((d: any) => deletePromises.push(deleteDoc(d.ref).catch(() => {})));
+      }
+
+      // 3. Delete loans and loan payments from Firestore
+      for (const l of toDeleteLoans) {
+        const enriched = {
+          ...l,
+          customerName: l.customerName || customerToDelete?.name,
+          accountNumber: l.accountNumber || customerToDelete?.accountNumber,
+        };
+        const readableLoanId = getFirestoreDocId('loans', l.id, enriched);
+        deletePromises.push(deleteDoc(doc(db, 'loans', readableLoanId)).catch(() => {}));
+        if (readableLoanId !== l.id) {
+          deletePromises.push(deleteDoc(doc(db, 'loans', l.id)).catch(() => {}));
+        }
+      }
+      const qLoan = query(collection(db, 'loans'), where('customerId', '==', id));
+      const snapLoan = await getDocs(qLoan);
+      snapLoan.forEach((d: any) => deletePromises.push(deleteDoc(d.ref).catch(() => {})));
+
+      const qPay = query(collection(db, 'loanPayments'), where('customerId', '==', id));
+      const snapPay = await getDocs(qPay);
+      snapPay.forEach((d: any) => deletePromises.push(deleteDoc(d.ref).catch(() => {})));
+
+      await Promise.all(deletePromises);
+      console.log(`[Firestore] Successfully purged customer ${id} and all related records from cloud database.`);
+    } catch (err) {
+      console.warn('Firestore customer purge note:', err);
+    }
   },
 
   // Bishi Config Operations
@@ -515,17 +541,17 @@ export const StorageService = {
     return collections[index];
   },
 
-  deleteCollectionEntry: (id: string): void => {
+  deleteCollectionEntry: async (id: string): Promise<void> => {
     const collections = StorageService.getCollections();
     const entryToDelete = collections.find((c) => c.id === id);
     const filtered = collections.filter((c) => c.id !== id);
     setStoredData(STORAGE_KEYS.COLLECTIONS, filtered);
-    deleteFromFirestore('collections', id, entryToDelete);
+    await deleteFromFirestore('collections', id, entryToDelete);
 
     if (entryToDelete?.customerId) {
       const cust = StorageService.getCustomerById(entryToDelete.customerId);
       if (cust) {
-        syncToFirestore('customers', cust.id, cust);
+        await syncToFirestore('customers', cust.id, cust);
       }
     }
   },
@@ -681,6 +707,27 @@ export const StorageService = {
     (backup.loans || []).forEach((l) => syncToFirestore('loans', l.id, l));
   },
 
+  clearAllData: async (): Promise<void> => {
+    setStoredData(STORAGE_KEYS.CUSTOMERS, []);
+    setStoredData(STORAGE_KEYS.COLLECTIONS, []);
+    setStoredData(STORAGE_KEYS.LOANS, []);
+    setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, []);
+    setStoredData(STORAGE_KEYS.SMS_LOGS, []);
+
+    try {
+      const collectionsToWipe = ['customers', 'collections', 'loans', 'loanPayments', 'smsLogs'];
+      for (const colName of collectionsToWipe) {
+        const snap = await getDocs(collection(db, colName));
+        for (const d of snap.docs) {
+          await deleteDoc(d.ref).catch(() => {});
+        }
+      }
+      console.log('[Firestore] All customer and transaction records wiped cleanly.');
+    } catch (err) {
+      console.warn('Error wiping cloud database:', err);
+    }
+  },
+
   // Complete Cloud Database Sync: Uploads all local data to Firebase Firestore
   syncAllToFirestore: async (): Promise<void> => {
     try {
@@ -718,36 +765,11 @@ export const StorageService = {
     }
   },
 
-  // Complete Cloud Database Wipe / Reset: Clears all customer, collection, and loan data both locally and in Firestore
-  clearAllData: async (): Promise<void> => {
-    // 1. Clear local storage
-    setStoredData(STORAGE_KEYS.CUSTOMERS, []);
-    setStoredData(STORAGE_KEYS.COLLECTIONS, []);
-    setStoredData(STORAGE_KEYS.LOANS, []);
-    setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, []);
-    setStoredData(STORAGE_KEYS.SMS_LOGS, []);
-
-    // 2. Clear Firestore collections completely
-    const collectionsToWipe = ['customers', 'collections', 'loans', 'loanPayments', 'smsLogs'];
-    for (const collName of collectionsToWipe) {
-      try {
-        const snap = await getDocs(collection(db, collName));
-        if (!snap.empty) {
-          const batch = writeBatch(db);
-          snap.docs.forEach((d: any) => batch.delete(d.ref));
-          await batch.commit();
-        }
-      } catch (err) {
-        console.warn(`Error clearing Firestore collection ${collName}:`, err);
-      }
-    }
-  },
-
   // Real-time synchronization listeners with Firebase Firestore
   setupFirestoreListeners: (onUpdate: () => void): (() => void) => {
     const unsubscribes: (() => void)[] = [];
 
-    // 1. Listen for customers in Firestore (Firestore is source of truth)
+    // 1. Listen for customers in Firestore
     try {
       const unsubCust = onSnapshot(
         collection(db, 'customers'),
@@ -763,7 +785,9 @@ export const StorageService = {
             };
             remoteList.push(fullCustomer);
           });
-          // Directly set local storage to remote list. Do NOT merge with stale local items!
+          // Cloud Firestore is the authoritative source of truth.
+          // Setting remoteList directly ensures that when a record is deleted from Firestore,
+          // it immediately disappears locally and never gets resurrected.
           setStoredData(STORAGE_KEYS.CUSTOMERS, remoteList);
           onUpdate();
         },
@@ -804,61 +828,33 @@ export const StorageService = {
       const unsubColls = onSnapshot(
         collection(db, 'collections'),
         (snapshot: any) => {
-          const currentCustomers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
-          const validCustIds = new Set(currentCustomers.map((c) => c.id));
-          const validAccNums = new Set(currentCustomers.map((c) => String(c.accountNumber)));
+          if (!snapshot.empty) {
+            const currentCustomers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
+            const validCustIds = new Set(currentCustomers.map((c) => c.id));
+            const validAccNums = new Set(currentCustomers.map((c) => String(c.accountNumber)));
 
-          const remoteList: CollectionEntry[] = [];
-          snapshot.forEach((d: any) => {
-            const raw = d.data();
-            const matchesCust =
-              (raw.customerId && validCustIds.has(raw.customerId)) ||
-              (raw.accountNumber && validAccNums.has(String(raw.accountNumber)));
-            if (matchesCust) {
-              const fullColl: CollectionEntry = {
-                ...raw,
-                id: raw.id || d.id,
-                customerName: raw.customerName || '',
-              };
-              remoteList.push(fullColl);
-            }
-          });
-          setStoredData(STORAGE_KEYS.COLLECTIONS, remoteList);
-          onUpdate();
+            const remoteList: CollectionEntry[] = [];
+            snapshot.forEach((d: any) => {
+              const raw = d.data();
+              const matchesCust =
+                (raw.customerId && validCustIds.has(raw.customerId)) ||
+                (raw.accountNumber && validAccNums.has(String(raw.accountNumber)));
+              if (matchesCust || currentCustomers.length === 0) {
+                const fullColl: CollectionEntry = {
+                  ...raw,
+                  id: raw.id || d.id,
+                  customerName: raw.customerName || '',
+                };
+                remoteList.push(fullColl);
+              }
+            });
+            setStoredData(STORAGE_KEYS.COLLECTIONS, remoteList);
+            onUpdate();
+          }
         },
         (err: any) => console.warn('Firestore collections listener error:', err?.message || err)
       );
       unsubscribes.push(unsubColls);
-    } catch (e) {}
-
-    // 4. Listen for loan payments in Firestore
-    try {
-      const unsubPayments = onSnapshot(
-        collection(db, 'loanPayments'),
-        (snapshot: any) => {
-          const currentCustomers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
-          const validCustIds = new Set(currentCustomers.map((c) => c.id));
-          const validAccNums = new Set(currentCustomers.map((c) => String(c.accountNumber)));
-
-          const remoteList: LoanPayment[] = [];
-          snapshot.forEach((d: any) => {
-            const raw = d.data();
-            const matchesCust =
-              (raw.customerId && validCustIds.has(raw.customerId)) ||
-              (raw.accountNumber && validAccNums.has(String(raw.accountNumber)));
-            if (matchesCust) {
-              remoteList.push({
-                ...raw,
-                id: raw.id || d.id,
-              });
-            }
-          });
-          setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, remoteList);
-          onUpdate();
-        },
-        (err: any) => console.warn('Firestore loanPayments listener error:', err?.message || err)
-      );
-      unsubscribes.push(unsubPayments);
     } catch (e) {}
 
     return () => {
