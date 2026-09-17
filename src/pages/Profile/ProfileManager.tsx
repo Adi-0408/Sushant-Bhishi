@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
-import { UserCheck, Phone, Save, Mail, Lock, KeyRound, Eye, EyeOff, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { UserCheck, Phone, Save, Mail, KeyRound, Eye, EyeOff, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 
 export const ProfileManager: React.FC = () => {
@@ -15,10 +15,8 @@ export const ProfileManager: React.FC = () => {
   const [saving, setSaving] = useState(false);
 
   // Change password state
-  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [changingPass, setChangingPass] = useState(false);
@@ -49,8 +47,8 @@ export const ProfileManager: React.FC = () => {
     setPassError('');
     setPassSuccess('');
 
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setPassError('कृपया सर्व आवश्यक पासवर्ड फील्ड भरा.');
+    if (!newPassword || !confirmPassword) {
+      setPassError('कृपया नवीन पासवर्ड आणि पुष्टीकरण पासवर्ड भरा.');
       return;
     }
 
@@ -64,17 +62,11 @@ export const ProfileManager: React.FC = () => {
       return;
     }
 
-    if (currentPassword === newPassword) {
-      setPassError('नवीन पासवर्ड सध्याच्या पासवर्डपेक्षा वेगळा असावा.');
-      return;
-    }
-
     setChangingPass(true);
     try {
-      await changePassword(currentPassword, newPassword);
+      await changePassword(newPassword);
       setPassSuccess('पासवर्ड यशस्वीपणे बदलला आहे! पुढील वेळी लॉगिनसाठी हाच पासवर्ड वापरा.');
       showToast('पासवर्ड यशस्वीपणे अपडेट झाला.', 'success');
-      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: unknown) {
@@ -201,31 +193,6 @@ export const ProfileManager: React.FC = () => {
           )}
 
           <form onSubmit={handlePasswordSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                सध्याचा पासवर्ड (Current Password) <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
-                <input
-                  type={showCurrentPassword ? 'text' : 'password'}
-                  required
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder="सध्याचा पासवर्ड टाका"
-                  className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                  className="absolute right-2 top-2 p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  aria-label="पासवर्ड दाखवा/लपवा"
-                >
-                  {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 नवीन पासवर्ड (New Password) <span className="text-rose-500">*</span>
