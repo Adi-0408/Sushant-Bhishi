@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 
 export const CustomerList: React.FC = () => {
-  const { customers, collections, loans, activeOffice, setActiveOffice, refreshData, showToast, t, language } = useApp();
+  const { customers, collections, loans, bishiConfigs, activeOffice, setActiveOffice, refreshData, showToast, t, language } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [bishiFilter, setBishiFilter] = useState<'ALL' | BishiType>('ALL');
@@ -155,9 +155,10 @@ export const CustomerList: React.FC = () => {
               onChange={(val) => setBishiFilter(val as any)}
               options={[
                 { value: 'ALL', label: t.allBishi },
-                { value: '15_AUGUST', label: t.bishi15Aug },
-                { value: '26_JANUARY', label: t.bishi26Jan },
-                { value: 'DASARA', label: t.bishiDasara },
+                ...bishiConfigs.map((cfg) => ({
+                  value: cfg.id,
+                  label: cfg.name,
+                })),
                 { value: 'LOAN_ONLY', label: language === 'EN' ? 'Loan Only' : 'फक्त कर्ज खातेदार' },
               ]}
               size="lg"

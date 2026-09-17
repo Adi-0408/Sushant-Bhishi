@@ -8,126 +8,38 @@ import {
   getModalityShort,
   getOfficeNameMarathi,
 } from '../utils/formatters';
-import { calculateCustomerFinancials } from '../utils/calculations';
+import { calculateCustomerFinancials, calculateLoanDueInterest, getLoanRemainingPrincipal } from '../utils/calculations';
+import { StorageService } from './db';
 
 /**
- * Generate PDF for a Single Customer in Clean Marathi
- * Show only customer details, transaction history, totals, and loan (if applicable).
+ * Creates an off-screen container positioned safely behind viewport elements
+ * so html2canvas accurately measures bounding boxes, baselines, and full layouts.
  */
-export const generateCustomerPDF = async (
-  customer: Customer,
-  collections: CollectionEntry[],
-  loan?: Loan | null
-) => {
+const createPdfContainer = (widthPx: number): HTMLDivElement => {
   const container = document.createElement('div');
-  container.style.position = 'absolute';
-  container.style.left = '-9999px';
-  container.style.top = '-9999px';
-  container.style.width = '800px';
+  container.style.position = 'fixed';
+  container.style.top = '0';
+  container.style.left = '0';
+  container.style.zIndex = '-9999';
+  container.style.pointerEvents = 'none';
+  container.style.width = `${widthPx}px`;
   container.style.backgroundColor = '#ffffff';
-  container.style.fontFamily = "'Noto Sans Devanagari', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
-  container.style.padding = '24px';
+  container.style.fontFamily = "'Noto Sans Devanagari', 'Mukta', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   container.style.color = '#1e293b';
+  container.style.padding = '20px';
+  container.style.boxSizing = 'border-box';
+  return container;
+};
 
-  const financials = calculateCustomerFinancials(customer, collections, loan);
-  const customerCollections = collections.filter((c) => c.customerId === customer.id);
-  const todayStr = formatDateMarathi(new Date().toISOString().split('T')[0]);
-
-  container.innerHTML = `
-    <div style="border: 2px solid #0B5C45; padding: 24px; border-radius: 16px; background: #ffffff;">
-      <!-- Statement Title Header -->
-      <div style="text-align: center; border-bottom: 2px solid #0B5C45; padding-bottom: 12px; margin-bottom: 16px;">
-        <h1 style="margin: 0; font-size: 22px; font-weight: 900; color: #0B5C45;">खातेदार व्यवहार अहवाल (Account Statement)</h1>
-        <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: 700; color: #64748b;">दिनांक: ${todayStr}</p>
-      </div>
-
-      <!-- Customer Details Master Card -->
-      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; font-size: 13px; font-weight: 700;">
-          <div><span style="color: #64748b;">खाते क्र.:</span> <strong style="color: #0f172a; font-size: 15px;">${customer.accountNumber}</strong></div>
-          <div><span style="color: #64748b;">नाव:</span> <strong style="color: #0f172a; font-size: 15px;">${customer.name}</strong></div>
-          <div><span style="color: #64748b;">मोबाईल:</span> <strong style="color: #0f172a;">${customer.mobile}</strong></div>
-          <div><span style="color: #64748b;">भिशी प्रकार:</span> <strong style="color: #0B5C45;">${getBishiNameMarathi(customer.bishiType)}</strong></div>
-          <div><span style="color: #64748b;">हप्ता:</span> <strong>${getModalityShort(customer.modality)} (${formatCurrency(customer.amount)})</strong></div>
-          <div><span style="color: #64748b;">कार्यालय:</span> <strong>${getOfficeNameMarathi(customer.officeId)}</strong></div>
-        </div>
-      </div>
-
-      <!-- Financial Summary Cards -->
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px;">
-        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px; border-radius: 10px; text-align: center;">
-          <span style="font-size: 11px; font-weight: 700; color: #166534; display: block;">अपेक्षित भिशी</span>
-          <span style="font-size: 15px; font-weight: 900; color: #15803d;">${formatCurrency(financials.totalExpectedBishi)}</span>
-        </div>
-        <div style="background: #f0fdf4; border: 1px solid #86efac; padding: 10px; border-radius: 10px; text-align: center;">
-          <span style="font-size: 11px; font-weight: 700; color: #166534; display: block;">प्रत्यक्ष जमा</span>
-          <span style="font-size: 15px; font-weight: 900; color: #0b5c45;">${formatCurrency(financials.totalCollectedBishi)}</span>
-        </div>
-        <div style="background: #fff1f2; border: 1px solid #fecdd3; padding: 10px; border-radius: 10px; text-align: center;">
-          <span style="font-size: 11px; font-weight: 700; color: #9f1239; display: block;">उरलेली बाकी</span>
-          <span style="font-size: 15px; font-weight: 900; color: #be123c;">${formatCurrency(financials.totalRemainingBishi)}</span>
-        </div>
-      </div>
-
-      <!-- Transaction History Table -->
-      <h3 style="font-size: 14px; font-weight: 800; color: #0f172a; margin: 0 0 8px 0;">व्यवहार इतिहास नोंदी</h3>
-      <table style="width: 100%; border-collapse: collapse; font-size: 11px; font-weight: 600; margin-bottom: 16px;">
-        <thead>
-          <tr style="background: #0B5C45; color: #ffffff; text-align: left;">
-            <th style="padding: 8px 10px;">देय तारीख</th>
-            <th style="padding: 8px 10px; text-align: right;">अपेक्षित (₹)</th>
-            <th style="padding: 8px 10px; text-align: right;">जमा (₹)</th>
-            <th style="padding: 8px 10px; text-align: right;">बाकी (₹)</th>
-            <th style="padding: 8px 10px; text-align: right;">व्याज (₹)</th>
-            <th style="padding: 8px 10px; text-align: right;">दंड (₹)</th>
-            <th style="padding: 8px 10px; text-align: center;">स्थिती</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${customerCollections
-            .map(
-              (item, idx) => `
-            <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">
-              <td style="padding: 8px 10px; font-weight: 700;">${formatDateMarathi(item.dueDate)}</td>
-              <td style="padding: 8px 10px; text-align: right; font-weight: 700;">${formatCurrency(item.expectedAmount)}</td>
-              <td style="padding: 8px 10px; text-align: right; font-weight: 800; color: #15803d;">${formatCurrency(item.collectedAmount)}</td>
-              <td style="padding: 8px 10px; text-align: right; font-weight: 900; color: #be123c;">${formatCurrency(item.remainingAmount)}</td>
-              <td style="padding: 8px 10px; text-align: right;">${formatCurrency(item.interestAmount)}</td>
-              <td style="padding: 8px 10px; text-align: right; font-weight: 700; color: #be123c;">${formatCurrency(item.penaltyAmount)}</td>
-              <td style="padding: 8px 10px; text-align: center;">
-                <span style="padding: 2px 8px; border-radius: 9999px; font-size: 10px; font-weight: 800; background: ${
-                  item.status === 'PAID' ? '#dcfce7' : item.status === 'PARTIAL' ? '#fef9c3' : '#ffe4e6'
-                }; color: ${item.status === 'PAID' ? '#15803d' : item.status === 'PARTIAL' ? '#a16207' : '#be123c'};">
-                  ${item.status === 'PAID' ? 'पूर्ण जमा' : item.status === 'PARTIAL' ? 'अंशतः' : 'बाकी'}
-                </span>
-              </td>
-            </tr>
-          `
-            )
-            .join('')}
-        </tbody>
-      </table>
-
-      ${
-        customer.hasLoan && loan
-          ? `
-        <h3 style="font-size: 14px; font-weight: 800; color: #7c2d12; margin: 12px 0 8px 0;">कर्ज माहिती</h3>
-        <div style="background: #fff7ed; border: 1px solid #ffedd5; border-radius: 10px; padding: 12px;">
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size: 12px; font-weight: 700;">
-            <div>कर्ज रक्कम: <strong style="color: #9a3412;">${formatCurrency(loan.principalAmount)}</strong></div>
-            <div>देय व्याज: <strong style="color: #9a3412;">${formatCurrency(loan.totalInterest)} (${loan.interestRate}%)</strong></div>
-            <div>एकूण देय: <strong style="color: #9a3412;">${formatCurrency(loan.totalPayable)}</strong></div>
-            <div>जमा रक्कम: <strong style="color: #15803d;">${formatCurrency(loan.paidAmount)}</strong></div>
-            <div>कर्ज बाकी: <strong style="color: #be123c;">${formatCurrency(loan.remainingAmount)}</strong></div>
-            <div>तारीख: <strong>${formatDateMarathi(loan.issueDate)}</strong></div>
-          </div>
-        </div>
-      `
-          : ''
-      }
-    </div>
-  `;
-
+/**
+ * Renders an off-screen HTML element into a multi-page PDF using canvas slicing.
+ * Preserves exact aspect ratio on standard A4 (210mm x 297mm) without vertical squishing or truncation.
+ */
+const renderHtmlToMultiPagePdf = async (
+  container: HTMLElement,
+  orientation: 'portrait' | 'landscape',
+  filename: string
+) => {
   document.body.appendChild(container);
 
   try {
@@ -135,25 +47,345 @@ export const generateCustomerPDF = async (
       scale: 2,
       useCORS: true,
       logging: false,
+      backgroundColor: '#ffffff',
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: container.scrollWidth,
+      windowHeight: container.scrollHeight,
     });
 
-    const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF({
-      orientation: 'portrait',
+      orientation,
       unit: 'mm',
       format: 'a4',
+      compress: true,
     });
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    const pageWidthMm = pdf.internal.pageSize.getWidth();
+    const pageHeightMm = pdf.internal.pageSize.getHeight();
 
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(pdfHeight, pdf.internal.pageSize.getHeight()));
-    pdf.save(`Account_${customer.accountNumber}_मराठी_अहवाल.pdf`);
+    // Height of one A4 page in canvas pixels
+    const canvasPageHeight = Math.floor((canvas.width * pageHeightMm) / pageWidthMm);
+
+    // If entire content fits onto a single page
+    if (canvas.height <= canvasPageHeight) {
+      const imgData = canvas.toDataURL('image/png');
+      const pdfHeightMm = (canvas.height * pageWidthMm) / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pageWidthMm, pdfHeightMm);
+    } else {
+      // Content spans multiple pages - slice canvas cleanly page by page
+      let renderedHeight = 0;
+      let pageIndex = 0;
+
+      while (renderedHeight < canvas.height) {
+        const sliceHeight = Math.min(canvasPageHeight, canvas.height - renderedHeight);
+
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = canvas.width;
+        sliceCanvas.height = sliceHeight;
+
+        const ctx = sliceCanvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+          ctx.drawImage(
+            canvas,
+            0,
+            renderedHeight,
+            canvas.width,
+            sliceHeight,
+            0,
+            0,
+            canvas.width,
+            sliceHeight
+          );
+
+          const sliceImgData = sliceCanvas.toDataURL('image/png');
+          if (pageIndex > 0) {
+            pdf.addPage();
+          }
+          const slicePdfHeightMm = (sliceHeight * pageWidthMm) / canvas.width;
+          pdf.addImage(sliceImgData, 'PNG', 0, 0, pageWidthMm, slicePdfHeightMm);
+        }
+
+        renderedHeight += sliceHeight;
+        pageIndex++;
+      }
+    }
+
+    pdf.save(filename);
   } catch (error) {
     console.error('PDF Generation error:', error);
   } finally {
-    document.body.removeChild(container);
+    if (container.parentNode) {
+      document.body.removeChild(container);
+    }
   }
+};
+
+/**
+ * Generate PDF for a Single Customer (Account Statement / खातेदार व्यवहार अहवाल)
+ * Includes customer info, financial cards, complete collection table with totals,
+ * loan details & payment history, and signature authorization.
+ */
+export const generateCustomerPDF = async (
+  customer: Customer,
+  collections: CollectionEntry[],
+  loan?: Loan | null,
+  loanPayments: LoanPayment[] = []
+) => {
+  // A4 Portrait target width: 794px
+  const container = createPdfContainer(794);
+
+  const financials = calculateCustomerFinancials(customer, collections, loan);
+  const customerCollections = collections
+    .filter((c) => c.customerId === customer.id)
+    .sort((a, b) => a.periodIndex - b.periodIndex);
+  const todayStr = formatDateMarathi(new Date().toISOString().split('T')[0]);
+
+  const effectiveLoanPayments = loanPayments.length > 0 ? loanPayments : StorageService.getLoanPayments();
+  const customerLoanPayments = effectiveLoanPayments.filter(
+    (lp: LoanPayment) => lp.customerId === customer.id || (loan && lp.loanId === loan.id)
+  );
+  const totalLoanInterestPaid = customerLoanPayments.reduce(
+    (sum: number, lp: LoanPayment) => sum + (Number(lp.interestPaid) || 0),
+    0
+  );
+  const totalLoanPrincipalPaid = customerLoanPayments.reduce(
+    (sum: number, lp: LoanPayment) => sum + (Number(lp.paidAmount) || 0),
+    0
+  );
+  const totalLoanDiscount = customerLoanPayments.reduce(
+    (sum: number, lp: LoanPayment) => sum + (Number(lp.discountAmount) || 0),
+    0
+  );
+
+  const loanDueInterest = loan ? calculateLoanDueInterest(loan) : 0;
+
+  // Table Totals
+  const totalExpected = customerCollections.reduce((sum, c) => sum + (c.expectedAmount || 0), 0);
+  const totalCollected = customerCollections.reduce((sum, c) => sum + (c.collectedAmount || 0), 0);
+  const totalRemaining = customerCollections.reduce((sum, c) => sum + (c.remainingAmount || 0), 0);
+  const totalInterest = customerCollections.reduce((sum, c) => sum + (c.interestAmount || 0), 0);
+  const totalPenalty = customerCollections.reduce((sum, c) => sum + (c.penaltyAmount || 0), 0);
+
+  container.innerHTML = `
+    <div style="border: 2px solid #0B5C45; padding: 20px; border-radius: 12px; background: #ffffff;">
+      <!-- Title Header Bar -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0B5C45; padding-bottom: 12px; margin-bottom: 16px;">
+        <div>
+          <h1 style="margin: 0; font-size: 22px; font-weight: 900; color: #0B5C45; letter-spacing: -0.5px;">सुषांत भिशी</h1>
+          <p style="margin: 2px 0 0 0; font-size: 13px; font-weight: 800; color: #334155;">खातेदार व्यवहार अहवाल (Customer Account Statement)</p>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 11px; font-weight: 700; color: #64748b;">दिनांक: <strong style="color: #0f172a;">${todayStr}</strong></div>
+          <div style="font-size: 11px; font-weight: 700; color: #64748b;">कार्यालय: <strong style="color: #0B5C45;">${getOfficeNameMarathi(customer.officeId)}</strong></div>
+        </div>
+      </div>
+
+      <!-- Customer Details Meta Grid -->
+      <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px;">
+        <div style="display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 8px 16px; font-size: 12px; font-weight: 700;">
+          <div><span style="color: #64748b;">खाते क्र.:</span> <strong style="color: #0f172a; font-size: 14px;">${customer.accountNumber}</strong></div>
+          <div><span style="color: #64748b;">खातेदाराचे नाव:</span> <strong style="color: #0f172a; font-size: 14px;">${customer.name}</strong></div>
+          <div><span style="color: #64748b;">मोबाईल:</span> <strong style="color: #0f172a;">${customer.mobile}</strong></div>
+          <div><span style="color: #64748b;">भिशी प्रकार:</span> <strong style="color: #0B5C45;">${getBishiNameMarathi(customer.bishiType)}</strong></div>
+          <div><span style="color: #64748b;">हप्ता रक्कम:</span> <strong>${formatCurrency(customer.amount)} (${getModalityShort(customer.modality)})</strong></div>
+          <div><span style="color: #64748b;">पत्ता:</span> <strong style="color: #475569;">${customer.address || '-'}</strong></div>
+        </div>
+      </div>
+
+      <!-- Financial Summary Cards -->
+      <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 16px;">
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px; border-radius: 8px; text-align: center;">
+          <span style="font-size: 10px; font-weight: 700; color: #64748b; display: block;">अपेक्षित भिशी</span>
+          <span style="font-size: 13px; font-weight: 900; color: #0f172a;">${formatCurrency(financials.totalExpectedBishi)}</span>
+        </div>
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 8px; border-radius: 8px; text-align: center;">
+          <span style="font-size: 10px; font-weight: 700; color: #166534; display: block;">एकूण जमा</span>
+          <span style="font-size: 13px; font-weight: 900; color: #15803d;">${formatCurrency(financials.totalCollectedBishi)}</span>
+        </div>
+        <div style="background: #fff1f2; border: 1px solid #fecdd3; padding: 8px; border-radius: 8px; text-align: center;">
+          <span style="font-size: 10px; font-weight: 700; color: #9f1239; display: block;">उरलेली बाकी</span>
+          <span style="font-size: 13px; font-weight: 900; color: #be123c;">${formatCurrency(financials.totalRemainingBishi)}</span>
+        </div>
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 8px; border-radius: 8px; text-align: center;">
+          <span style="font-size: 10px; font-weight: 700; color: #1e40af; display: block;">एकूण व्याज</span>
+          <span style="font-size: 13px; font-weight: 900; color: #1d4ed8;">${formatCurrency(financials.totalInterest)}</span>
+        </div>
+        <div style="background: #fffbeb; border: 1px solid #fde68a; padding: 8px; border-radius: 8px; text-align: center;">
+          <span style="font-size: 10px; font-weight: 700; color: #92400e; display: block;">एकूण दंड</span>
+          <span style="font-size: 13px; font-weight: 900; color: #b45309;">${formatCurrency(financials.totalPenalty)}</span>
+        </div>
+        <div style="background: #0B5C45; padding: 8px; border-radius: 8px; text-align: center; color: #ffffff;">
+          <span style="font-size: 10px; font-weight: 700; color: #a7f3d0; display: block;">एकूण देय</span>
+          <span style="font-size: 13px; font-weight: 900; color: #ffffff;">${formatCurrency(financials.totalPayableBishi)}</span>
+        </div>
+      </div>
+
+      <!-- Transaction History Table -->
+      <div style="margin-bottom: 16px;">
+        <h3 style="font-size: 13px; font-weight: 800; color: #0f172a; margin: 0 0 8px 0; display: flex; justify-content: space-between;">
+          <span>भिशी व्यवहार इतिहास नोंदी (${customer.modality === 'W' ? 'साप्ताहिक' : 'मासिक'})</span>
+          <span style="font-size: 11px; color: #64748b; font-weight: 700;">एकूण हप्ते: ${customerCollections.length}</span>
+        </h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 10px; font-weight: 600; border: 1px solid #cbd5e1;">
+          <thead>
+            <tr style="background: #0B5C45; color: #ffffff;">
+              <th style="padding: 6px 4px; border: 1px solid #0f4a3c; text-align: center; width: 35px;">क्र.</th>
+              <th style="padding: 6px 6px; border: 1px solid #0f4a3c; text-align: center; width: 85px;">देय तारीख</th>
+              <th style="padding: 6px 8px; border: 1px solid #0f4a3c; text-align: right; width: 80px;">अपेक्षित (₹)</th>
+              <th style="padding: 6px 8px; border: 1px solid #0f4a3c; text-align: right; width: 80px;">जमा (₹)</th>
+              <th style="padding: 6px 8px; border: 1px solid #0f4a3c; text-align: right; width: 80px;">बाकी (₹)</th>
+              <th style="padding: 6px 6px; border: 1px solid #0f4a3c; text-align: right; width: 65px;">व्याज (₹)</th>
+              <th style="padding: 6px 6px; border: 1px solid #0f4a3c; text-align: right; width: 65px;">दंड (₹)</th>
+              <th style="padding: 6px 6px; border: 1px solid #0f4a3c; text-align: center; width: 70px;">पद्धत</th>
+              <th style="padding: 6px 6px; border: 1px solid #0f4a3c; text-align: center; width: 75px;">स्थिती</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${customerCollections
+              .map(
+                (item, idx) => `
+              <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                <td style="padding: 5px 4px; border: 1px solid #e2e8f0; text-align: center; font-weight: 700;">${idx + 1}</td>
+                <td style="padding: 5px 6px; border: 1px solid #e2e8f0; text-align: center; font-weight: 700;">${formatDateMarathi(item.dueDate)}</td>
+                <td style="padding: 5px 8px; border: 1px solid #e2e8f0; text-align: right; font-weight: 700; color: #334155;">${formatCurrency(item.expectedAmount)}</td>
+                <td style="padding: 5px 8px; border: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #15803d;">${formatCurrency(item.collectedAmount)}</td>
+                <td style="padding: 5px 8px; border: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #be123c;">${formatCurrency(item.remainingAmount)}</td>
+                <td style="padding: 5px 6px; border: 1px solid #e2e8f0; text-align: right; color: #475569;">${formatCurrency(item.interestAmount)}</td>
+                <td style="padding: 5px 6px; border: 1px solid #e2e8f0; text-align: right; font-weight: 700; color: #b45309;">${formatCurrency(item.penaltyAmount)}</td>
+                <td style="padding: 5px 6px; border: 1px solid #e2e8f0; text-align: center; color: #475569;">${
+                  item.paymentMode === 'ONLINE' ? 'ऑनलाइन' : item.paymentMode === 'BANK' ? 'बँक' : 'नगद'
+                }</td>
+                <td style="padding: 5px 6px; border: 1px solid #e2e8f0; text-align: center;">
+                  <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800; background: ${
+                    item.status === 'PAID' ? '#dcfce7' : item.status === 'PARTIAL' ? '#fef9c3' : '#ffe4e6'
+                  }; color: ${item.status === 'PAID' ? '#15803d' : item.status === 'PARTIAL' ? '#a16207' : '#be123c'};">
+                    ${item.status === 'PAID' ? 'पूर्ण जमा' : item.status === 'PARTIAL' ? 'अंशतः' : 'बाकी'}
+                  </span>
+                </td>
+              </tr>
+            `
+              )
+              .join('')}
+          </tbody>
+          <tfoot>
+            <tr style="background: #0f4a3c; color: #ffffff; font-weight: 900; font-size: 10px;">
+              <td style="padding: 6px 4px; border: 1px solid #0f4a3c; text-align: center;">-</td>
+              <td style="padding: 6px 6px; border: 1px solid #0f4a3c; text-align: center;">एकूण (TOTAL)</td>
+              <td style="padding: 6px 8px; border: 1px solid #0f4a3c; text-align: right;">${formatCurrency(totalExpected)}</td>
+              <td style="padding: 6px 8px; border: 1px solid #0f4a3c; text-align: right;">${formatCurrency(totalCollected)}</td>
+              <td style="padding: 6px 8px; border: 1px solid #0f4a3c; text-align: right;">${formatCurrency(totalRemaining)}</td>
+              <td style="padding: 6px 6px; border: 1px solid #0f4a3c; text-align: right;">${formatCurrency(totalInterest)}</td>
+              <td style="padding: 6px 6px; border: 1px solid #0f4a3c; text-align: right;">${formatCurrency(totalPenalty)}</td>
+              <td style="padding: 6px 6px; border: 1px solid #0f4a3c; text-align: center;">-</td>
+              <td style="padding: 6px 6px; border: 1px solid #0f4a3c; text-align: center;">-</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- Loan Section (If Applicable) -->
+      ${
+        customer.hasLoan && loan
+          ? `
+        <div style="margin-bottom: 16px; border: 1px solid #fed7aa; border-radius: 10px; background: #fffaf5; padding: 12px;">
+          <h3 style="font-size: 13px; font-weight: 800; color: #9a3412; margin: 0 0 8px 0;">कर्जाचा तपशील (Loan Summary)</h3>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 11px; font-weight: 700; margin-bottom: 10px;">
+            <div><span style="color: #7c2d12;">कर्ज रक्कम:</span> <strong style="color: #9a3412; font-size: 12px;">${formatCurrency(loan.principalAmount)}</strong></div>
+            <div><span style="color: #7c2d12;">व्याज दर:</span> <strong style="color: #9a3412;">${loan.interestRate}%</strong> (मासिक: ${formatCurrency(loanDueInterest)})</div>
+            <div><span style="color: #7c2d12;">एकूण देय:</span> <strong>${formatCurrency(loan.totalPayable)}</strong></div>
+            <div><span style="color: #7c2d12;">तारीख:</span> <strong>${formatDateMarathi(loan.issueDate)}</strong></div>
+            <div><span style="color: #166534;">भरलेली मुद्दल:</span> <strong style="color: #15803d; font-size: 12px;">${formatCurrency(loan.paidAmount)}</strong></div>
+            <div><span style="color: #b45309;">भरलेले व्याज:</span> <strong style="color: #b45309; font-size: 12px;">${formatCurrency(totalLoanInterestPaid)}</strong></div>
+            <div><span style="color: #be123c;">कर्ज बाकी मुद्दल:</span> <strong style="color: #be123c; font-size: 12px;">${formatCurrency(loan.remainingAmount)}</strong></div>
+            <div><span style="color: #475569;">कर्ज स्थिती:</span> <strong style="color: ${loan.status === 'ACTIVE' ? '#c2410c' : '#15803d'};">${loan.status === 'ACTIVE' ? 'सुरू' : 'पूर्ण बंद'}</strong></div>
+          </div>
+
+          ${
+            customerLoanPayments.length > 0
+              ? `
+            <div style="border-top: 1px solid #fed7aa; pt: 8px; margin-top: 8px;">
+              <h4 style="font-size: 11px; font-weight: 800; color: #7c2d12; margin: 6px 0 6px 0;">कर्ज भरणा इतिहास (Loan Payment History)</h4>
+              <table style="width: 100%; border-collapse: collapse; font-size: 10px; font-weight: 600; border: 1px solid #fed7aa;">
+                <thead>
+                  <tr style="background: #ea580c; color: #ffffff;">
+                    <th style="padding: 5px 6px; text-align: center; width: 35px; border: 1px solid #c2410c;">क्र.</th>
+                    <th style="padding: 5px 8px; text-align: center; width: 85px; border: 1px solid #c2410c;">दिनांक</th>
+                    <th style="padding: 5px 8px; text-align: right; width: 95px; border: 1px solid #c2410c;">भरलेली मुद्दल (₹)</th>
+                    <th style="padding: 5px 8px; text-align: right; width: 95px; border: 1px solid #c2410c;">भरलेले व्याज (₹)</th>
+                    <th style="padding: 5px 8px; text-align: right; width: 80px; border: 1px solid #c2410c;">सूट (₹)</th>
+                    <th style="padding: 5px 8px; text-align: right; width: 95px; border: 1px solid #c2410c;">बाकी मुद्दल (₹)</th>
+                    <th style="padding: 5px 6px; text-align: center; width: 75px; border: 1px solid #c2410c;">पद्धत</th>
+                    <th style="padding: 5px 8px; text-align: left; border: 1px solid #c2410c;">टीप</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${customerLoanPayments
+                    .map(
+                      (lp, idx) => `
+                    <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#fff7ed'};">
+                      <td style="padding: 4px 6px; border: 1px solid #fed7aa; text-align: center;">${idx + 1}</td>
+                      <td style="padding: 4px 8px; border: 1px solid #fed7aa; text-align: center; font-weight: 700;">${formatDateMarathi(lp.paymentDate)}</td>
+                      <td style="padding: 4px 8px; border: 1px solid #fed7aa; text-align: right; font-weight: 800; color: #15803d;">${formatCurrency(lp.paidAmount)}</td>
+                      <td style="padding: 4px 8px; border: 1px solid #fed7aa; text-align: right; font-weight: 800; color: #b45309;">${formatCurrency(lp.interestPaid)}</td>
+                      <td style="padding: 4px 8px; border: 1px solid #fed7aa; text-align: right; color: #475569;">${lp.discountAmount ? formatCurrency(lp.discountAmount) : '-'}</td>
+                      <td style="padding: 4px 8px; border: 1px solid #fed7aa; text-align: right; font-weight: 800; color: #be123c;">${formatCurrency(lp.remainingLoan)}</td>
+                      <td style="padding: 4px 6px; border: 1px solid #fed7aa; text-align: center; color: #475569;">${lp.paymentMode === 'ONLINE' ? 'ऑनलाइन' : 'नगद'}</td>
+                      <td style="padding: 4px 8px; border: 1px solid #fed7aa; color: #64748b;">${lp.note || '-'}</td>
+                    </tr>
+                  `
+                    )
+                    .join('')}
+                </tbody>
+                <tfoot>
+                  <tr style="background: #9a3412; color: #ffffff; font-weight: 900; font-size: 10px;">
+                    <td style="padding: 5px 6px; text-align: center; border: 1px solid #7c2d12;">-</td>
+                    <td style="padding: 5px 8px; text-align: center; border: 1px solid #7c2d12;">एकूण</td>
+                    <td style="padding: 5px 8px; text-align: right; border: 1px solid #7c2d12;">${formatCurrency(totalLoanPrincipalPaid)}</td>
+                    <td style="padding: 5px 8px; text-align: right; border: 1px solid #7c2d12;">${formatCurrency(totalLoanInterestPaid)}</td>
+                    <td style="padding: 5px 8px; text-align: right; border: 1px solid #7c2d12;">${formatCurrency(totalLoanDiscount)}</td>
+                    <td style="padding: 5px 8px; text-align: right; border: 1px solid #7c2d12;">${formatCurrency(loan.remainingAmount)}</td>
+                    <td style="padding: 5px 6px; text-align: center; border: 1px solid #7c2d12;">-</td>
+                    <td style="padding: 5px 8px; border: 1px solid #7c2d12;">-</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          `
+              : ''
+          }
+        </div>
+      `
+          : ''
+      }
+
+      <!-- Verification & Signature Block -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 24px; padding-top: 12px; border-top: 1px dashed #cbd5e1; font-size: 11px; font-weight: 700;">
+        <div style="color: #64748b; font-size: 10px;">
+          <div>• सदर अहवाल सुषांत भिशी व्यवस्थापन प्रणालीद्वारे संगणकीकृत तयार करण्यात आला आहे.</div>
+          <div>• कोणतीही तफावत आढळल्यास त्वरित कार्यालयाशी संपर्क साधावा.</div>
+        </div>
+        <div style="display: flex; gap: 40px; text-align: center;">
+          <div>
+            <div style="height: 35px;"></div>
+            <div style="border-top: 1px solid #64748b; padding-top: 4px; min-width: 120px; color: #334155;">खातेदार स्वाक्षरी</div>
+          </div>
+          <div>
+            <div style="height: 35px;"></div>
+            <div style="border-top: 1px solid #0B5C45; padding-top: 4px; min-width: 140px; color: #0B5C45; font-weight: 900;">अधिकृत स्वाक्षरी / शिक्का</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  await renderHtmlToMultiPagePdf(
+    container,
+    'portrait',
+    `खाते_${customer.accountNumber}_${customer.name.replace(/\s+/g, '_')}_अहवाल.pdf`
+  );
 };
 
 /**

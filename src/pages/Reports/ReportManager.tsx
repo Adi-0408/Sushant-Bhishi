@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 
 export const ReportManager: React.FC = () => {
-  const { customers, collections, loans, activeOffice, selectedBishiFilter, t, language } = useApp();
+  const { customers, collections, loans, bishiConfigs, activeOffice, selectedBishiFilter, t, language } = useApp();
 
   const [viewMode, setViewMode] = useState<'LEDGER_CARD' | 'SUMMARY'>('LEDGER_CARD');
   const [timePeriodFilter, setTimePeriodFilter] = useState<'ALL' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'>('ALL');
@@ -479,9 +479,10 @@ export const ReportManager: React.FC = () => {
                   onChange={(val) => setBishiFilter(val)}
                   options={[
                     { value: 'ALL', label: t.allBishi },
-                    { value: '15_AUGUST', label: t.bishi15Aug },
-                    { value: '26_JANUARY', label: t.bishi26Jan },
-                    { value: 'DASARA', label: t.bishiDasara },
+                    ...bishiConfigs.map((cfg) => ({
+                      value: cfg.id as BishiType,
+                      label: cfg.name,
+                    })),
                     { value: 'LOAN_ONLY', label: language === 'EN' ? 'Loan Only Customer' : 'फक्त कर्ज खातेदार' },
                   ]}
                   size="lg"

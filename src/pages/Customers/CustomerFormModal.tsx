@@ -98,7 +98,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
         }
       }
     } else {
-      const initType = initialLoanOnly ? 'LOAN_ONLY' : '15_AUGUST';
+      const initType = initialLoanOnly ? 'LOAN_ONLY' : (bishiConfigs.length > 0 ? bishiConfigs[0].id : '15_AUGUST');
       const autoAcc = generateNextAccountNumber(initType, customers, bishiConfigs);
       setAccountNumber(autoAcc);
       setName('');
@@ -251,9 +251,9 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             totalPayable,
             paidAmount: existingLoan ? existingLoan.paidAmount : 0,
             remainingAmount: existingLoan
-              ? Math.max(0, totalPayable - existingLoan.paidAmount)
-              : totalPayable,
-            penaltyAmount: 0,
+              ? Math.max(0, principal - (existingLoan.paidAmount || 0) - (existingLoan.discountAmount || 0) + (existingLoan.penaltyAmount || 0))
+              : principal,
+            penaltyAmount: existingLoan ? existingLoan.penaltyAmount || 0 : 0,
             status: 'ACTIVE',
           });
         }
@@ -321,7 +321,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             totalInterest,
             totalPayable,
             paidAmount: 0,
-            remainingAmount: totalPayable,
+            remainingAmount: principal,
             penaltyAmount: 0,
             status: 'ACTIVE',
           });
@@ -463,15 +463,10 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                 value={bishiType}
                 onChange={(val) => handleBishiTypeChange(val)}
                 options={[
-                  { value: '15_AUGUST', label: '१५ ऑगस्ट भिशी' },
-                  { value: '26_JANUARY', label: '२६ जानेवारी भिशी' },
-                  { value: 'DASARA', label: 'दसरा भिशी' },
-                  ...bishiConfigs
-                    .filter((cfg) => !['15_AUGUST', '26_JANUARY', 'DASARA'].includes(cfg.id))
-                    .map((cfg) => ({
-                      value: cfg.id as BishiType,
-                      label: cfg.name,
-                    })),
+                  ...bishiConfigs.map((cfg) => ({
+                    value: cfg.id as BishiType,
+                    label: cfg.name,
+                  })),
                   ...((initialLoanOnly || bishiType === 'LOAN_ONLY')
                     ? [{ value: 'LOAN_ONLY' as BishiType, label: 'फक्त कर्ज खातेदार (Loan Only)' }]
                     : []),

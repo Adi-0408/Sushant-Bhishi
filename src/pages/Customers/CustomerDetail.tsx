@@ -14,7 +14,7 @@ import {
   getStatusBadgeClass,
   getStatusTextMarathi,
 } from '../../utils/formatters';
-import { calculateCustomerFinancials, calculateCollectionEntry } from '../../utils/calculations';
+import { calculateCustomerFinancials, calculateCollectionEntry, getLoanRemainingPrincipal, calculateLoanDueInterest } from '../../utils/calculations';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 import { CustomerFormModal } from './CustomerFormModal';
@@ -43,10 +43,17 @@ import {
 export const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { customers, collections, loans, bishiConfigs, refreshData, showToast } = useApp();
+  const { customers, collections, loans, loanPayments, bishiConfigs, refreshData, showToast } = useApp();
 
   const customer = customers.find((c) => c.id === id);
   const loan = customer ? loans.find((l) => l.customerId === customer.id && l.status === 'ACTIVE') : null;
+  const loanPrincipalRemaining = loan ? getLoanRemainingPrincipal(loan) : 0;
+  const loanDueInterest = loan ? calculateLoanDueInterest(loan) : 0;
+
+  const customerLoanPayments = customer
+    ? loanPayments.filter((lp) => lp.customerId === customer.id || (loan && lp.loanId === loan.id))
+    : [];
+  const totalInterestPaid = customerLoanPayments.reduce((sum, lp) => sum + (Number(lp.interestPaid) || 0), 0);
 
   // Collection modal state
   const [selectedEntry, setSelectedEntry] = useState<CollectionEntry | null>(null);
@@ -196,7 +203,7 @@ export const CustomerDetail: React.FC = () => {
 
   const handleOpenLoanModal = () => {
     if (loan) {
-      const calcInterest = Math.round((loan.remainingAmount * loan.interestRate) / 100);
+      const calcInterest = calculateLoanDueInterest(loan);
       setLoanInterestPaymentInput(calcInterest);
       setLoanPaymentInput('');
       setLoanDiscountPaymentInput('');
@@ -218,9 +225,10 @@ export const CustomerDetail: React.FC = () => {
       return;
     }
 
-    const calcDueInterest = Math.round((loan.remainingAmount * loan.interestRate) / 100);
+    const calcDueInterest = calculateLoanDueInterest(loan);
     const unpaidInt = Math.max(0, calcDueInterest - paidInt);
-    const remLoan = Math.max(0, loan.remainingAmount - paidPrin - discountVal);
+    const remainingPrincipal = Math.max(0, (loan.principalAmount || 0) - (loan.paidAmount || 0) - paidPrin - discountVal);
+    const remLoan = Math.max(0, remainingPrincipal + (loan.penaltyAmount || 0) + unpaidInt);
 
     StorageService.addLoanPayment({
       loanId: loan.id,
@@ -290,7 +298,7 @@ export const CustomerDetail: React.FC = () => {
 
           {/* Download PDF - Requirement 25: Clean PDF without Branding */}
           <button
-            onClick={() => generateCustomerPDF(customer, collections, loan)}
+            onClick={() => generateCustomerPDF(customer, collections, loan, loanPayments)}
             className="px-3.5 py-2 min-h-[44px] rounded-xl bg-brand-50 text-brand-700 border border-brand-200 font-bold text-xs hover:bg-brand-100 transition-colors flex items-center space-x-1.5 touch-target cursor-pointer"
           >
             <Download className="w-4 h-4" />
@@ -743,18 +751,26 @@ export const CustomerDetail: React.FC = () => {
           </div>
 
           <div className="p-6">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4">
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                 <span className="text-[11px] font-bold text-slate-500 block">कर्जाची रक्कम</span>
                 <span className="text-base font-extrabold text-slate-900">
                   {formatCurrency(loan.principalAmount)}
                 </span>
+                {loanPrincipalRemaining < loan.principalAmount && (
+                  <span className="text-[10px] font-bold text-amber-800 block mt-0.5">
+                    (उर्वरित मुद्दल: {formatCurrency(loanPrincipalRemaining)})
+                  </span>
+                )}
               </div>
 
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                 <span className="text-[11px] font-bold text-slate-500 block">व्याज दर</span>
                 <span className="text-base font-extrabold text-slate-900">
                   {loan.interestRate}%
+                </span>
+                <span className="text-[10px] font-bold text-amber-800 block mt-0.5">
+                  (मासिक: {formatCurrency(loanDueInterest)})
                 </span>
               </div>
 
@@ -766,9 +782,16 @@ export const CustomerDetail: React.FC = () => {
               </div>
 
               <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-200">
-                <span className="text-[11px] font-bold text-emerald-800 block">भरलेली रक्कम</span>
+                <span className="text-[11px] font-bold text-emerald-800 block">भरलेली मुद्दल</span>
                 <span className="text-base font-black text-emerald-700">
                   {formatCurrency(loan.paidAmount)}
+                </span>
+              </div>
+
+              <div className="bg-amber-100/70 p-3.5 rounded-xl border border-amber-300">
+                <span className="text-[11px] font-extrabold text-amber-950 block">भरलेले व्याज</span>
+                <span className="text-base font-black text-amber-900">
+                  {formatCurrency(totalInterestPaid)}
                 </span>
               </div>
 
@@ -794,6 +817,61 @@ export const CustomerDetail: React.FC = () => {
                 </span>
               </div>
             </div>
+
+            {/* Loan Payment History Table */}
+            {customerLoanPayments.length > 0 && (
+              <div className="mt-6 border-t border-slate-100 pt-5">
+                <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider mb-3 flex items-center justify-between">
+                  <span>कर्ज भरणा इतिहास (Loan Payment History)</span>
+                  <span className="text-[11px] text-slate-500 font-bold">
+                    एकूण नोंदी: {customerLoanPayments.length} | एकूण जमा व्याज: {formatCurrency(totalInterestPaid)}
+                  </span>
+                </h4>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
+                      <tr>
+                        <th className="p-3 pl-4">दिनांक</th>
+                        <th className="p-3 text-right">भरलेली मुद्दल</th>
+                        <th className="p-3 text-right text-amber-900 font-black">भरलेले व्याज</th>
+                        <th className="p-3 text-right">सूट (Discount)</th>
+                        <th className="p-3 text-right">उर्वरित बाकी</th>
+                        <th className="p-3">पद्धत</th>
+                        <th className="p-3">तपशील / टीप</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                      {customerLoanPayments.map((lp) => (
+                        <tr key={lp.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="p-3 pl-4 font-bold text-slate-900">{formatDateMarathi(lp.paymentDate)}</td>
+                          <td className="p-3 text-right font-black text-emerald-700">
+                            {formatCurrency(lp.paidAmount)}
+                          </td>
+                          <td className="p-3 text-right font-black text-amber-800">
+                            {formatCurrency(lp.interestPaid)}
+                          </td>
+                          <td className="p-3 text-right text-slate-600">
+                            {lp.discountAmount ? formatCurrency(lp.discountAmount) : '-'}
+                          </td>
+                          <td className="p-3 text-right font-black text-rose-600">
+                            {formatCurrency(lp.remainingLoan)}
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-bold text-slate-700">
+                              {lp.paymentMode === 'ONLINE' ? '📱 ऑनलाइन' : '💵 नगद'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-slate-500 text-[11px] font-medium">
+                            {lp.note || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       ) : null}
@@ -985,12 +1063,12 @@ export const CustomerDetail: React.FC = () => {
                 </div>
               </div>
 
-              {/* Option 1: Loan Interest (Calculated First) */}
+              {/* Option 1: Loan Interest (Calculated on Loan Amount) */}
               <div>
                 <label className="block text-xs font-extrabold text-slate-900 mb-1">
                   १. कर्ज व्याज जमा (₹)
                   <span className="text-amber-700 ml-2 font-bold text-[11px]">
-                    (चालू ऑटो व्याज: ₹{Math.round((loan.remainingAmount * loan.interestRate) / 100)})
+                    (चालू ऑटो व्याज: ₹{loanDueInterest})
                   </span>
                 </label>
                 <input
@@ -998,7 +1076,7 @@ export const CustomerDetail: React.FC = () => {
                   min={0}
                   value={loanInterestPaymentInput}
                   onChange={(e) => setLoanInterestPaymentInput(e.target.value ? Number(e.target.value) : '')}
-                  placeholder={`उदा. ${Math.round((loan.remainingAmount * loan.interestRate) / 100)}`}
+                  placeholder={`उदा. ${loanDueInterest}`}
                   className="w-full px-4 py-2.5 rounded-xl border border-amber-300 text-sm font-bold focus:ring-2 focus:ring-amber-500 bg-amber-50/20"
                 />
               </div>
@@ -1041,6 +1119,12 @@ export const CustomerDetail: React.FC = () => {
                   <span>चालू कर्जाची बाकी:</span>
                   <span>{formatCurrency(loan.remainingAmount)}</span>
                 </div>
+                {(Number(loanInterestPaymentInput) || 0) > 0 && (
+                  <div className="flex justify-between text-amber-900 font-bold">
+                    <span>भरलेले व्याज (Interest Paid):</span>
+                    <span>₹{Number(loanInterestPaymentInput) || 0}</span>
+                  </div>
+                )}
                 {((Number(loanPaymentInput) || 0) > 0 || (Number(loanDiscountPaymentInput) || 0) > 0) && (
                   <div className="flex justify-between text-emerald-700">
                     <span>जमा मुद्दल + डिस्काउंट:</span>
@@ -1050,14 +1134,14 @@ export const CustomerDetail: React.FC = () => {
                 <div className="flex justify-between pt-1 border-t border-slate-200">
                   <span>नवीन कर्जाची उर्वरित बाकी:</span>
                   <span className="text-rose-600 font-extrabold">
-                    {formatCurrency(Math.max(0, loan.remainingAmount - (Number(loanPaymentInput) || 0) - (Number(loanDiscountPaymentInput) || 0)))}
+                    {formatCurrency(Math.max(0, loanPrincipalRemaining - (Number(loanPaymentInput) || 0) - (Number(loanDiscountPaymentInput) || 0) + (loan.penaltyAmount || 0) + Math.max(0, loanDueInterest - (Number(loanInterestPaymentInput) || 0))))}
                   </span>
                 </div>
-                {Math.max(0, loan.remainingAmount - (Number(loanPaymentInput) || 0) - (Number(loanDiscountPaymentInput) || 0)) > 0 && (Number(loanPaymentInput) || 0) > 0 && (
+                {Math.max(0, loanPrincipalRemaining - (Number(loanPaymentInput) || 0) - (Number(loanDiscountPaymentInput) || 0)) > 0 && (Number(loanPaymentInput) || 0) > 0 && (
                   <div className="flex justify-between text-blue-800 pt-1 border-t border-slate-200 text-[11px]">
                     <span>💡 मुद्दल परतीनंतर पुढील महिन्याचे ऑटो व्याज ({loan.interestRate}%):</span>
                     <span className="font-extrabold text-blue-900">
-                      ₹{Math.round((Math.max(0, loan.remainingAmount - (Number(loanPaymentInput) || 0) - (Number(loanDiscountPaymentInput) || 0)) * loan.interestRate) / 100)}
+                      ₹{Math.round((Math.max(0, loanPrincipalRemaining - (Number(loanPaymentInput) || 0) - (Number(loanDiscountPaymentInput) || 0)) * loan.interestRate) / 100)}
                     </span>
                   </div>
                 )}
@@ -1069,9 +1153,9 @@ export const CustomerDetail: React.FC = () => {
               </div>
 
               {/* Unpaid Interest Carry Forward Note */}
-              {Math.round((loan.remainingAmount * loan.interestRate) / 100) > (Number(loanInterestPaymentInput) || 0) && (
+              {loanDueInterest > (Number(loanInterestPaymentInput) || 0) && (
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-900">
-                  ⚠️ न भरलेले व्याज ₹{Math.round((loan.remainingAmount * loan.interestRate) / 100) - (Number(loanInterestPaymentInput) || 0)} थकबाकी दंडासह पुढील हप्त्यात जोडले जाईल.
+                  ⚠️ न भरलेले व्याज ₹{loanDueInterest - (Number(loanInterestPaymentInput) || 0)} थकबाकी दंडासह पुढील हप्त्यात जोडले जाईल.
                 </div>
               )}
             </div>

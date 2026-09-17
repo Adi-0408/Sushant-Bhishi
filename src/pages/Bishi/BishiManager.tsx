@@ -3,11 +3,12 @@ import { useApp } from '../../context/AppContext';
 import { BishiConfig, BishiType, Modality } from '../../types';
 import { StorageService } from '../../services/db';
 import { formatDateMarathi, getOfficeNameMarathi } from '../../utils/formatters';
-import { Calendar, Save, Edit3, Plus, X } from 'lucide-react';
+import { Calendar, Save, Edit3, Plus, X, Trash2 } from 'lucide-react';
 import { ModalPortal } from '../../components/common/ModalPortal';
+import { ConfirmModal } from '../../components/common/ConfirmModal';
 
 export const BishiManager: React.FC = () => {
-  const { bishiConfigs, activeOffice, refreshData, showToast, language } = useApp();
+  const { bishiConfigs, customers, activeOffice, refreshData, showToast, language } = useApp();
 
   const [editingId, setEditingId] = useState<BishiType | null>(null);
   const [startDate, setStartDate] = useState('');
@@ -230,7 +231,30 @@ export const BishiManager: React.FC = () => {
     }
   };
 
-  const defaultBishiList: BishiConfig[] = [
+  // Delete Bishi Scheme state
+  const [schemeToDelete, setSchemeToDelete] = useState<BishiConfig | null>(null);
+
+  const handleDeleteScheme = async (scheme: BishiConfig) => {
+    try {
+      await StorageService.deleteBishiConfig(scheme.id);
+      showToast(
+        language === 'EN'
+          ? `Bishi scheme "${scheme.name}" deleted successfully.`
+          : `"${scheme.name}" भिशी योजना यशस्वीपणे हटवली गेली.`,
+        'success'
+      );
+      refreshData();
+    } catch (err) {
+      showToast(
+        language === 'EN' ? 'Failed to delete Bishi scheme.' : 'भिशी योजना हटवता आली नाही.',
+        'error'
+      );
+    } finally {
+      setSchemeToDelete(null);
+    }
+  };
+
+  const defaultInitialList: BishiConfig[] = [
     {
       id: '15_AUGUST',
       name: language === 'EN' ? '15 August Bishi' : '१५ ऑगस्ट भिशी',
@@ -266,20 +290,53 @@ export const BishiManager: React.FC = () => {
     },
   ];
 
-  // Merge default configs with user-added custom configs
-  const mergedConfigs = [...defaultBishiList];
-  bishiConfigs.forEach((userCfg) => {
-    const existingIdx = mergedConfigs.findIndex((c) => c.id === userCfg.id);
-    if (existingIdx >= 0) {
-      mergedConfigs[existingIdx] = { ...mergedConfigs[existingIdx], ...userCfg };
-    } else {
-      mergedConfigs.push({
-        ...userCfg,
-        color: userCfg.color || 'bg-purple-600',
-        bgPastel: userCfg.bgPastel || 'bg-purple-50/50',
-      });
+  // Seed default configs if storage was never initialized
+  React.useEffect(() => {
+    if (bishiConfigs.length === 0 && localStorage.getItem('sushant_bishi_configs') === null) {
+      StorageService.saveBishiConfigs(defaultInitialList);
+      refreshData();
     }
+  }, [bishiConfigs.length]);
+
+  const getSchemeColors = (id: string, index: number) => {
+    if (id === '15_AUGUST') return { color: 'bg-emerald-600', bgPastel: 'bg-pastel-green/30' };
+    if (id === '26_JANUARY') return { color: 'bg-brand-600', bgPastel: 'bg-pastel-blue/30' };
+    if (id === 'DASARA') return { color: 'bg-amber-600', bgPastel: 'bg-pastel-yellow/30' };
+
+    const palette = [
+      { color: 'bg-emerald-700', bgPastel: 'bg-emerald-50/50' },
+      { color: 'bg-purple-600', bgPastel: 'bg-purple-50/50' },
+      { color: 'bg-indigo-600', bgPastel: 'bg-indigo-50/50' },
+      { color: 'bg-teal-600', bgPastel: 'bg-teal-50/50' },
+      { color: 'bg-rose-600', bgPastel: 'bg-rose-50/50' },
+      { color: 'bg-cyan-700', bgPastel: 'bg-cyan-50/50' },
+    ];
+    return palette[index % palette.length];
+  };
+
+  // Display configs directly from stored bishiConfigs
+  const displayConfigs: BishiConfig[] = bishiConfigs.map((cfg, idx) => {
+    const defaultCol = getSchemeColors(cfg.id, idx);
+    return {
+      ...cfg,
+      color: cfg.color || defaultCol.color,
+      bgPastel: cfg.bgPastel || defaultCol.bgPastel,
+    };
   });
+
+  const associatedCustomers = schemeToDelete
+    ? customers.filter((c) => c.bishiType === schemeToDelete.id)
+    : [];
+
+  const confirmDeleteMessage = schemeToDelete
+    ? associatedCustomers.length > 0
+      ? language === 'EN'
+        ? `Are you sure you want to delete the "${schemeToDelete.name}" scheme? Warning: ${associatedCustomers.length} customer(s) are currently registered under this scheme. Existing transaction records will be preserved, but this scheme will no longer be available for new registrations.`
+        : `तुम्हाला खात्रीने "${schemeToDelete.name}" भिशी योजना हटवायची आहे का? सावधान: या योजनेखाली सध्या ${associatedCustomers.length} खातेदार नोंदणीकृत आहेत. त्यांचे जुने व्यवहार सुरक्षित राहतील, परंतु नवीन निवडीसाठी ही योजना उपलब्ध राहणार नाही.`
+      : language === 'EN'
+      ? `Are you sure you want to delete the "${schemeToDelete.name}" scheme? This action cannot be undone.`
+      : `तुम्हाला खात्रीने "${schemeToDelete.name}" भिशी योजना हटवायची आहे का? ही योजना कायमची हटवली जाईल.`
+    : '';
 
   return (
     <div className="space-y-6 pb-12">
@@ -308,198 +365,234 @@ export const BishiManager: React.FC = () => {
       </div>
 
       {/* Dynamic Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {mergedConfigs.map((config) => {
-          const isEditing = editingId === config.id;
-          const cardColor = config.color || 'bg-emerald-600';
-          const cardPastel = config.bgPastel || 'bg-pastel-green/30';
-          const currentModality = config.modality || (config.id === '26_JANUARY' ? 'M' : 'W');
-          const currentTotalInst = config.totalInstallments || (currentModality === 'M' ? 10 : 40);
+      {displayConfigs.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center flex flex-col items-center justify-center space-y-3 shadow-xs">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+            <Calendar className="w-7 h-7" />
+          </div>
+          <h3 className="text-base font-extrabold text-slate-900">
+            {language === 'EN' ? 'No Bishi Schemes Found' : 'कोणतीही भिशी योजना उपलब्ध नाही'}
+          </h3>
+          <p className="text-xs text-slate-500 max-w-sm">
+            {language === 'EN'
+              ? 'Currently there are no active Bishi schemes. Click below to add a new Bishi scheme.'
+              : 'सध्या कोणतीही भिशी योजना नाही. नवीन भिशी योजना तयार करण्यासाठी खालील बटणावर क्लिक करा.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs flex items-center space-x-2 shadow-sm cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{language === 'EN' ? 'Add Bishi Scheme' : 'नवीन भिशी योजना जोडा'}</span>
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {displayConfigs.map((config) => {
+            const isEditing = editingId === config.id;
+            const cardColor = config.color || 'bg-emerald-600';
+            const cardPastel = config.bgPastel || 'bg-pastel-green/30';
+            const currentModality = config.modality || (config.id === '26_JANUARY' ? 'M' : 'W');
+            const currentTotalInst = config.totalInstallments || (currentModality === 'M' ? 10 : 40);
 
-          return (
-            <div key={config.id} className="rainbow-border-box">
-              <div className="bg-white rounded-[1.1rem] overflow-hidden flex flex-col justify-between h-full">
-                {/* Header Banner */}
-                <div className={`${cardColor} p-6 text-white text-center`}>
-                  <span className="text-xs font-bold uppercase tracking-wider text-white/80 block mb-1">
-                    {language === 'EN' ? 'Bishi Scheme' : 'भिशी प्रकार'}
-                  </span>
-                  <h3 className="text-2xl font-black text-white !text-white">{config.name}</h3>
-                </div>
+            return (
+              <div key={config.id} className="rainbow-border-box">
+                <div className="bg-white rounded-[1.1rem] overflow-hidden flex flex-col justify-between h-full">
+                  {/* Header Banner */}
+                  <div className={`${cardColor} p-6 text-white text-center`}>
+                    <span className="text-xs font-bold uppercase tracking-wider text-white/80 block mb-1">
+                      {language === 'EN' ? 'Bishi Scheme' : 'भिशी प्रकार'}
+                    </span>
+                    <h3 className="text-2xl font-black text-white !text-white">{config.name}</h3>
+                  </div>
 
-                {/* Body */}
-                <div className={`p-6 space-y-4 flex-1 ${cardPastel}`}>
-                  {isEditing ? (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          {language === 'EN' ? 'Frequency / Modality:' : 'पद्धत (साप्ताहिक / मासिक):'}
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleModalityChangeInEdit('W')}
-                            className={`py-2 text-xs font-extrabold rounded-xl border ${
-                              modality === 'W'
-                                ? 'bg-brand-800 text-white border-brand-800'
-                                : 'bg-white text-slate-700 border-slate-300'
-                            }`}
-                          >
-                            {language === 'EN' ? 'Weekly (40 W)' : 'साप्ताहिक (४० आठवडे)'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleModalityChangeInEdit('M')}
-                            className={`py-2 text-xs font-extrabold rounded-xl border ${
-                              modality === 'M'
-                                ? 'bg-brand-800 text-white border-brand-800'
-                                : 'bg-white text-slate-700 border-slate-300'
-                            }`}
-                          >
-                            {language === 'EN' ? 'Monthly (10 M)' : 'मासिक (१० महिने)'}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          {language === 'EN' ? 'Start Date:' : 'सुरुवातीची तारीख:'}
-                        </label>
-                        <input
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => handleStartDateChange(e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold bg-white focus:ring-2 focus:ring-[#0F7A5C]"
-                        />
-                      </div>
-
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-xs font-bold text-slate-700">
-                            {language === 'EN' ? 'End Date:' : 'शेवटची तारीख:'}
+                  {/* Body */}
+                  <div className={`p-6 space-y-4 flex-1 ${cardPastel}`}>
+                    {isEditing ? (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            {language === 'EN' ? 'Frequency / Modality:' : 'पद्धत (साप्ताहिक / मासिक):'}
                           </label>
-                          <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
-                            {language === 'EN' ? 'Auto-synced' : 'आपोआप अपडेट होते'}
-                          </span>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleModalityChangeInEdit('W')}
+                              className={`py-2 text-xs font-extrabold rounded-xl border ${
+                                modality === 'W'
+                                  ? 'bg-brand-800 text-white border-brand-800'
+                                  : 'bg-white text-slate-700 border-slate-300'
+                              }`}
+                            >
+                              {language === 'EN' ? 'Weekly (40 W)' : 'साप्ताहिक (४० आठवडे)'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleModalityChangeInEdit('M')}
+                              className={`py-2 text-xs font-extrabold rounded-xl border ${
+                                modality === 'M'
+                                  ? 'bg-brand-800 text-white border-brand-800'
+                                  : 'bg-white text-slate-700 border-slate-300'
+                              }`}
+                            >
+                              {language === 'EN' ? 'Monthly (10 M)' : 'मासिक (१० महिने)'}
+                            </button>
+                          </div>
                         </div>
-                        <input
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => handleEndDateChange(e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold bg-white focus:ring-2 focus:ring-[#0F7A5C]"
-                        />
-                      </div>
 
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-xs font-bold text-slate-700">
-                            {modality === 'M'
-                              ? language === 'EN' ? 'Total Months (Editable):' : 'एकूण महिने (Edit करा):'
-                              : language === 'EN' ? 'Total Weeks (Editable):' : 'एकूण आठवडे (Edit करा):'}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            {language === 'EN' ? 'Start Date:' : 'सुरुवातीची तारीख:'}
                           </label>
-                          <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
-                            {language === 'EN' ? 'Auto-calculates dates' : 'तारीख आपोआप बदलते'}
+                          <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => handleStartDateChange(e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold bg-white focus:ring-2 focus:ring-[#0F7A5C]"
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-xs font-bold text-slate-700">
+                              {language === 'EN' ? 'End Date:' : 'शेवटची तारीख:'}
+                            </label>
+                            <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                              {language === 'EN' ? 'Auto-synced' : 'आपोआप अपडेट होते'}
+                            </span>
+                          </div>
+                          <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => handleEndDateChange(e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold bg-white focus:ring-2 focus:ring-[#0F7A5C]"
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-xs font-bold text-slate-700">
+                              {modality === 'M'
+                                ? language === 'EN' ? 'Total Months (Editable):' : 'एकूण महिने (Edit करा):'
+                                : language === 'EN' ? 'Total Weeks (Editable):' : 'एकूण आठवडे (Edit करा):'}
+                            </label>
+                            <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                              {language === 'EN' ? 'Auto-calculates dates' : 'तारीख आपोआप बदलते'}
+                            </span>
+                          </div>
+                          <input
+                            type="number"
+                            min={1}
+                            max={200}
+                            value={installments || ''}
+                            onChange={(e) => handleInstallmentsChange(e.target.value === '' ? '' : Number(e.target.value))}
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-black text-brand-900 bg-white focus:ring-2 focus:ring-[#0F7A5C]"
+                          />
+                          <div className="text-[11px] font-bold text-emerald-800 mt-1 flex items-center space-x-1">
+                            <span>💡</span>
+                            <span>
+                              {modality === 'M'
+                                ? (language === 'EN' ? 'Changing months updates end date automatically, and vice-versa.' : 'महिने बदलल्यास शेवटची तारीख आपोआप बदलते, तसेच तारीख बदलल्यास महिने बदलतात.')
+                                : (language === 'EN' ? 'Changing weeks updates end date automatically, and vice-versa.' : 'आठवडे बदलल्यास शेवटची तारीख आपोआप बदलते, तसेच तारीख बदलल्यास आठवडे बदलतात.')}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 text-sm font-medium">
+                        <div className="flex justify-between items-center p-3 bg-white/90 rounded-xl border border-slate-100 shadow-2xs">
+                          <span className="text-xs text-slate-500 font-bold">
+                            {language === 'EN' ? 'Frequency' : 'पद्धत'}
+                          </span>
+                          <span className="font-extrabold text-brand-800">
+                            {currentModality === 'M'
+                              ? language === 'EN' ? 'Monthly (मासिक)' : 'मासिक (Monthly)'
+                              : language === 'EN' ? 'Weekly (साप्ताहिक)' : 'साप्ताहिक (Weekly)'}
                           </span>
                         </div>
-                        <input
-                          type="number"
-                          min={1}
-                          max={200}
-                          value={installments || ''}
-                          onChange={(e) => handleInstallmentsChange(e.target.value === '' ? '' : Number(e.target.value))}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-black text-brand-900 bg-white focus:ring-2 focus:ring-[#0F7A5C]"
-                        />
-                        <div className="text-[11px] font-bold text-emerald-800 mt-1 flex items-center space-x-1">
-                          <span>💡</span>
-                          <span>
-                            {modality === 'M'
-                              ? (language === 'EN' ? 'Changing months updates end date automatically, and vice-versa.' : 'महिने बदलल्यास शेवटची तारीख आपोआप बदलते, तसेच तारीख बदलल्यास महिने बदलतात.')
-                              : (language === 'EN' ? 'Changing weeks updates end date automatically, and vice-versa.' : 'आठवडे बदलल्यास शेवटची तारीख आपोआप बदलते, तसेच तारीख बदलल्यास आठवडे बदलतात.')}
+
+                        <div className="flex justify-between items-center p-3 bg-white/90 rounded-xl border border-slate-100 shadow-2xs">
+                          <span className="text-xs text-slate-500 font-bold">
+                            {language === 'EN' ? 'Total Installments' : 'एकूण हप्ते'}
+                          </span>
+                          <span className="font-extrabold text-slate-900">
+                            {currentTotalInst}{' '}
+                            {currentModality === 'M'
+                              ? language === 'EN' ? 'Months' : 'महिने'
+                              : language === 'EN' ? 'Weeks' : 'आठवडे'}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center p-3 bg-white/90 rounded-xl border border-slate-100 shadow-2xs">
+                          <span className="text-xs text-slate-500 font-bold">
+                            {language === 'EN' ? 'Start Date' : 'सुरुवातीची तारीख'}
+                          </span>
+                          <span className="font-extrabold text-slate-800">
+                            {formatDateMarathi(config.startDate, language)}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center p-3 bg-white/90 rounded-xl border border-slate-100 shadow-2xs">
+                          <span className="text-xs text-slate-500 font-bold">
+                            {language === 'EN' ? 'End Date' : 'शेवटची तारीख'}
+                          </span>
+                          <span className="font-extrabold text-slate-800">
+                            {formatDateMarathi(config.endDate, language)}
                           </span>
                         </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 text-sm font-medium">
-                      <div className="flex justify-between items-center p-3 bg-white/90 rounded-xl border border-slate-100 shadow-2xs">
-                        <span className="text-xs text-slate-500 font-bold">
-                          {language === 'EN' ? 'Frequency' : 'पद्धत'}
-                        </span>
-                        <span className="font-extrabold text-brand-800">
-                          {currentModality === 'M'
-                            ? language === 'EN' ? 'Monthly (मासिक)' : 'मासिक (Monthly)'
-                            : language === 'EN' ? 'Weekly (साप्ताहिक)' : 'साप्ताहिक (Weekly)'}
-                        </span>
-                      </div>
+                    )}
+                  </div>
 
-                      <div className="flex justify-between items-center p-3 bg-white/90 rounded-xl border border-slate-100 shadow-2xs">
-                        <span className="text-xs text-slate-500 font-bold">
-                          {language === 'EN' ? 'Total Installments' : 'एकूण हप्ते'}
-                        </span>
-                        <span className="font-extrabold text-slate-900">
-                          {currentTotalInst}{' '}
-                          {currentModality === 'M'
-                            ? language === 'EN' ? 'Months' : 'महिने'
-                            : language === 'EN' ? 'Weeks' : 'आठवडे'}
-                        </span>
+                  {/* Action */}
+                  <div className="p-4 bg-white border-t border-slate-100">
+                    {isEditing ? (
+                      <div className="flex space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingId(null)}
+                          className="w-1/2 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-extrabold text-xs transition-colors cursor-pointer"
+                        >
+                          {language === 'EN' ? 'Cancel' : 'रद्द करा'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSave(config.id)}
+                          className="w-1/2 py-2.5 rounded-xl bg-[#0F7A5C] hover:bg-[#0B5C45] text-white font-extrabold text-xs flex items-center justify-center space-x-1.5 shadow-md transition-colors cursor-pointer"
+                        >
+                          <Save className="w-4 h-4" />
+                          <span>{language === 'EN' ? 'Save' : 'जतन करा'}</span>
+                        </button>
                       </div>
-
-                      <div className="flex justify-between items-center p-3 bg-white/90 rounded-xl border border-slate-100 shadow-2xs">
-                        <span className="text-xs text-slate-500 font-bold">
-                          {language === 'EN' ? 'Start Date' : 'सुरुवातीची तारीख'}
-                        </span>
-                        <span className="font-extrabold text-slate-800">
-                          {formatDateMarathi(config.startDate, language)}
-                        </span>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(config)}
+                          className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-extrabold text-xs hover:bg-slate-800 transition-all flex items-center justify-center space-x-2 shadow-xs cursor-pointer hover:shadow-md active:scale-[0.99]"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                          <span>{language === 'EN' ? 'Edit Scheme' : 'तारीख / हप्ते बदला'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSchemeToDelete(config)}
+                          className="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200 transition-all flex items-center justify-center shadow-xs cursor-pointer hover:scale-105 active:scale-95"
+                          title={language === 'EN' ? 'Delete Bishi Scheme' : 'भिशी योजना हटवा'}
+                          aria-label={language === 'EN' ? 'Delete Bishi Scheme' : 'भिशी योजना हटवा'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-
-                      <div className="flex justify-between items-center p-3 bg-white/90 rounded-xl border border-slate-100 shadow-2xs">
-                        <span className="text-xs text-slate-500 font-bold">
-                          {language === 'EN' ? 'End Date' : 'शेवटची तारीख'}
-                        </span>
-                        <span className="font-extrabold text-slate-800">
-                          {formatDateMarathi(config.endDate, language)}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Action */}
-                <div className="p-4 bg-white border-t border-slate-100">
-                  {isEditing ? (
-                    <div className="flex space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => setEditingId(null)}
-                        className="w-1/2 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-extrabold text-xs transition-colors cursor-pointer"
-                      >
-                        {language === 'EN' ? 'Cancel' : 'रद्द करा'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSave(config.id)}
-                        className="w-1/2 py-2.5 rounded-xl bg-[#0F7A5C] hover:bg-[#0B5C45] text-white font-extrabold text-xs flex items-center justify-center space-x-1.5 shadow-md transition-colors cursor-pointer"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>{language === 'EN' ? 'Save' : 'जतन करा'}</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => startEdit(config)}
-                      className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-extrabold text-xs hover:bg-slate-800 transition-colors flex items-center justify-center space-x-2 shadow-xs"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                      <span>{language === 'EN' ? 'Edit Scheme / Installments' : 'तारीख / हप्ते बदला'}</span>
-                    </button>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Add New Bishi Scheme Modal */}
       {isAddModalOpen && (
@@ -646,6 +739,22 @@ export const BishiManager: React.FC = () => {
         </div>
       </ModalPortal>
       )}
+
+      {/* Delete Scheme Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!schemeToDelete}
+        title={language === 'EN' ? 'Delete Bishi Scheme' : 'भिशी योजना हटवा'}
+        message={confirmDeleteMessage}
+        confirmText={language === 'EN' ? 'Delete Scheme' : 'योजना हटवा'}
+        cancelText={language === 'EN' ? 'Cancel' : 'रद्द करा'}
+        isDanger={true}
+        onConfirm={() => {
+          if (schemeToDelete) {
+            handleDeleteScheme(schemeToDelete);
+          }
+        }}
+        onCancel={() => setSchemeToDelete(null)}
+      />
     </div>
   );
 };

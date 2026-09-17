@@ -6,6 +6,7 @@ import {
   Customer,
   InterestRateConfig,
   Loan,
+  LoanPayment,
   OfficeId,
   PenaltySetting,
   SmsLog,
@@ -32,6 +33,7 @@ interface AppContextType {
   bishiConfigs: BishiConfig[];
   collections: CollectionEntry[];
   loans: Loan[];
+  loanPayments: LoanPayment[];
   interestRates: InterestRateConfig[];
   penaltySettings: PenaltySetting;
   smsLogs: SmsLog[];
@@ -66,6 +68,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [bishiConfigs, setBishiConfigs] = useState<BishiConfig[]>([]);
   const [collections, setCollections] = useState<CollectionEntry[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [loanPayments, setLoanPayments] = useState<LoanPayment[]>([]);
   const [interestRates, setInterestRates] = useState<InterestRateConfig[]>([]);
   const [penaltySettings, setPenaltySettings] = useState<PenaltySetting>(
     StorageService.getPenaltySettings()
@@ -80,6 +83,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBishiConfigs(StorageService.getBishiConfigs());
     setCollections(StorageService.getCollections());
     setLoans(StorageService.getLoans());
+    setLoanPayments(StorageService.getLoanPayments());
     setInterestRates(StorageService.getInterestRates());
     setPenaltySettings(StorageService.getPenaltySettings());
     setSmsLogs(StorageService.getSmsLogs());
@@ -149,6 +153,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         bishiConfigs,
         collections,
         loans,
+        loanPayments,
         interestRates,
         penaltySettings,
         smsLogs,

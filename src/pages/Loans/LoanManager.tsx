@@ -10,7 +10,7 @@ import { CustomerFormModal } from '../Customers/CustomerFormModal';
 import { ModalPortal } from '../../components/common/ModalPortal';
 
 export const LoanManager: React.FC = () => {
-  const { loans, customers, activeOffice, refreshData, showToast, t, language } = useApp();
+  const { loans, loanPayments, customers, activeOffice, refreshData, showToast, t, language } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -68,7 +68,7 @@ export const LoanManager: React.FC = () => {
       totalInterest,
       totalPayable,
       paidAmount: 0,
-      remainingAmount: totalPayable,
+      remainingAmount: principal,
       penaltyAmount: 0,
       status: 'ACTIVE',
       purposeNote: purposeInput.trim() || undefined,
@@ -140,6 +140,9 @@ export const LoanManager: React.FC = () => {
               {filteredLoans.map((loan) => {
                 const cust = customers.find((c) => c.id === loan.customerId);
                 if (!cust) return null;
+                const loanInterestPaid = (loanPayments || [])
+                  .filter((lp) => lp.loanId === loan.id || lp.customerId === loan.customerId)
+                  .reduce((sum, lp) => sum + (Number(lp.interestPaid) || 0), 0);
 
                 return (
                   <div
@@ -193,11 +196,17 @@ export const LoanManager: React.FC = () => {
                     </div>
 
                     {/* Financial Summary Box */}
-                    <div className="flex items-center justify-between bg-amber-50/60 p-2.5 rounded-xl border border-amber-200 text-xs">
+                    <div className="grid grid-cols-3 gap-2 bg-amber-50/60 p-2.5 rounded-xl border border-amber-200 text-xs">
                       <div>
-                        <span className="text-[10px] text-amber-800 font-bold block">{t.colPaidAmount}:</span>
+                        <span className="text-[10px] text-amber-800 font-bold block">{language === 'EN' ? 'Principal Paid' : 'भरलेली मुद्दल'}:</span>
                         <span className="font-black text-emerald-700">
                           {formatCurrency(loan.paidAmount, language)}
+                        </span>
+                      </div>
+                      <div className="text-center">
+                        <span className="text-[10px] text-amber-800 font-bold block">{language === 'EN' ? 'Interest Paid' : 'भरलेले व्याज'}:</span>
+                        <span className="font-black text-amber-900">
+                          {formatCurrency(loanInterestPaid, language)}
                         </span>
                       </div>
                       <div className="text-right">
@@ -235,7 +244,8 @@ export const LoanManager: React.FC = () => {
                     <th className="p-3.5 text-right">{t.colPrincipalAmount}</th>
                     <th className="p-3.5 text-right">{t.colInterestRate}</th>
                     <th className="p-3.5 text-right">{t.colTotalPayable}</th>
-                    <th className="p-3.5 text-right">{t.colPaidAmount}</th>
+                    <th className="p-3.5 text-right">{language === 'EN' ? 'Principal Paid' : 'भरलेली मुद्दल'}</th>
+                    <th className="p-3.5 text-right text-amber-950 font-black">{language === 'EN' ? 'Interest Paid' : 'भरलेले व्याज'}</th>
                     <th className="p-3.5 text-right">{t.statLoanRemaining}</th>
                     <th className="p-3.5 text-center">{t.colActions}</th>
                   </tr>
@@ -244,6 +254,9 @@ export const LoanManager: React.FC = () => {
                   {filteredLoans.map((loan) => {
                     const cust = customers.find((c) => c.id === loan.customerId);
                     if (!cust) return null;
+                    const loanInterestPaid = (loanPayments || [])
+                      .filter((lp) => lp.loanId === loan.id || lp.customerId === loan.customerId)
+                      .reduce((sum, lp) => sum + (Number(lp.interestPaid) || 0), 0);
 
                     return (
                       <tr key={loan.id} className="hover:bg-slate-50 transition-colors">
@@ -262,6 +275,9 @@ export const LoanManager: React.FC = () => {
                         </td>
                         <td className="p-3.5 text-right font-bold text-emerald-700">
                           {formatCurrency(loan.paidAmount, language)}
+                        </td>
+                        <td className="p-3.5 text-right font-black text-amber-800">
+                          {formatCurrency(loanInterestPaid, language)}
                         </td>
                         <td className="p-3.5 text-right font-black text-rose-600">
                           {formatCurrency(loan.remainingAmount, language)}

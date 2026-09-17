@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { CollectionEntry, Customer } from '../../types';
 import { StorageService } from '../../services/db';
 import { SmsService } from '../../services/sms';
-import { calculateCollectionEntry } from '../../utils/calculations';
+import { calculateCollectionEntry, getLoanRemainingPrincipal, calculateLoanDueInterest } from '../../utils/calculations';
 import { formatCurrency, formatDateMarathi, getBishiNameMarathi, matchesCustomerSearch, toEnglishDigits } from '../../utils/formatters';
 import { X, Wallet, CheckCircle2, AlertCircle, Phone, Calendar, Landmark, CreditCard } from 'lucide-react';
 import { MarathiTextInput } from '../common/MarathiTextInput';
@@ -116,7 +116,8 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
   const isLoanOnly = selectedCustomer?.bishiType === 'LOAN_ONLY';
   const hasActiveLoan = Boolean(selectedCustomer?.hasLoan || activeLoan || isLoanOnly);
 
-  const dueInterest = activeLoan ? Math.round((activeLoan.remainingAmount * activeLoan.interestRate) / 100) : 0;
+  const loanPrinRemaining = activeLoan ? getLoanRemainingPrincipal(activeLoan) : 0;
+  const dueInterest = activeLoan ? calculateLoanDueInterest(activeLoan) : 0;
   const loanInterestPaidVal = Number(loanInterestInput) || 0;
   const unpaidInterest = activeLoan && dueInterest > loanInterestPaidVal ? dueInterest - loanInterestPaidVal : 0;
 
@@ -180,7 +181,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
     const loanObj = StorageService.getLoanByCustomerId(customerId) || loans.find((l) => l.customerId === customerId && l.status === 'ACTIVE');
 
     if (loanObj) {
-      const calcInterest = Math.round((loanObj.remainingAmount * loanObj.interestRate) / 100);
+      const calcInterest = calculateLoanDueInterest(loanObj);
       setLoanInterestInput(calcInterest);
     }
 
@@ -278,9 +279,10 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
     // 2. Record Loan & Interest Payment (if customer has active loan and amounts entered)
     const loanDiscVal = Number(loanDiscountInput) || 0;
     if (activeLoan && (loanPrinVal > 0 || loanInterestPaidVal > 0 || loanDiscVal > 0)) {
-      const calcDueInterest = Math.round((activeLoan.remainingAmount * activeLoan.interestRate) / 100);
+      const calcDueInterest = calculateLoanDueInterest(activeLoan);
       const unpaidInt = Math.max(0, calcDueInterest - loanInterestPaidVal);
-      const remLoan = Math.max(0, activeLoan.remainingAmount - loanPrinVal - loanDiscVal);
+      const remainingPrincipal = Math.max(0, (activeLoan.principalAmount || 0) - (activeLoan.paidAmount || 0) - loanPrinVal - loanDiscVal);
+      const remLoan = Math.max(0, remainingPrincipal + (activeLoan.penaltyAmount || 0) + unpaidInt);
 
       StorageService.addLoanPayment({
         loanId: activeLoan.id,
@@ -716,7 +718,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                   <div className="flex justify-between items-center pt-1 border-t border-amber-200/80 text-blue-900 font-bold">
                     <span>💡 मुद्दल परतीनंतर पुढील महिन्याचे ऑटो व्याज:</span>
                     <span className="font-black text-blue-950">
-                      ₹{Math.round((Math.max(0, activeLoan.remainingAmount - loanPrinVal - (Number(loanDiscountInput) || 0)) * activeLoan.interestRate) / 100)}
+                      ₹{Math.round((Math.max(0, loanPrinRemaining - loanPrinVal - (Number(loanDiscountInput) || 0)) * activeLoan.interestRate) / 100)}
                     </span>
                   </div>
                 )}

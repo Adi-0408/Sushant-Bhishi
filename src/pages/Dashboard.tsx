@@ -41,6 +41,7 @@ export const Dashboard: React.FC = () => {
     customers,
     collections,
     loans,
+    bishiConfigs,
     t,
     language,
   } = useApp();
@@ -252,9 +253,10 @@ export const Dashboard: React.FC = () => {
                 onChange={(val) => setSelectedBishiFilter(val as any)}
                 options={[
                   { value: 'ALL', label: t.allBishi },
-                  { value: '15_AUGUST', label: t.bishi15Aug },
-                  { value: '26_JANUARY', label: t.bishi26Jan },
-                  { value: 'DASARA', label: t.bishiDasara },
+                  ...bishiConfigs.map((cfg) => ({
+                    value: cfg.id,
+                    label: cfg.name,
+                  })),
                 ]}
                 size="md"
               />

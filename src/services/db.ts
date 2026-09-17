@@ -231,8 +231,8 @@ const deleteFromFirestore = async (collectionName: string, docId: string, data?:
 
 // Initialize default configs if empty
 const initializeDefaultConfigs = () => {
-  const currentBishi = getStoredData<BishiConfig[]>(STORAGE_KEYS.BISHI_CONFIGS, []);
-  if (currentBishi.length === 0) {
+  const isInitialized = localStorage.getItem(STORAGE_KEYS.BISHI_CONFIGS) !== null;
+  if (!isInitialized) {
     const currentYear = new Date().getFullYear();
     const defaults: BishiConfig[] = [
       {
@@ -243,6 +243,8 @@ const initializeDefaultConfigs = () => {
         totalInstallments: 40,
         modality: 'W',
         officeId: 'MAIN',
+        color: 'bg-emerald-600',
+        bgPastel: 'bg-pastel-green/30',
       },
       {
         id: '26_JANUARY',
@@ -252,6 +254,8 @@ const initializeDefaultConfigs = () => {
         totalInstallments: 10,
         modality: 'M',
         officeId: 'MAIN',
+        color: 'bg-brand-600',
+        bgPastel: 'bg-pastel-blue/30',
       },
       {
         id: 'DASARA',
@@ -261,6 +265,8 @@ const initializeDefaultConfigs = () => {
         totalInstallments: 40,
         modality: 'W',
         officeId: 'MAIN',
+        color: 'bg-amber-600',
+        bgPastel: 'bg-pastel-yellow/30',
       },
     ];
     setStoredData(STORAGE_KEYS.BISHI_CONFIGS, defaults);
@@ -509,6 +515,14 @@ export const StorageService = {
     configs.forEach((c) => syncToFirestore('bishi', c.id, c));
   },
 
+  deleteBishiConfig: async (id: string): Promise<void> => {
+    const configs = StorageService.getBishiConfigs();
+    const toDelete = configs.find((c) => c.id === id);
+    const updated = configs.filter((c) => c.id !== id);
+    setStoredData(STORAGE_KEYS.BISHI_CONFIGS, updated);
+    await deleteFromFirestore('bishi', id, toDelete);
+  },
+
   // Collection Entries Operations
   getCollections: (): CollectionEntry[] => getStoredData<CollectionEntry[]>(STORAGE_KEYS.COLLECTIONS, []),
 
@@ -557,7 +571,36 @@ export const StorageService = {
   },
 
   // Loan Operations
-  getLoans: (): Loan[] => getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []),
+  getLoans: (): Loan[] => {
+    const rawLoans = getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []);
+    let hasChanges = false;
+    const sanitized = rawLoans.map((loan) => {
+      const principal = Number(loan.principalAmount) || 0;
+      const paid = Number(loan.paidAmount) || 0;
+      const discount = Number(loan.discountAmount) || 0;
+      const penalty = Number(loan.penaltyAmount) || 0;
+      const remainingPrincipal = Math.max(0, principal - paid - discount);
+      const expectedRemaining = remainingPrincipal + penalty;
+
+      // Auto-correct active loans where remainingAmount had initial interest incorrectly baked into the balance
+      if (loan.status === 'ACTIVE' && loan.remainingAmount !== expectedRemaining) {
+        hasChanges = true;
+        const currentInterest = Math.round((remainingPrincipal * (loan.interestRate || 0)) / 100);
+        return {
+          ...loan,
+          remainingAmount: expectedRemaining,
+          totalInterest: currentInterest,
+          totalPayable: remainingPrincipal + penalty + (remainingPrincipal > 0 ? currentInterest : 0),
+        };
+      }
+      return loan;
+    });
+
+    if (hasChanges) {
+      setStoredData(STORAGE_KEYS.LOANS, sanitized);
+    }
+    return sanitized;
+  },
 
   getLoanByCustomerId: (customerId: string): Loan | undefined => {
     return StorageService.getLoans().find((l) => l.customerId === customerId && l.status === 'ACTIVE');
@@ -599,16 +642,19 @@ export const StorageService = {
 
     const loan = StorageService.getLoans().find((l) => l.id === payment.loanId);
     if (loan) {
-      const newPaid = (loan.paidAmount || 0) + payment.paidAmount;
+      const newPaid = (loan.paidAmount || 0) + (payment.paidAmount || 0);
       const newDiscount = (loan.discountAmount || 0) + (payment.discountAmount || 0);
       const newPenalty = (loan.penaltyAmount || 0) + (payment.penaltyPaid || 0);
-      const newTotalPayable = (loan.principalAmount || 0) + (loan.totalInterest || 0) + newPenalty;
-      const newRemaining = Math.max(0, newTotalPayable - newPaid - newDiscount);
+      const remainingPrincipal = Math.max(0, (loan.principalAmount || 0) - newPaid - newDiscount);
+      const newRemaining = remainingPrincipal + newPenalty;
       const isClosed = newRemaining <= 0;
+      const nextDueInterest = Math.round((remainingPrincipal * (loan.interestRate || 0)) / 100);
+      const newTotalPayable = remainingPrincipal + newPenalty + (remainingPrincipal > 0 ? nextDueInterest : 0);
 
       StorageService.saveLoan({
         ...loan,
         totalPayable: newTotalPayable,
+        totalInterest: nextDueInterest,
         paidAmount: newPaid,
         discountAmount: newDiscount,
         remainingAmount: newRemaining,

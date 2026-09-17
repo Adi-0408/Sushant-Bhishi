@@ -243,3 +243,31 @@ export const generateMonthlyEntries = (
 
   return entries;
 };
+
+/**
+ * Calculates current active loan principal balance (remaining loan principal amount).
+ * If no principal has been repaid, it returns the full loan principal amount (loan.principalAmount).
+ * If partial principal has been repaid, it returns the remaining principal amount.
+ */
+export const getLoanRemainingPrincipal = (loan?: Loan | null): number => {
+  if (!loan) return 0;
+  if (loan.status === 'CLOSED') return 0;
+  const principal = Number(loan.principalAmount) || 0;
+  if (principal > 0) {
+    const paid = Number(loan.paidAmount) || 0;
+    const discount = Number(loan.discountAmount) || 0;
+    return Math.max(0, principal - paid - discount);
+  }
+  return Math.max(0, Number(loan.remainingAmount) || 0);
+};
+
+/**
+ * Calculates monthly interest due for a loan based on the loan principal amount (not total payable amount).
+ */
+export const calculateLoanDueInterest = (loan?: Loan | null): number => {
+  if (!loan) return 0;
+  if (loan.status === 'CLOSED') return 0;
+  const remPrincipal = getLoanRemainingPrincipal(loan);
+  const rate = Number(loan.interestRate) || 0;
+  return Math.round((remPrincipal * rate) / 100);
+};
