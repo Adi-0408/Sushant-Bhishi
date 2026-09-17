@@ -1,0 +1,319 @@
+export type Language = 'MR' | 'EN';
+
+export const translations = {
+  MR: {
+    // Brand & App
+    appName: 'सुशांत भिशी',
+    tagline: 'विश्वासाची साथ, समृद्धीची वाट',
+    trustSecurity: 'Trust • Security',
+    secureSystem: 'सुरक्षित आणि विश्वसनीय प्रणाली',
+    
+    // Header
+    welcomeGreeting: 'नमस्कार,',
+    adminDefault: 'प्रशासक',
+    officeLabel: 'कार्यालय:',
+    allOffices: 'सर्व कार्यालये',
+    mainOffice: 'मुख्य कार्यालय',
+    homeOffice: 'गृह कार्यालय',
+    profileMenu: 'माझी माहिती (Profile)',
+    logoutMenu: 'बाहेर पडा (Logout)',
+
+    // Navigation Menu
+    navDashboard: 'मुख्य पान',
+    navCustomers: 'खातेदार',
+    navCollections: 'जमा',
+    navBishi: 'भिशी',
+    navLoans: 'कर्ज',
+    navInterest: 'व्याज',
+    navPenalty: 'दंड',
+    navReports: 'अहवाल',
+    navSms: 'एसएमएस',
+    navBackup: 'बॅकअप',
+    navProfile: 'माझी माहिती',
+    navSettings: 'सेटिंग',
+    navLogout: 'बाहेर पडा',
+
+    // Dashboard
+    heroTagline: '⚡ रोजचे काम',
+    heroTitle: 'हप्ता जमा करा',
+    heroDesc: 'खातेदाराचा साप्ताहिक किंवा मासिक हप्ता एका क्लिकवर जमा करा.',
+    heroButton: 'हप्ता जमा करा',
+
+    filterBishi: 'भिशी:',
+    filterModality: 'पद्धत:',
+    filterOffice: 'कार्यालय:',
+    allBishi: 'सर्व भिशी',
+    bishi15Aug: '१५ ऑगस्ट भिशी',
+    bishi26Jan: '२६ जानेवारी भिशी',
+    bishiDasara: 'दसरा भिशी',
+    allModalities: 'सर्व (साप्ताहिक/मासिक)',
+    modalityWeekly: 'साप्ताहिक (Weekly)',
+    modalityMonthly: 'मासिक (Monthly)',
+
+    // Stat Cards
+    statTotalCustomers: 'एकूण खातेदार',
+    statTotalCustSub: 'नोंदणीकृत खातेदार',
+    statTodayCollection: 'आजची जमा',
+    statTodayCollSub: 'आजपर्यंत जमा रक्कम',
+    statTodayPending: 'आजची भिशी',
+    statTodayPendSub: 'आजची देणे बाकी',
+    statTotalBishiColl: 'आतापर्यंत जमा भिशी',
+    statTotalBishiSub: 'नगद/ऑनलाइन जमा झालेली रक्कम',
+    statTotalLoan: 'एकूण कर्ज',
+    statTotalLoanSub: 'चालू कर्ज रक्कम',
+    statLoanRemaining: 'कर्जाची बाकी',
+    statLoanRemSub: 'कर्जाची उरलेली रक्कम',
+    statTodayPendInstallments: 'आजचे प्रलंबित हप्ते',
+    statTodayInstSub: 'बाकी असलेले हप्ते',
+    statTodayPenalty: 'आजचा दंड',
+    statTodayPenSub: 'आजचा दंड रक्कम',
+
+    // Today Pending Table
+    todayPendingTitle: 'आजची बाकी',
+    todayPendingSub: '(Daily Pending)',
+    pendingCountSuffix: 'खातेदार प्रलंबित',
+    noPendingText: 'आज कोणत्याही खातेदाराची बाकी प्रलंबित नाही.',
+
+    // Table Common Headers
+    colAccountNo: 'खाते क्र.',
+    colCustomerName: 'नाव',
+    colFullName: 'खातेदाराचे नाव',
+    colMobile: 'मोबाईल',
+    colBishi: 'भिशी',
+    colModality: 'पद्धत',
+    colInstallmentAmount: 'हप्ता रक्कम',
+    colCollected: 'जमा',
+    colRemaining: 'बाकी',
+    colLoan: 'कर्ज',
+    colOffice: 'कार्यालय',
+    colStatus: 'स्थिती',
+    colActions: 'कृती',
+    colDueDate: 'देय तारीख',
+    colExpectedAmount: 'अपेक्षित (₹)',
+    colCollectedAmount: 'जमा (₹)',
+    colRemainingAmount: 'बाकी (₹)',
+
+    // Actions
+    btnCollect: 'जमा करा',
+    btnRecordDeposit: 'नवीन जमा करा (Record Deposit)',
+    btnView: 'पहा',
+    btnEdit: 'बदल',
+    btnDelete: 'हटवा',
+    btnAddCustomer: 'नवीन खातेदार जोडा',
+    btnAddLoan: 'नवीन कर्ज जोडा',
+    btnSave: 'जतन करा',
+    btnCancel: 'रद्द करा',
+    btnSearch: 'शोधा',
+
+    // Status Badges
+    statusPaid: 'पूर्ण जमा',
+    statusPending: 'बाकी',
+    statusPartial: 'अंशातः जमा',
+    statusActive: 'सुरू',
+    statusClosed: 'पूर्ण बंद',
+    statusBorrower: 'कर्जदार',
+
+    // Customer List
+    customerListTitle: 'खातेदार यादी',
+    customerListSub: 'सर्व खातेदार, भिशी पद्धत व आर्थिक स्थिती',
+    searchCustomerPlaceholder: 'खाते क्रमांक / नाव / मोबाईल क्रमांक शोधा...',
+    filterAllStatus: 'सर्व स्थिती',
+
+    // Collection Manager
+    collectionTitle: 'जमा व्यवस्थापन',
+    collectionSub: 'दैनिक, साप्ताहिक व मासिक जमा नोंदी',
+    tabToday: 'आजची जमा',
+    tabWeekly: 'साप्ताहिक जमा',
+    tabMonthly: 'मासिक जमा',
+    tabAllRecords: 'सर्व नोंदी',
+    noRecordsFound: 'कोणतीही जमा नोंद सापडली नाही.',
+
+    // Loan Manager
+    loanTitle: 'कर्ज व्यवस्थापन',
+    loanSub: 'कर्जधारक खातेदार व कर्ज परतफेडीची माहिती',
+    colLoanDate: 'कर्ज तारीख',
+    colPrincipalAmount: 'मूळ कर्जाची रक्कम',
+    colInterestRate: 'व्याजदर',
+    colTotalPayable: 'एकूण देय',
+    colPaidAmount: 'जमा रक्कम',
+    btnLoanPay: 'कर्ज भरणा',
+
+    // Reports
+    reportTitle: 'अहवाल व हिशोब (Reports & Analysis)',
+    reportSub: 'कोणी भिशी भरली आणि कोणाची बाकी आहे याचा संपूर्ण हिशोब',
+    btnDownloadPdf: 'अहवाल PDF डाऊनलोड',
+    btnPrint: 'प्रिंट',
+    reportAllCustomers: 'सर्व खातेदार',
+    reportPaidReport: '✅ पूर्ण भरलेले',
+    reportPendingReport: '❌ बाकी',
+    summaryExpected: 'अपेक्षित जमा',
+    summaryCollected: 'प्रत्यक्ष जमा',
+    summaryRemaining: 'एकूण बाकी (Pending)',
+    summaryUnpaidCustomers: 'एकूण न भरलेले खातेदार',
+
+    // Modals
+    modalDepositTitle: 'जमा नोंदवा (Deposit)',
+    modalSelectCustomer: 'खातेदार निवडा',
+    modalDepositAmount: 'जमा रक्कम (₹)',
+    modalTotalCollected: 'आत्ता जमा होणारी एकूण रक्कम',
+  },
+
+  EN: {
+    // Brand & App
+    appName: 'Sushant Bishi',
+    tagline: 'Trust & Prosperity Management',
+    trustSecurity: 'Trust • Security',
+    secureSystem: 'Secure & Reliable System',
+
+    // Header
+    welcomeGreeting: 'Welcome,',
+    adminDefault: 'Admin',
+    officeLabel: 'Office:',
+    allOffices: 'All Offices',
+    mainOffice: 'Main Office',
+    homeOffice: 'Home Office',
+    profileMenu: 'My Profile',
+    logoutMenu: 'Logout',
+
+    // Navigation Menu
+    navDashboard: 'Dashboard',
+    navCustomers: 'Customers',
+    navCollections: 'Collections',
+    navBishi: 'Bishi Schemes',
+    navLoans: 'Loans',
+    navInterest: 'Interest',
+    navPenalty: 'Penalty',
+    navReports: 'Reports',
+    navSms: 'SMS Logs',
+    navBackup: 'Backup',
+    navProfile: 'Profile',
+    navSettings: 'Settings',
+    navLogout: 'Logout',
+
+    // Dashboard
+    heroTagline: '⚡ Daily Task',
+    heroTitle: 'Record Installment Deposit',
+    heroDesc: 'Record weekly or monthly installment collection with one click.',
+    heroButton: 'Record Deposit',
+
+    filterBishi: 'Scheme:',
+    filterModality: 'Frequency:',
+    filterOffice: 'Office:',
+    allBishi: 'All Schemes',
+    bishi15Aug: '15 August Bishi',
+    bishi26Jan: '26 January Bishi',
+    bishiDasara: 'Dasara Bishi',
+    allModalities: 'All (Weekly/Monthly)',
+    modalityWeekly: 'Weekly (W)',
+    modalityMonthly: 'Monthly (M)',
+
+    // Stat Cards
+    statTotalCustomers: 'Total Customers',
+    statTotalCustSub: 'Registered Account Holders',
+    statTodayCollection: "Today's Collection",
+    statTodayCollSub: 'Collected Amount Today',
+    statTodayPending: "Today's Due",
+    statTodayPendSub: "Today's Pending Amount",
+    statTotalBishiColl: 'Total Bishi Collected',
+    statTotalBishiSub: 'Cash/Online Received',
+    statTotalLoan: 'Total Principal Loans',
+    statTotalLoanSub: 'Active Loan Disbursement',
+    statLoanRemaining: 'Loan Balance Due',
+    statLoanRemSub: 'Outstanding Loan Balance',
+    statTodayPendInstallments: "Today's Due Installments",
+    statTodayInstSub: 'Pending Installment Count',
+    statTodayPenalty: "Today's Penalty",
+    statTodayPenSub: 'Late Fee Penalty Collected',
+
+    // Today Pending Table
+    todayPendingTitle: "Today's Pending Due",
+    todayPendingSub: '(Daily Pending)',
+    pendingCountSuffix: 'Customers Pending',
+    noPendingText: 'No customer payments are pending for today.',
+
+    // Table Common Headers
+    colAccountNo: 'Acc No.',
+    colCustomerName: 'Name',
+    colFullName: 'Customer Name',
+    colMobile: 'Mobile',
+    colBishi: 'Bishi Scheme',
+    colModality: 'Frequency',
+    colInstallmentAmount: 'Installment (₹)',
+    colCollected: 'Collected (₹)',
+    colRemaining: 'Remaining (₹)',
+    colLoan: 'Loan',
+    colOffice: 'Office',
+    colStatus: 'Status',
+    colActions: 'Actions',
+    colDueDate: 'Due Date',
+    colExpectedAmount: 'Expected (₹)',
+    colCollectedAmount: 'Collected (₹)',
+    colRemainingAmount: 'Remaining (₹)',
+
+    // Actions
+    btnCollect: 'Deposit',
+    btnRecordDeposit: 'Record Deposit',
+    btnView: 'View',
+    btnEdit: 'Edit',
+    btnDelete: 'Delete',
+    btnAddCustomer: 'Add New Customer',
+    btnAddLoan: 'Add New Loan',
+    btnSave: 'Save Changes',
+    btnCancel: 'Cancel',
+    btnSearch: 'Search',
+
+    // Status Badges
+    statusPaid: 'Paid',
+    statusPending: 'Pending',
+    statusPartial: 'Partial',
+    statusActive: 'Active',
+    statusClosed: 'Closed',
+    statusBorrower: 'Borrower',
+
+    // Customer List
+    customerListTitle: 'Customer List',
+    customerListSub: 'Manage all accounts, bishi schemes, and financial balances',
+    searchCustomerPlaceholder: 'Search Acc No / Name / Mobile...',
+    filterAllStatus: 'All Statuses',
+
+    // Collection Manager
+    collectionTitle: 'Collection Manager',
+    collectionSub: 'Daily, Weekly, and Monthly deposit records',
+    tabToday: "Today's Due",
+    tabWeekly: 'Weekly Deposits',
+    tabMonthly: 'Monthly Deposits',
+    tabAllRecords: 'All Entries',
+    noRecordsFound: 'No collection records found.',
+
+    // Loan Manager
+    loanTitle: 'Loan Manager',
+    loanSub: 'Active borrowers and loan repayment schedule',
+    colLoanDate: 'Issue Date',
+    colPrincipalAmount: 'Principal Loan',
+    colInterestRate: 'Interest %',
+    colTotalPayable: 'Total Payable',
+    colPaidAmount: 'Amount Paid',
+    btnLoanPay: 'Repay Loan',
+
+    // Reports
+    reportTitle: 'Reports & Analytics',
+    reportSub: 'Comprehensive statement of paid collections & outstanding dues',
+    btnDownloadPdf: 'Download PDF Report',
+    btnPrint: 'Print Statement',
+    reportAllCustomers: 'All Accounts',
+    reportPaidReport: '✅ Fully Paid',
+    reportPendingReport: '❌ Pending Dues',
+    summaryExpected: 'Expected Total',
+    summaryCollected: 'Actual Collected',
+    summaryRemaining: 'Total Outstanding Dues',
+    summaryUnpaidCustomers: 'Unpaid Customers',
+
+    // Modals
+    modalDepositTitle: 'Record Deposit',
+    modalSelectCustomer: 'Select Customer',
+    modalDepositAmount: 'Deposit Amount (₹)',
+    modalTotalCollected: 'Total Amount Being Deposited',
+  },
+};
+
+export const getTranslation = (lang: Language = 'MR') => translations[lang] || translations.MR;

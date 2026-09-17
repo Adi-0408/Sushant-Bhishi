@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Sushant Bishi Cloud Database Security Rules
+    // Allows full access to customers, loans, collections, and settings collections
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+

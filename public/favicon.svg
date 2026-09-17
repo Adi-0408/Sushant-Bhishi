@@ -1,0 +1,12 @@
+<svg width="160" height="160" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="80" cy="80" r="80" fill="#0f4a3c"/>
+  <circle cx="80" cy="80" r="66" fill="none" stroke="#2f9e6e" stroke-width="3"/>
+  <!-- Pillars (classic bank motif) -->
+  <rect x="45" y="55" width="9" height="45" fill="#ffffff"/>
+  <rect x="61" y="55" width="9" height="45" fill="#ffffff"/>
+  <rect x="77" y="55" width="9" height="45" fill="#ffffff"/>
+  <rect x="93" y="55" width="9" height="45" fill="#ffffff"/>
+  <rect x="109" y="55" width="9" height="45" fill="#ffffff"/>
+  <polygon points="80,30 115,50 45,50" fill="#ffffff"/>
+  <rect x="42" y="103" width="76" height="8" fill="#ffffff"/>
+</svg>

@@ -1,0 +1,438 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Mukta', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #F4F6F5;
+  }
+  
+  body {
+    font-family: 'Mukta', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #F4F6F5;
+    color: #10241E;
+    letter-spacing: -0.01em;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Mukta', 'Noto Sans Devanagari', sans-serif;
+    letter-spacing: -0.015em;
+    color: #10241E;
+  }
+
+  input, select, textarea, button {
+    font-family: 'Mukta', 'Noto Sans Devanagari', sans-serif;
+  }
+}
+
+/* ==========================================
+   Theme-Styled Dropdowns & Selects
+   ========================================== */
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%230F7A5C' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2.25rem;
+  cursor: pointer;
+}
+
+/* For tight pill containers where native or manual arrow is used */
+select.no-custom-arrow {
+  background-image: none;
+  padding-right: 0.25rem;
+}
+
+select:focus {
+  outline: none;
+  border-color: #0F7A5C !important;
+  box-shadow: 0 0 0 2px rgba(15, 122, 92, 0.25) !important;
+}
+
+select option {
+  background-color: #FFFFFF;
+  color: #10241E;
+  font-weight: 600;
+  padding: 8px 12px;
+}
+
+/* ==========================================
+   Splash Screen Reveal Animations (Exact Specs)
+   ========================================== */
+
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes logoBounce {
+  0% {
+    transform: scale(0) rotate(-24deg);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes pulseRing {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+@keyframes letterReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes progressFill {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+@keyframes splashExit {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-24px);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 1.6s ease forwards;
+}
+
+.animate-logo-bounce {
+  animation: logoBounce 0.78s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s forwards;
+}
+
+.animate-pulse-ring-1 {
+  animation: pulseRing 1.8s ease-out 0.9s forwards;
+}
+
+.animate-pulse-ring-2 {
+  animation: pulseRing 1.8s ease-out 1.15s forwards;
+}
+
+.animate-letter-reveal {
+  animation: letterReveal 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease 1.5s forwards;
+}
+
+.animate-progress-fill {
+  animation: progressFill 1.1s ease-in-out 1.8s forwards;
+}
+
+.animate-splash-exit {
+  animation: splashExit 0.6s cubic-bezier(0.6, 0, 0.4, 1) forwards;
+}
+
+/* ==========================================
+   Page & Section Transition Animations
+   ========================================== */
+
+@keyframes pageEnter {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.animate-page-enter {
+  animation: pageEnter 0.2s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-page-enter {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+
+/* ==========================================
+   Interactive Hover & Micro-interaction Effects
+   ========================================== */
+
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px rgba(15, 122, 92, 0.12), 0 4px 8px -2px rgba(0, 0, 0, 0.04);
+}
+
+.hover-lift:active {
+  transform: translateY(0) scale(0.99);
+}
+
+.btn-hover-lift {
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s ease;
+}
+
+.btn-hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px -2px rgba(15, 122, 92, 0.3);
+}
+
+.btn-hover-lift:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Interactive Table Row Hover Styling */
+table tbody tr {
+  transition: background-color 0.15s ease-in-out;
+}
+
+table tbody tr:hover {
+  background-color: rgba(15, 122, 92, 0.035);
+}
+
+/* Custom scrollbar for horizontal tables */
+::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #E4EAE7;
+}
+::-webkit-scrollbar-thumb {
+  background: #0F7A5C;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #0B5C45;
+}
+
+/* Utility to hide scrollbars while maintaining scrollability */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* Print layout optimization */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-container {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  @page {
+    margin: 1cm;
+    size: auto;
+  }
+}
+
+/* ==========================================================================
+   Mobile Responsiveness & Usability Enhancements
+   Strictly scoped to screens < 1024px and < 768px
+   Desktop experience (screens 1024px and wider) remains 100% identical
+   ========================================================================== */
+
+/* 1. Global Media Scaling & Prevent Horizontal Scrolling on Mobile */
+@media (max-width: 1023px) {
+  html,
+  body,
+  #root {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+    width: 100%;
+    position: relative;
+  }
+
+  /* Media Scaling: Ensure all images, videos, and embedded media scale properly */
+  img,
+  video,
+  canvas,
+  iframe,
+  embed,
+  object,
+  svg {
+    max-width: 100% !important;
+  }
+
+  img,
+  video {
+    height: auto !important;
+  }
+
+  /* Smooth momentum scrolling on iOS and Android for touch devices */
+  .overflow-x-auto,
+  .overflow-y-auto,
+  table,
+  nav,
+  aside {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Safe Area Inset Support for Modern Mobile Devices (Notches & Home Bars) */
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* 2. Mobile & Tablet Breakpoint (max-width: 1023px) */
+@media (max-width: 1023px) {
+  /* Prevent background body scrolling when sidebar drawer or modals are open */
+  body.drawer-open,
+  body.modal-open {
+    overflow: hidden !important;
+  }
+
+  /* Mobile Touch Targets: minimum 44px height for touch usability */
+  button:not(.no-min-touch),
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"],
+  a.btn-touch {
+    min-height: 44px;
+  }
+
+  /* Ensure inputs and selects have comfortable touch height and readable font */
+  input[type="text"],
+  input[type="tel"],
+  input[type="email"],
+  input[type="number"],
+  input[type="date"],
+  input[type="password"],
+  select {
+    min-height: 44px !important;
+    font-size: 16px !important; /* Prevents iOS Safari auto-zoom on input focus */
+  }
+
+  /* Custom dropdown trigger touch target */
+  .custom-dropdown-trigger {
+    min-height: 44px !important;
+  }
+
+  /* Modal Dialogues: Full width on mobile screens with safe padding */
+  .modal-dialog {
+    width: 100% !important;
+    max-width: calc(100vw - 1.5rem) !important;
+    margin: auto !important;
+  }
+}
+
+/* 3. Mobile Phone Breakpoint (max-width: 767px) */
+@media (max-width: 767px) {
+  /* Header adjustments on mobile phones */
+  header {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    gap: 0.375rem !important;
+  }
+
+  /* Touch Targets for interactive buttons */
+  .touch-target {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* Convert multi-column grid and flex layouts into single-column stacks */
+  .mobile-stack {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .mobile-grid-1 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Table horizontal scroll cue & container safety */
+  .table-responsive {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    display: block !important;
+  }
+
+  /* Ensure typography doesn't cause horizontal overflow */
+  h1, h2, h3, h4, p, span {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* Compact padding on mobile cards */
+  .card-mobile-pad {
+    padding: 0.875rem !important;
+  }
+}
+
+/* 4. Small Mobile Phones (max-width: 480px) */
+@media (max-width: 480px) {
+  /* Ultra-compact stat cards on small mobile screens */
+  .mobile-stat-card {
+    padding: 0.75rem !important;
+  }
+
+  /* Ensure modal padding is comfortable on 320px-375px screens */
+  .modal-compact {
+    padding: 1rem !important;
+  }
+}
+

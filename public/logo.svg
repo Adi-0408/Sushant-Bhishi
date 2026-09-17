@@ -1,0 +1,21 @@
+<svg width="700" height="220" viewBox="0 0 700 220" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="700" height="220" fill="#ffffff"/>
+
+  <!-- Circular badge -->
+  <g transform="translate(40,30)">
+    <circle cx="80" cy="80" r="80" fill="#0f4a3c"/>
+    <circle cx="80" cy="80" r="66" fill="none" stroke="#2f9e6e" stroke-width="3"/>
+    <!-- Pillars (classic bank motif) -->
+    <rect x="45" y="55" width="9" height="45" fill="#ffffff"/>
+    <rect x="61" y="55" width="9" height="45" fill="#ffffff"/>
+    <rect x="77" y="55" width="9" height="45" fill="#ffffff"/>
+    <rect x="93" y="55" width="9" height="45" fill="#ffffff"/>
+    <rect x="109" y="55" width="9" height="45" fill="#ffffff"/>
+    <polygon points="80,30 115,50 45,50" fill="#ffffff"/>
+    <rect x="42" y="103" width="76" height="8" fill="#ffffff"/>
+  </g>
+
+  <!-- Brand name -->
+  <text x="220" y="100" font-family="'Noto Sans Devanagari', 'Mukta', Arial, sans-serif" font-size="52" font-weight="700" fill="#0f4a3c">सुषांत भिशी</text>
+  <text x="220" y="130" font-family="Arial, sans-serif" font-size="18" letter-spacing="3" fill="#2f9e6e">TRUST • SECURITY • GROWTH</text>
+</svg>
