@@ -307,23 +307,36 @@ const initializeDefaultConfigs = () => {
     defaultInterest.forEach((d) => syncToFirestore('interestRates', d.id, d));
   }
 
-  // Seed default admin if none exists so login is immediately accessible without registration
+  // Delete all previous admin records and create single new admin (9876543210 / 123456)
+  const PRIMARY_ADMIN: Admin = {
+    id: 'admin_primary',
+    name: 'सुषांत भिशी व्यवस्थापक',
+    mobile: '9876543210',
+    email: 'sushant@gmail.com',
+    createdAt: new Date().toISOString(),
+  };
+
   const admins = getStoredData<Admin[]>(STORAGE_KEYS.ADMINS, []);
-  if (admins.length === 0) {
-    const defaultAdmin: Admin = {
-      id: 'admin_default',
-      name: 'सुषांत भिशी व्यवस्थापक',
-      mobile: '9823056678',
-      email: 'sushant@gmail.com',
-      createdAt: new Date().toISOString(),
-    };
-    setStoredData(STORAGE_KEYS.ADMINS, [defaultAdmin]);
-    if (!localStorage.getItem('sb_admin_pass')) {
-      localStorage.setItem('sb_admin_pass', 'admin');
-    }
-    syncToFirestore('admins', defaultAdmin.id, defaultAdmin);
+  const hasOnlyPrimaryAdmin =
+    admins.length === 1 &&
+    admins[0].mobile.trim() === '9876543210' &&
+    admins[0].id === 'admin_primary';
+
+  if (!hasOnlyPrimaryAdmin) {
+    // Delete any previous admin records locally and in Firestore
+    admins.forEach((oldAdmin) => {
+      if (oldAdmin.id !== 'admin_primary') {
+        deleteFromFirestore('admins', oldAdmin.id);
+      }
+    });
+    deleteFromFirestore('admins', 'admin_default');
+
+    setStoredData(STORAGE_KEYS.ADMINS, [PRIMARY_ADMIN]);
+    localStorage.setItem('sb_admin_pass', '123456');
+    localStorage.removeItem('sb_active_session'); // Clear old session so user logs in with new credentials
+    syncToFirestore('admins', PRIMARY_ADMIN.id, PRIMARY_ADMIN);
   } else if (!localStorage.getItem('sb_admin_pass')) {
-    localStorage.setItem('sb_admin_pass', 'admin');
+    localStorage.setItem('sb_admin_pass', '123456');
   }
 };
 
@@ -333,19 +346,22 @@ export const StorageService = {
   // Admin Operations
   getAdmins: (): Admin[] => {
     const admins = getStoredData<Admin[]>(STORAGE_KEYS.ADMINS, []);
-    if (admins.length === 0) {
-      const defaultAdmin: Admin = {
-        id: 'admin_default',
+    const hasOnlyPrimaryAdmin =
+      admins.length === 1 &&
+      admins[0].mobile.trim() === '9876543210' &&
+      admins[0].id === 'admin_primary';
+
+    if (!hasOnlyPrimaryAdmin) {
+      const PRIMARY_ADMIN: Admin = {
+        id: 'admin_primary',
         name: 'सुषांत भिशी व्यवस्थापक',
-        mobile: '9823056678',
+        mobile: '9876543210',
         email: 'sushant@gmail.com',
         createdAt: new Date().toISOString(),
       };
-      setStoredData(STORAGE_KEYS.ADMINS, [defaultAdmin]);
-      if (!localStorage.getItem('sb_admin_pass')) {
-        localStorage.setItem('sb_admin_pass', 'admin');
-      }
-      return [defaultAdmin];
+      setStoredData(STORAGE_KEYS.ADMINS, [PRIMARY_ADMIN]);
+      localStorage.setItem('sb_admin_pass', '123456');
+      return [PRIMARY_ADMIN];
     }
     return admins;
   },

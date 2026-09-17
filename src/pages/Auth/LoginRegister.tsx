@@ -218,7 +218,7 @@ export const LoginRegister: React.FC = () => {
                     required
                     value={loginIdentifier}
                     onChange={(e) => setLoginIdentifier(e.target.value)}
-                    placeholder="उदा. ९८२३०५६६७८ किंवा sushant@gmail.com"
+                    placeholder="उदा. ९८७६५४३२१० किंवा sushant@gmail.com"
                     className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/40"
                   />
                 </div>
@@ -261,7 +261,7 @@ export const LoginRegister: React.FC = () => {
 
               {forgotPasswordMsg && (
                 <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs font-semibold">
-                  💡 डिफॉल्ट पासवर्ड <strong className="font-mono">admin</strong> आहे. आपण प्रोफाइल विभागात जाऊन पासवर्ड बदलू शकता.
+                  💡 डिफॉल्ट पासवर्ड <strong className="font-mono">123456</strong> आहे (मोबाईल: ९८७६५४३२१०). आपण प्रोफाइल विभागात जाऊन पासवर्ड बदलू शकता.
                 </div>
               )}
 

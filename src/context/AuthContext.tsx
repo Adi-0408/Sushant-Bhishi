@@ -40,7 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (identifier: string, pass: string): Promise<boolean> => {
     const admins = StorageService.getAdmins();
-    const storedPass = localStorage.getItem('sb_admin_pass') || 'admin';
+    const storedPass = localStorage.getItem('sb_admin_pass') || '123456';
 
     const cleanInput = identifier.trim().toLowerCase();
     const matched = admins.find(
