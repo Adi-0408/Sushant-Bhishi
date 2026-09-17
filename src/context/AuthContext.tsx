@@ -8,6 +8,7 @@ interface AuthContextType {
   login: (identifier: string, pass: string) => Promise<boolean>;
   registerAdmin: (data: Omit<Admin, 'id' | 'createdAt'> & { password: string }) => Promise<Admin>;
   updateAdminProfile: (updates: Partial<Admin>) => Promise<Admin>;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
 }
@@ -71,6 +72,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return updated;
   };
 
+  const changePassword = async (oldPassword: string, newPassword: string): Promise<boolean> => {
+    const currentPass = localStorage.getItem('sb_admin_pass') || '123456';
+    if (oldPassword !== currentPass) {
+      throw new Error('सध्याचा (जुना) पासवर्ड चुकीचा आहे.');
+    }
+    if (!newPassword || newPassword.trim().length < 4) {
+      throw new Error('नवीन पासवर्ड किमान ४ अक्षरांचा असावा.');
+    }
+    localStorage.setItem('sb_admin_pass', newPassword.trim());
+    return true;
+  };
+
   const logout = () => {
     setCurrentAdmin(null);
     localStorage.removeItem('sb_active_session');
@@ -84,6 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         registerAdmin,
         updateAdminProfile,
+        changePassword,
         logout,
         loading,
       }}

@@ -1,20 +1,31 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
-import { UserCheck, Phone, Save, Mail, User } from 'lucide-react';
+import { UserCheck, Phone, Save, Mail, Lock, KeyRound, Eye, EyeOff, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 
 export const ProfileManager: React.FC = () => {
-  const { currentAdmin, updateAdminProfile } = useAuth();
+  const { currentAdmin, updateAdminProfile, changePassword } = useAuth();
   const { showToast } = useApp();
 
+  // Profile info state
   const [name, setName] = useState(currentAdmin?.name || '');
   const [mobile, setMobile] = useState(currentAdmin?.mobile || '');
   const [email, setEmail] = useState(currentAdmin?.email || '');
-
   const [saving, setSaving] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Change password state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [changingPass, setChangingPass] = useState(false);
+  const [passError, setPassError] = useState('');
+  const [passSuccess, setPassSuccess] = useState('');
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !mobile.trim()) return;
 
@@ -33,80 +44,254 @@ export const ProfileManager: React.FC = () => {
     }
   };
 
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassError('');
+    setPassSuccess('');
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPassError('कृपया सर्व आवश्यक पासवर्ड फील्ड भरा.');
+      return;
+    }
+
+    if (newPassword.length < 4) {
+      setPassError('नवीन पासवर्ड किमान ४ अक्षरांचा असावा.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPassError('नवीन पासवर्ड आणि पुन्हा टाकलेला पासवर्ड जुळत नाही.');
+      return;
+    }
+
+    if (currentPassword === newPassword) {
+      setPassError('नवीन पासवर्ड सध्याच्या पासवर्डपेक्षा वेगळा असावा.');
+      return;
+    }
+
+    setChangingPass(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      setPassSuccess('पासवर्ड यशस्वीपणे बदलला आहे! पुढील वेळी लॉगिनसाठी हाच पासवर्ड वापरा.');
+      showToast('पासवर्ड यशस्वीपणे अपडेट झाला.', 'success');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'पासवर्ड बदलताना त्रुटी आली.';
+      setPassError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setChangingPass(false);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-12">
+      {/* Header Banner */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
           <UserCheck className="w-6 h-6 text-brand-700" />
-          <span>माझी माहिती (Profile)</span>
+          <span>माझी माहिती व सुरक्षा (Profile & Security)</span>
         </h2>
         <p className="text-xs text-slate-500 font-medium mt-1">
-          प्रशासकाची प्रोफाइल माहिती बदला
+          प्रशासकाची प्रोफाइल माहिती बदला आणि सुरक्षा पासवर्ड अपडेट करा
         </p>
       </div>
 
-      <div className="max-w-xl bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              प्रशासकाचे नाव <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative">
-              <MarathiTextInput
-                required
-                value={name}
-                onChange={(val) => setName(val)}
-                placeholder="प्रशासकाचे नाव (उदा. sushant -> सुशांत)"
-                className="w-full pl-4 pr-20 py-2.5 rounded-xl border border-slate-300 text-sm font-bold"
-              />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        {/* Profile Card */}
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex items-center space-x-3 pb-3 border-b border-slate-100">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-slate-900">प्रशासक तपशील</h3>
+              <p className="text-xs text-slate-500 font-medium">नाव, ईमेल आणि मोबाईल क्रमांक</p>
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              ईमेल आयडी (Email ID) <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative">
-              <Mail className="w-5 h-5 absolute left-3 top-3 text-slate-400" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="sushant@gmail.com"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold"
-              />
+          <form onSubmit={handleProfileSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                प्रशासकाचे नाव <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <MarathiTextInput
+                  required
+                  value={name}
+                  onChange={(val) => setName(val)}
+                  placeholder="प्रशासकाचे नाव (उदा. sushant -> सुशांत)"
+                  className="w-full pl-4 pr-20 py-2.5 rounded-xl border border-slate-300 text-sm font-bold"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                ईमेल आयडी (Email ID) <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <Mail className="w-5 h-5 absolute left-3 top-3 text-slate-400" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="sushant@gmail.com"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                मोबाईल क्रमांक <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <Phone className="w-5 h-5 absolute left-3 top-3 text-slate-400" />
+                <input
+                  type="tel"
+                  required
+                  maxLength={10}
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100">
+              <button
+                type="submit"
+                disabled={saving}
+                className="w-full min-h-[44px] py-3 rounded-xl bg-brand-900 text-white font-extrabold text-sm hover:bg-brand-800 transition-colors shadow-md flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+              >
+                <Save className="w-5 h-5" />
+                <span>{saving ? 'जतन होत आहे...' : 'माहिती जतन करा'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Change Password Card */}
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex items-center space-x-3 pb-3 border-b border-slate-100">
+            <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-slate-900">पासवर्ड बदला (Change Password)</h3>
+              <p className="text-xs text-slate-500 font-medium">खाते सुरक्षित ठेवण्यासाठी नवीन पासवर्ड सेट करा</p>
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              मोबाईल क्रमांक <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative">
-              <Phone className="w-5 h-5 absolute left-3 top-3 text-slate-400" />
-              <input
-                type="tel"
-                required
-                maxLength={10}
-                value={mobile}
-                onChange={(e) => setMobile(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold"
-              />
+          {passSuccess && (
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center space-x-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <span>{passSuccess}</span>
             </div>
-          </div>
+          )}
 
-          <div className="pt-3 border-t border-slate-100">
-            <button
-              type="submit"
-              disabled={saving}
-              className="w-full min-h-[44px] py-3 rounded-xl bg-brand-900 text-white font-extrabold text-sm hover:bg-brand-800 transition-colors shadow-md flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
-            >
-              <Save className="w-5 h-5" />
-              <span>{saving ? 'जतन होत आहे...' : 'माहिती जतन करा'}</span>
-            </button>
-          </div>
-        </form>
+          {passError && (
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center space-x-2">
+              <span>⚠️ {passError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                सध्याचा पासवर्ड (Current Password) <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+                <input
+                  type={showCurrentPassword ? 'text' : 'password'}
+                  required
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="सध्याचा पासवर्ड टाका"
+                  className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-2 top-2 p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  aria-label="पासवर्ड दाखवा/लपवा"
+                >
+                  {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                नवीन पासवर्ड (New Password) <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <KeyRound className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="नवीन पासवर्ड टाका (किमान ४ अक्षरे)"
+                  className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-2 top-2 p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  aria-label="नवीन पासवर्ड दाखवा/लपवा"
+                >
+                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                नवीन पासवर्ड पुन्हा टाका (Confirm New Password) <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <ShieldCheck className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="नवीन पासवर्ड पुन्हा लिहा"
+                  className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-2 top-2 p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  aria-label="पुन्हा पासवर्ड दाखवा/लपवा"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-xs font-medium">
+              💡 <strong>टीप:</strong> पासवर्ड बदलल्यानंतर पुढील सर्व लॉगिनसाठी हाच नवीन पासवर्ड वापरला जाईल.
+            </div>
+
+            <div className="pt-3 border-t border-slate-100">
+              <button
+                type="submit"
+                disabled={changingPass}
+                className="w-full min-h-[44px] py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-sm transition-colors shadow-md flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+              >
+                <KeyRound className="w-5 h-5" />
+                <span>{changingPass ? 'पासवर्ड बदलत आहे...' : 'पासवर्ड अपडेट करा'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );
