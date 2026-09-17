@@ -389,7 +389,8 @@ export const generateCustomerPDF = async (
 };
 
 /**
- * Generate Report PDF (Daily / Weekly / Monthly) in Clean Marathi
+ * Generate Report PDF (Daily / Weekly / Monthly / Custom Summary)
+ * Landscape layout with 11 aligned columns, zebra striping, and full totals.
  */
 export const generateReportPDF = async (
   title: string,
@@ -398,15 +399,8 @@ export const generateReportPDF = async (
   customers: Customer[],
   collections: CollectionEntry[]
 ) => {
-  const container = document.createElement('div');
-  container.style.position = 'absolute';
-  container.style.left = '-9999px';
-  container.style.top = '-9999px';
-  container.style.width = '1100px';
-  container.style.backgroundColor = '#ffffff';
-  container.style.fontFamily = "'Noto Sans Devanagari', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
-  container.style.padding = '30px';
-  container.style.color = '#1e293b';
+  // A4 Landscape target width: 1122px
+  const container = createPdfContainer(1122);
 
   let totalExp = 0;
   let totalColl = 0;
@@ -456,32 +450,34 @@ export const generateReportPDF = async (
   const todayStr = formatDateMarathi(new Date().toISOString().split('T')[0]);
 
   container.innerHTML = `
-    <div style="border: 2px solid #0B5C45; padding: 24px; border-radius: 12px; background: #ffffff;">
+    <div style="border: 2px solid #0B5C45; padding: 20px; border-radius: 12px; background: #ffffff;">
       <!-- Title Header Bar -->
-      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #0B5C45; padding-bottom: 12px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #0B5C45; padding-bottom: 10px; margin-bottom: 14px;">
         <div>
-          <h2 style="margin: 0; font-size: 20px; font-weight: 900; color: #0B5C45;">${title}</h2>
+          <h1 style="margin: 0; font-size: 20px; font-weight: 900; color: #0B5C45;">सुषांत भिशी</h1>
+          <h2 style="margin: 2px 0 0 0; font-size: 15px; font-weight: 800; color: #1e293b;">${title}</h2>
         </div>
-        <div style="text-align: right; font-size: 11px; font-weight: 700; color: #334155;">
-          <span>कार्यालय: <strong style="color: #0F7A5C;">${officeName}</strong></span> | 
-          <span>भिशी: <strong style="color: #0F7A5C;">${bishiName}</strong></span> | 
-          <span>दिनांक: <strong>${todayStr}</strong></span>
+        <div style="text-align: right; font-size: 11px; font-weight: 700; color: #475569; line-height: 1.5;">
+          <div>कार्यालय: <strong style="color: #0B5C45;">${officeName}</strong> | भिशी योजना: <strong style="color: #0B5C45;">${bishiName}</strong></div>
+          <div>दिनांक: <strong style="color: #0f172a;">${todayStr}</strong> | एकूण खातेदार: <strong style="color: #0f172a;">${customers.length}</strong></div>
         </div>
       </div>
 
-      <!-- Clean Data Table -->
-      <table style="width: 100%; border-collapse: collapse; font-size: 11px; font-weight: 600; border: 1px solid #94a3b8;">
+      <!-- Summary Report Data Table -->
+      <table style="width: 100%; border-collapse: collapse; font-size: 11px; font-weight: 600; border: 1px solid #cbd5e1;">
         <thead>
-          <tr style="background: #0B5C45; color: #ffffff; text-align: left; font-size: 11px;">
-            <th style="padding: 8px 6px; border: 1px solid #0f4a3c; text-align: center; width: 40px;">अ.क्र.</th>
-            <th style="padding: 8px 8px; border: 1px solid #0f4a3c; width: 80px;">खाते क्र.</th>
-            <th style="padding: 8px 8px; border: 1px solid #0f4a3c;">खातेदाराचे नाव</th>
-            <th style="padding: 8px 8px; border: 1px solid #0f4a3c; width: 100px;">मोबाईल</th>
-            <th style="padding: 8px 8px; border: 1px solid #0f4a3c; width: 75px;">प्रकार</th>
-            <th style="padding: 8px 8px; border: 1px solid #0f4a3c; text-align: right; width: 95px;">अपेक्षित (₹)</th>
-            <th style="padding: 8px 8px; border: 1px solid #0f4a3c; text-align: right; width: 95px;">जमा (₹)</th>
-            <th style="padding: 8px 8px; border: 1px solid #0f4a3c; text-align: right; width: 95px;">बाकी (₹)</th>
-            <th style="padding: 8px 8px; border: 1px solid #0f4a3c; text-align: center; width: 85px;">स्थिती</th>
+          <tr style="background: #0B5C45; color: #ffffff;">
+            <th style="padding: 7px 4px; border: 1px solid #0f4a3c; text-align: center; width: 35px;">अ.क्र.</th>
+            <th style="padding: 7px 6px; border: 1px solid #0f4a3c; text-align: center; width: 75px;">खाते क्र.</th>
+            <th style="padding: 7px 8px; border: 1px solid #0f4a3c; text-align: left;">खातेदाराचे नाव</th>
+            <th style="padding: 7px 6px; border: 1px solid #0f4a3c; text-align: center; width: 95px;">मोबाईल</th>
+            <th style="padding: 7px 6px; border: 1px solid #0f4a3c; text-align: center; width: 80px;">प्रकार</th>
+            <th style="padding: 7px 6px; border: 1px solid #0f4a3c; text-align: center; width: 65px;">पद्धत</th>
+            <th style="padding: 7px 8px; border: 1px solid #0f4a3c; text-align: right; width: 95px;">अपेक्षित (₹)</th>
+            <th style="padding: 7px 8px; border: 1px solid #0f4a3c; text-align: right; width: 95px;">जमा (₹)</th>
+            <th style="padding: 7px 8px; border: 1px solid #0f4a3c; text-align: right; width: 95px;">बाकी (₹)</th>
+            <th style="padding: 7px 8px; border: 1px solid #0f4a3c; text-align: right; width: 100px;">व्याज/दंड (₹)</th>
+            <th style="padding: 7px 6px; border: 1px solid #0f4a3c; text-align: center; width: 85px;">स्थिती</th>
           </tr>
         </thead>
         <tbody>
@@ -489,15 +485,21 @@ export const generateReportPDF = async (
             .map(
               (r, idx) => `
             <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-              <td style="padding: 7px 6px; border: 1px solid #cbd5e1; text-align: center; font-weight: 700;">${idx + 1}</td>
-              <td style="padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: 800; color: #0f172a;">${r.cust.accountNumber}</td>
-              <td style="padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: 800; color: #1e293b;">${r.cust.name}</td>
-              <td style="padding: 7px 8px; border: 1px solid #cbd5e1; color: #475569;">${r.cust.mobile}</td>
-              <td style="padding: 7px 8px; border: 1px solid #cbd5e1; color: #475569;">${r.cust.modality === 'W' ? 'साप्ताहिक' : 'मासिक'}</td>
-              <td style="padding: 7px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: 700; color: #334155;">${formatCurrency(r.exp)}</td>
-              <td style="padding: 7px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: 800; color: #15803d;">${formatCurrency(r.coll)}</td>
-              <td style="padding: 7px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: 900; color: #be123c;">${formatCurrency(r.rem)}</td>
-              <td style="padding: 7px 8px; border: 1px solid #cbd5e1; text-align: center;">
+              <td style="padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; font-weight: 700;">${idx + 1}</td>
+              <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-weight: 800; color: #0f172a;">${r.cust.accountNumber}</td>
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 800; color: #1e293b;">${r.cust.name}</td>
+              <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; color: #475569;">${r.cust.mobile}</td>
+              <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; color: #475569;">${getBishiNameMarathi(r.cust.bishiType)}</td>
+              <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; color: #475569;">${r.cust.modality === 'W' ? 'साप्ताहिक' : 'मासिक'}</td>
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: 700; color: #334155;">${formatCurrency(r.exp)}</td>
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: 800; color: #15803d;">${formatCurrency(r.coll)}</td>
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: 900; color: #be123c;">${formatCurrency(r.rem)}</td>
+              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: 700; color: #64748b;">
+                ${r.int > 0 ? `<span style="color: #1d4ed8;">व्याज: ${formatCurrency(r.int)}</span><br>` : ''}
+                ${r.pen > 0 ? `<span style="color: #b45309;">दंड: ${formatCurrency(r.pen)}</span>` : ''}
+                ${r.int === 0 && r.pen === 0 ? '-' : ''}
+              </td>
+              <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center;">
                 <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 800; background: ${r.statusBg}; color: ${r.statusColor};">
                   ${r.statusText}
                 </span>
@@ -509,51 +511,45 @@ export const generateReportPDF = async (
         </tbody>
         <tfoot>
           <tr style="background: #0F4A3C; color: #ffffff; font-weight: 900; font-size: 11px;">
-            <td style="padding: 9px 6px; border: 1px solid #0f4a3c; text-align: center;">-</td>
-            <td style="padding: 9px 8px; border: 1px solid #0f4a3c;">एकूण (TOTAL)</td>
-            <td style="padding: 9px 8px; border: 1px solid #0f4a3c;">खातेदार: ${customers.length}</td>
-            <td style="padding: 9px 8px; border: 1px solid #0f4a3c;">-</td>
-            <td style="padding: 9px 8px; border: 1px solid #0f4a3c;">-</td>
-            <td style="padding: 9px 8px; border: 1px solid #0f4a3c; text-align: right;">${formatCurrency(totalExp)}</td>
-            <td style="padding: 9px 8px; border: 1px solid #0f4a3c; text-align: right;">${formatCurrency(totalColl)}</td>
-            <td style="padding: 9px 8px; border: 1px solid #0f4a3c; text-align: right;">${formatCurrency(totalRem)}</td>
-            <td style="padding: 9px 8px; border: 1px solid #0f4a3c; text-align: center;">-</td>
+            <td style="padding: 8px 4px; border: 1px solid #0f4a3c; text-align: center;">-</td>
+            <td style="padding: 8px 6px; border: 1px solid #0f4a3c; text-align: center;">एकूण</td>
+            <td style="padding: 8px 8px; border: 1px solid #0f4a3c;">एकूण खातेदार: ${customers.length}</td>
+            <td style="padding: 8px 6px; border: 1px solid #0f4a3c;">-</td>
+            <td style="padding: 8px 6px; border: 1px solid #0f4a3c;">-</td>
+            <td style="padding: 8px 6px; border: 1px solid #0f4a3c;">-</td>
+            <td style="padding: 8px 8px; border: 1px solid #0f4a3c; text-align: right;">${formatCurrency(totalExp)}</td>
+            <td style="padding: 8px 8px; border: 1px solid #0f4a3c; text-align: right;">${formatCurrency(totalColl)}</td>
+            <td style="padding: 8px 8px; border: 1px solid #0f4a3c; text-align: right;">${formatCurrency(totalRem)}</td>
+            <td style="padding: 8px 8px; border: 1px solid #0f4a3c; text-align: right;">${formatCurrency(totalInt + totalPen)}</td>
+            <td style="padding: 8px 6px; border: 1px solid #0f4a3c; text-align: center;">-</td>
           </tr>
         </tfoot>
       </table>
+
+      <!-- Footer Info and Signature -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 20px; font-size: 11px; font-weight: 700; color: #475569;">
+        <div>
+          <div>अहवाल निर्मिती: ${todayStr} | संगणकीकृत प्रत: सुषांत भिशी व्यवस्थापन</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="height: 30px;"></div>
+          <div style="border-top: 1px solid #0B5C45; padding-top: 4px; min-width: 150px; color: #0B5C45; font-weight: 900;">अधिकृत स्वाक्षरी</div>
+        </div>
+      </div>
     </div>
   `;
 
-  document.body.appendChild(container);
-
-  try {
-    const canvas = await html2canvas(container, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-    });
-
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a4',
-    });
-
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(pdfHeight, pdf.internal.pageSize.getHeight()));
-    pdf.save(`${title.replace(/\s+/g, '_')}_मराठी_अहवाल.pdf`);
-  } catch (error) {
-    console.error('PDF Generation error:', error);
-  } finally {
-    document.body.removeChild(container);
-  }
+  await renderHtmlToMultiPagePdf(
+    container,
+    'landscape',
+    `${title.replace(/\s+/g, '_')}_मराठी_अहवाल.pdf`
+  );
 };
 
 /**
- * Generate PDF for Member Ledger Card (खातेदार खाते उतारा) matching exact register book layout.
+ * Generate PDF for Member Ledger Card (खातेदार खाते उतारा)
+ * Exactly matches the authentic physical register passbook in Landscape A4 format.
+ * Features 11 aligned columns, two-tier header, complete totals, and notes box.
  */
 export const generateMemberLedgerPDF = async (
   customer: Customer,
@@ -562,17 +558,9 @@ export const generateMemberLedgerPDF = async (
   loanPayments: LoanPayment[] = [],
   showAllWeeks: boolean = false
 ) => {
-  const container = document.createElement('div');
-  container.style.position = 'absolute';
-  container.style.left = '-9999px';
-  container.style.top = '-9999px';
-  container.style.width = '1050px';
-  container.style.backgroundColor = '#ffffff';
-  container.style.fontFamily = "'Noto Sans Devanagari', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
-  container.style.padding = '24px';
-  container.style.color = '#1e293b';
+  // A4 Landscape target width: 1122px
+  const container = createPdfContainer(1122);
 
-  const todayStr = new Date().toISOString().split('T')[0];
   const allCustomerCollections = collections
     .filter((c) => c.customerId === customer.id)
     .sort((a, b) => a.periodIndex - b.periodIndex);
@@ -589,40 +577,59 @@ export const generateMemberLedgerPDF = async (
       });
 
   let totalCumulative = 0;
+  let totalDeposit = 0;
+  let totalBishiPenalty = 0;
+  let totalExpected = 0;
+  let totalLoanIssued = 0;
+  let totalLoanPrincipalPaid = 0;
+  let totalLoanInterestPaid = 0;
+  let totalLoanPenalty = 0;
+  let finalRemainingBalance = 0;
 
   const tableRowsHtml = customerCollections.length === 0
-    ? `<tr><td colspan="11" style="padding: 16px; text-align: center; color: #64748b; font-weight: 700; border: 1px solid #b8a99a;">या खातेदाराची अद्याप कोणतीही पूर्ण जमा नोंद झालेली नाही.</td></tr>`
+    ? `<tr><td colspan="11" style="padding: 18px; text-align: center; color: #64748b; font-weight: 700; border: 1px solid #b8a99a;">या खातेदाराची अद्याप कोणतीही पूर्ण जमा नोंद झालेली नाही.</td></tr>`
     : customerCollections
         .map((item, idx) => {
           const deposit = item.collectedAmount || 0;
+          totalDeposit += deposit;
           totalCumulative += deposit;
           const penalty = item.penaltyAmount || 0;
+          totalBishiPenalty += penalty;
           const expected = item.expectedAmount || 0;
+          totalExpected += expected;
 
           const periodPayment = loanPayments.find(
             (lp) => lp.customerId === customer.id && lp.paymentDate === item.dueDate
           );
 
-          const loanPrincipalPaid = periodPayment ? periodPayment.paidAmount : 0;
-          const loanInterestPaid = periodPayment ? periodPayment.interestPaid : 0;
-          const loanPenalty = periodPayment ? periodPayment.penaltyPaid : 0;
-          const loanIssued = idx === 0 && customer.hasLoan && loan ? loan.principalAmount : 0;
+          const loanPrincipalPaid = periodPayment ? (periodPayment.paidAmount || 0) : 0;
+          totalLoanPrincipalPaid += loanPrincipalPaid;
+
+          const loanInterestPaid = periodPayment ? (periodPayment.interestPaid || 0) : 0;
+          totalLoanInterestPaid += loanInterestPaid;
+
+          const loanPenalty = periodPayment ? (periodPayment.penaltyPaid || 0) : 0;
+          totalLoanPenalty += loanPenalty;
+
+          const loanIssued = idx === 0 && customer.hasLoan && loan ? (loan.principalAmount || 0) : 0;
+          totalLoanIssued += loanIssued;
 
           const balanceRemaining = item.remainingAmount || 0;
+          finalRemainingBalance = balanceRemaining;
 
           return `
-            <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#fcf8f2'}; border-bottom: 1px solid #d1c7bd;">
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: center; font-weight: 700;">${idx + 1}</td>
+            <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#fcf8f2'};">
+              <td style="padding: 5px 4px; border: 1px solid #b8a99a; text-align: center; font-weight: 700;">${idx + 1}</td>
               <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: center; font-weight: 700;">${formatDateMarathi(item.dueDate)}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 800; color: #15803d;">${deposit > 0 ? deposit : ''}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #0b5c45;">${totalCumulative > 0 ? totalCumulative : ''}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #be123c;">${penalty > 0 ? penalty : ''}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 700;">${expected}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #c2410c; font-weight: 700;">${loanIssued > 0 ? loanIssued : ''}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #15803d;">${loanPrincipalPaid > 0 ? loanPrincipalPaid : ''}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #15803d;">${loanInterestPaid > 0 ? loanInterestPaid : ''}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #be123c;">${loanPenalty > 0 ? loanPenalty : ''}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #be123c;">${balanceRemaining}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 800; color: #15803d;">${deposit > 0 ? deposit : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #0b5c45;">${totalCumulative > 0 ? totalCumulative : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #be123c;">${penalty > 0 ? penalty : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 700;">${expected > 0 ? expected : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #c2410c; font-weight: 700;">${loanIssued > 0 ? loanIssued : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #15803d; font-weight: 800;">${loanPrincipalPaid > 0 ? loanPrincipalPaid : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #15803d; font-weight: 800;">${loanInterestPaid > 0 ? loanInterestPaid : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #be123c;">${loanPenalty > 0 ? loanPenalty : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #be123c;">${balanceRemaining > 0 ? balanceRemaining : '-'}</td>
             </tr>
           `;
         })
@@ -630,64 +637,86 @@ export const generateMemberLedgerPDF = async (
 
   container.innerHTML = `
     <div style="border: 3px double #8B4513; padding: 20px; background: #fffdfa; border-radius: 8px;">
-      <!-- Title Header -->
-      <div style="text-align: center; border-bottom: 2px solid #8B4513; padding-bottom: 8px; margin-bottom: 12px;">
-        <h1 style="margin: 0; font-size: 20px; font-weight: 900; color: #5c3a21;">खातेदार खाते उतारा (Member Ledger Card)</h1>
+      <!-- Title Header Bar -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #8B4513; padding-bottom: 8px; margin-bottom: 12px;">
+        <div>
+          <h2 style="margin: 0; font-size: 14px; font-weight: 900; color: #8B4513;">सुषांत भिशी</h2>
+          <h1 style="margin: 2px 0 0 0; font-size: 19px; font-weight: 900; color: #5c3a21;">खातेदार खाते उतारा (Member Ledger Card Register)</h1>
+        </div>
+        <div style="text-align: right; font-size: 11px; font-weight: 800; color: #5c3a21;">
+          <div>कार्यालय: ${getOfficeNameMarathi(customer.officeId)}</div>
+          <div>दिनांक: ${formatDateMarathi(new Date().toISOString().split('T')[0])}</div>
+        </div>
       </div>
 
-      <!-- Customer Meta Grid -->
-      <table style="width: 100%; border-collapse: collapse; font-size: 13px; font-weight: 800; margin-bottom: 14px;">
+      <!-- Customer Meta Grid Box (Brown Register Look) -->
+      <table style="width: 100%; border-collapse: collapse; font-size: 12px; font-weight: 800; margin-bottom: 12px;">
         <tr>
-          <td style="width: 15%; background: #8B4513; color: white; padding: 6px 10px; border: 1px solid #8B4513;">खाते नंबर:</td>
-          <td style="width: 35%; background: #fffde7; padding: 6px 10px; border: 1px solid #b8a99a; font-size: 15px;">${customer.accountNumber}</td>
-          <td style="width: 18%; background: #8B4513; color: white; padding: 6px 10px; border: 1px solid #8B4513;">खातेदाराचे नाव:</td>
-          <td style="width: 32%; background: #fffde7; padding: 6px 10px; border: 1px solid #b8a99a; font-size: 15px;">${customer.name}</td>
+          <td style="width: 14%; background: #8B4513; color: white; padding: 6px 8px; border: 1px solid #8B4513;">खाते नंबर:</td>
+          <td style="width: 36%; background: #fffde7; padding: 6px 8px; border: 1px solid #b8a99a; font-size: 14px; color: #0f172a;">${customer.accountNumber}</td>
+          <td style="width: 16%; background: #8B4513; color: white; padding: 6px 8px; border: 1px solid #8B4513;">खातेदाराचे नाव:</td>
+          <td style="width: 34%; background: #fffde7; padding: 6px 8px; border: 1px solid #b8a99a; font-size: 14px; color: #0f172a;">${customer.name}</td>
         </tr>
         <tr>
-          <td style="background: #8B4513; color: white; padding: 6px 10px; border: 1px solid #8B4513;">हप्ता रुपये:</td>
-          <td style="background: #fffde7; padding: 6px 10px; border: 1px solid #b8a99a;">₹${customer.amount} (${customer.modality === 'W' ? 'साप्ताहिक' : 'मासिक'})</td>
-          <td style="background: #8B4513; color: white; padding: 6px 10px; border: 1px solid #8B4513;">पत्ता / मोबाईल:</td>
-          <td style="background: #fffde7; padding: 6px 10px; border: 1px solid #b8a99a;">${customer.address || ''} (${customer.mobile})</td>
+          <td style="background: #8B4513; color: white; padding: 6px 8px; border: 1px solid #8B4513;">हप्ता रुपये:</td>
+          <td style="background: #fffde7; padding: 6px 8px; border: 1px solid #b8a99a; color: #166534;">₹${customer.amount} (${customer.modality === 'W' ? 'साप्ताहिक' : 'मासिक'})</td>
+          <td style="background: #8B4513; color: white; padding: 6px 8px; border: 1px solid #8B4513;">पत्ता / मोबाईल:</td>
+          <td style="background: #fffde7; padding: 6px 8px; border: 1px solid #b8a99a;">${customer.address || '-'} (${customer.mobile})</td>
         </tr>
       </table>
 
-      <!-- Ledger Table -->
+      <!-- Ledger Register 11-Column Table -->
       <table style="width: 100%; border-collapse: collapse; font-size: 11px; font-weight: 700; border: 1px solid #8B4513;">
         <thead>
           <tr style="background: #f5e6d3; color: #333333; font-weight: 900; text-align: center;">
-            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px;">अ. क्र.</th>
-            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px;">तारीख</th>
-            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px;">खात्यात जमा रुपये</th>
-            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px;">एकूण जमा रुपये</th>
-            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px;">दंड</th>
-            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px;">देणे</th>
-            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px;">दिलेले कर्ज</th>
-            <th colspan="2" style="border: 1px solid #8B4513; padding: 6px;">कर्ज परत फेड</th>
-            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px;">दंड</th>
-            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px;">देणे बाकी</th>
+            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px 4px; width: 40px;">अ. क्र.</th>
+            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px; width: 85px;">तारीख</th>
+            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px; width: 100px;">खात्यात जमा रुपये</th>
+            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px; width: 100px;">एकूण जमा रुपये</th>
+            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px; width: 65px;">दंड</th>
+            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px; width: 75px;">देणे</th>
+            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px; width: 95px;">दिलेले कर्ज</th>
+            <th colspan="2" style="border: 1px solid #8B4513; padding: 5px;">कर्ज परत फेड</th>
+            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px; width: 65px;">दंड</th>
+            <th rowspan="2" style="border: 1px solid #8B4513; padding: 6px; width: 95px;">देणे बाकी</th>
           </tr>
           <tr style="background: #faebd7; color: #333333; font-weight: 900; text-align: center;">
-            <th style="border: 1px solid #8B4513; padding: 5px;">कर्ज</th>
-            <th style="border: 1px solid #8B4513; padding: 5px;">व्याज</th>
+            <th style="border: 1px solid #8B4513; padding: 5px; width: 85px;">कर्ज (मुद्दल)</th>
+            <th style="border: 1px solid #8B4513; padding: 5px; width: 85px;">व्याज</th>
           </tr>
         </thead>
         <tbody>
           ${tableRowsHtml}
         </tbody>
+        <tfoot>
+          <tr style="background: #8B4513; color: #ffffff; font-weight: 900; font-size: 11px;">
+            <td style="padding: 6px 4px; border: 1px solid #5c3a21; text-align: center;">-</td>
+            <td style="padding: 6px 8px; border: 1px solid #5c3a21; text-align: center;">एकूण</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalDeposit > 0 ? totalDeposit : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalCumulative > 0 ? totalCumulative : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalBishiPenalty > 0 ? totalBishiPenalty : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalExpected > 0 ? totalExpected : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalLoanIssued > 0 ? totalLoanIssued : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalLoanPrincipalPaid > 0 ? totalLoanPrincipalPaid : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalLoanInterestPaid > 0 ? totalLoanInterestPaid : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalLoanPenalty > 0 ? totalLoanPenalty : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${finalRemainingBalance > 0 ? finalRemainingBalance : '-'}</td>
+          </tr>
+        </tfoot>
       </table>
 
-      <!-- Footer Notes and Signature Block -->
+      <!-- Footer Notes & Signature Block -->
       <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 16px; font-size: 11px; font-weight: 700;">
-        <div style="border: 1px solid #8B4513; padding: 8px 12px; border-radius: 6px; background: #fffde7; min-width: 220px;">
-          <div>१) टाकणी: ______________</div>
-          <div>२) डिव्हिडंड: ______________</div>
-          <div>३) खाते नं.: ${customer.accountNumber}</div>
-          <div>४) शेरा: ______________</div>
+        <div style="border: 1px solid #8B4513; padding: 8px 14px; border-radius: 6px; background: #fffde7; min-width: 240px; line-height: 1.6;">
+          <div>१) टाकणी: ___________________</div>
+          <div>२) डिव्हिडंड: ___________________</div>
+          <div>३) खाते नं.: <strong>${customer.accountNumber}</strong></div>
+          <div>४) शेरा: ___________________</div>
         </div>
 
         <div style="text-align: right; padding-right: 20px;">
-          <p style="margin: 0 0 35px 0;">सदर भिशीची रक्कम मिळाला बद्दल...</p>
-          <div style="font-weight: 900; font-size: 13px; border-top: 1px solid #333; padding-top: 4px; display: inline-block; min-width: 150px; text-align: center;">
+          <p style="margin: 0 0 35px 0; color: #475569;">सदर भिशीची रक्कम मिळाल्या बद्दल...</p>
+          <div style="font-weight: 900; font-size: 13px; border-top: 1px solid #333; padding-top: 4px; display: inline-block; min-width: 160px; text-align: center; color: #0f172a;">
             सेक्रेटरी / अध्यक्ष
           </div>
         </div>
@@ -695,30 +724,9 @@ export const generateMemberLedgerPDF = async (
     </div>
   `;
 
-  document.body.appendChild(container);
-
-  try {
-    const canvas = await html2canvas(container, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-    });
-
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-    });
-
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(pdfHeight, pdf.internal.pageSize.getHeight()));
-    pdf.save(`खातेदार_उतारा_${customer.accountNumber}_${customer.name.replace(/\s+/g, '_')}.pdf`);
-  } catch (error) {
-    console.error('Member Ledger PDF error:', error);
-  } finally {
-    document.body.removeChild(container);
-  }
+  await renderHtmlToMultiPagePdf(
+    container,
+    'landscape',
+    `खातेदार_उतारा_${customer.accountNumber}_${customer.name.replace(/\s+/g, '_')}.pdf`
+  );
 };

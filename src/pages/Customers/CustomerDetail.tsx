@@ -316,8 +316,22 @@ export const CustomerDetail: React.FC = () => {
         </div>
       </div>
 
+      {/* Print-Only Header */}
+      <div className="print-only mb-6 border-b-2 border-emerald-900 pb-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-black text-emerald-900 tracking-tight">सुषांत भिशी</h1>
+            <p className="text-sm font-extrabold text-slate-700">खातेदार व्यवहार अहवाल (Customer Account Statement)</p>
+          </div>
+          <div className="text-right text-xs font-bold text-slate-600">
+            <div>दिनांक: <strong className="text-slate-900">{formatDateMarathi(new Date().toISOString().split('T')[0])}</strong></div>
+            <div>कार्यालय: <strong className="text-emerald-900">{getOfficeNameMarathi(customer.officeId)}</strong></div>
+          </div>
+        </div>
+      </div>
+
       {/* Customer Header Info Card */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs print:border-slate-300">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
           <div className="flex items-center space-x-4">
             <div className="w-14 h-14 rounded-2xl bg-brand-900 text-white flex items-center justify-center text-xl font-black shadow-md flex-shrink-0">
@@ -339,7 +353,7 @@ export const CustomerDetail: React.FC = () => {
                 </span>
                 <button
                   onClick={() => setIsEditCustomerOpen(true)}
-                  className="px-3 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-extrabold text-xs flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer ml-1"
+                  className="px-3 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-extrabold text-xs flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer ml-1 no-print"
                   title="नाव, मोबाईल नंबर किंवा माहिती बदला"
                 >
                   <Edit className="w-3.5 h-3.5 text-amber-700" />
@@ -477,7 +491,7 @@ export const CustomerDetail: React.FC = () => {
               {customer.modality === 'W' ? 'साप्ताहिक भिशी जमा नोंदी' : 'मासिक भिशी जमा नोंदी'}
             </h3>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 no-print">
             <button
               onClick={() => setShowAllWeeks(!showAllWeeks)}
               className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center space-x-1.5"
@@ -493,7 +507,7 @@ export const CustomerDetail: React.FC = () => {
 
         {/* Banner if all current installments are paid */}
         {isUpToDate && nextUpcomingEntry && (
-          <div className="mx-3 sm:mx-5 mt-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="mx-3 sm:mx-5 mt-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 no-print">
             <div className="flex items-center space-x-2.5">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <div>
@@ -875,6 +889,26 @@ export const CustomerDetail: React.FC = () => {
           </div>
         </div>
       ) : null}
+
+      {/* Print-Only Verification & Signature Block */}
+      <div className="print-only mt-8 pt-6 border-t border-dashed border-slate-400 text-xs font-bold text-slate-600">
+        <div className="flex justify-between items-end">
+          <div>
+            <p className="text-[10px] text-slate-500">• सदर अहवाल सुषांत भिशी व्यवस्थापन प्रणालीद्वारे संगणकीकृत तयार करण्यात आला आहे.</p>
+            <p className="text-[10px] text-slate-500">• कोणतीही तफावत आढळल्यास त्वरित कार्यालयाशी संपर्क साधावा.</p>
+          </div>
+          <div className="flex gap-10 text-center">
+            <div>
+              <div className="h-10"></div>
+              <div className="border-t border-slate-600 pt-1 min-w-32 text-slate-800 font-bold">खातेदार स्वाक्षरी</div>
+            </div>
+            <div>
+              <div className="h-10"></div>
+              <div className="border-t border-emerald-900 pt-1 min-w-36 text-emerald-950 font-black">अधिकृत स्वाक्षरी / शिक्का</div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Collection Entry Modal - Requirement 12 */}
       {isCollectModalOpen && selectedEntry && (

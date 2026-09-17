@@ -283,6 +283,16 @@ export const ReportManager: React.FC = () => {
 
   let cumulativeDeposit = 0;
 
+  const ledgerTotalDeposit = activeCustomerCollections.reduce((sum, c) => sum + (c.collectedAmount || 0), 0);
+  const ledgerTotalExpected = activeCustomerCollections.reduce((sum, c) => sum + (c.expectedAmount || 0), 0);
+  const ledgerTotalPenalty = activeCustomerCollections.reduce((sum, c) => sum + (c.penaltyAmount || 0), 0);
+  const ledgerLoanIssued = activeLedgerCustomer?.hasLoan && activeCustomerLoan ? (activeCustomerLoan.principalAmount || 0) : 0;
+  const ledgerLoanPaymentsForCust = loanPayments.filter((lp) => activeLedgerCustomer && lp.customerId === activeLedgerCustomer.id);
+  const ledgerTotalLoanPrincipal = ledgerLoanPaymentsForCust.reduce((sum, lp) => sum + (lp.paidAmount || 0), 0);
+  const ledgerTotalLoanInterest = ledgerLoanPaymentsForCust.reduce((sum, lp) => sum + (lp.interestPaid || 0), 0);
+  const ledgerTotalLoanPenalty = ledgerLoanPaymentsForCust.reduce((sum, lp) => sum + (lp.penaltyPaid || 0), 0);
+  const ledgerFinalRemaining = activeCustomerCollections.length > 0 ? (activeCustomerCollections[activeCustomerCollections.length - 1].remainingAmount || 0) : 0;
+
   return (
     <div className="space-y-6 pb-16 print-container">
       {/* Top Header Control Bar */}
@@ -514,10 +524,17 @@ export const ReportManager: React.FC = () => {
           {activeLedgerCustomer ? (
             <div className="border-4 border-double border-amber-900/40 p-4 sm:p-6 bg-[#fffdfa] rounded-xl space-y-5">
               {/* Header Box */}
-              <div className="text-center border-b-2 border-amber-900/40 pb-3">
-                <h1 className="text-lg sm:text-xl font-black text-amber-950 tracking-tight">
-                  खातेदार खाते उतारा (Member Ledger Card)
-                </h1>
+              <div className="flex flex-col sm:flex-row justify-between items-center border-b-2 border-amber-900/40 pb-3 gap-2">
+                <div>
+                  <h2 className="text-sm font-black text-amber-900">सुषांत भिशी</h2>
+                  <h1 className="text-lg sm:text-xl font-black text-amber-950 tracking-tight">
+                    खातेदार खाते उतारा (Member Ledger Card)
+                  </h1>
+                </div>
+                <div className="text-right text-xs font-extrabold text-amber-950">
+                  <div>कार्यालय: {getOfficeNameMarathi(activeOffice, language)}</div>
+                  <div>दिनांक: {formatDateMarathi(new Date().toISOString().split('T')[0], language)}</div>
+                </div>
               </div>
 
               {/* Account Meta Grid Box */}
@@ -644,6 +661,21 @@ export const ReportManager: React.FC = () => {
                       );
                     }))}
                   </tbody>
+                  <tfoot>
+                    <tr className="bg-[#8B4513] text-white font-extrabold text-xs">
+                      <td className="p-2 border border-amber-900/40 text-center">-</td>
+                      <td className="p-2 border border-amber-900/40 text-center">एकूण</td>
+                      <td className="p-2 border border-amber-900/40 text-right text-emerald-200 font-black">{ledgerTotalDeposit > 0 ? formatCurrency(ledgerTotalDeposit, language) : '-'}</td>
+                      <td className="p-2 border border-amber-900/40 text-right text-emerald-100 font-black">{cumulativeDeposit > 0 ? formatCurrency(cumulativeDeposit, language) : '-'}</td>
+                      <td className="p-2 border border-amber-900/40 text-right text-rose-200">{ledgerTotalPenalty > 0 ? formatCurrency(ledgerTotalPenalty, language) : '-'}</td>
+                      <td className="p-2 border border-amber-900/40 text-right">{ledgerTotalExpected > 0 ? formatCurrency(ledgerTotalExpected, language) : '-'}</td>
+                      <td className="p-2 border border-amber-900/40 text-right text-amber-200">{ledgerLoanIssued > 0 ? formatCurrency(ledgerLoanIssued, language) : '-'}</td>
+                      <td className="p-2 border border-amber-900/40 text-right text-emerald-200 font-black">{ledgerTotalLoanPrincipal > 0 ? formatCurrency(ledgerTotalLoanPrincipal, language) : '-'}</td>
+                      <td className="p-2 border border-amber-900/40 text-right text-emerald-200 font-black">{ledgerTotalLoanInterest > 0 ? formatCurrency(ledgerTotalLoanInterest, language) : '-'}</td>
+                      <td className="p-2 border border-amber-900/40 text-right text-rose-200">{ledgerTotalLoanPenalty > 0 ? formatCurrency(ledgerTotalLoanPenalty, language) : '-'}</td>
+                      <td className="p-2 border border-amber-900/40 text-right text-rose-200 font-black">{ledgerFinalRemaining > 0 ? formatCurrency(ledgerFinalRemaining, language) : '-'}</td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
 
@@ -677,6 +709,21 @@ export const ReportManager: React.FC = () => {
       {/* VIEW 2: GENERAL SUMMARY REPORT */}
       {viewMode === 'SUMMARY' && (
         <>
+          {/* Print-Only Header for Summary Report */}
+          <div className="print-only mb-6 border-b-2 border-emerald-900 pb-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-2xl font-black text-emerald-900 tracking-tight">सुषांत भिशी</h1>
+                <h2 className="text-base font-extrabold text-slate-800">{customReportNote ? `${reportTitle} - ${customReportNote}` : reportTitle}</h2>
+              </div>
+              <div className="text-right text-xs font-bold text-slate-600 leading-relaxed">
+                <div>कार्यालय: <strong className="text-emerald-900">{getOfficeNameMarathi(activeOffice, language)}</strong></div>
+                <div>भिशी योजना: <strong className="text-emerald-900">{bishiFilter === 'ALL' ? t.allBishi : getBishiNameMarathi(bishiFilter, language)}</strong></div>
+                <div>दिनांक: <strong className="text-slate-900">{formatDateMarathi(new Date().toISOString().split('T')[0], language)}</strong> | एकूण: <strong className="text-slate-900">{filteredRows.length}</strong></div>
+              </div>
+            </div>
+          </div>
+
           {/* Report Data Table */}
           <div className="bg-white rounded-2xl border border-slate-300 shadow-xs overflow-hidden print:border-none print:shadow-none">
             {filteredRows.length === 0 ? (
@@ -817,12 +864,28 @@ export const ReportManager: React.FC = () => {
               </>
             )}
           </div>
+
+          {/* Print-Only Footer for Summary Report */}
+          <div className="print-only mt-8 pt-4 border-t border-dashed border-slate-300 text-xs font-bold text-slate-600">
+            <div className="flex justify-between items-end">
+              <div>
+                <div>अहवाल निर्मिती दिनांक: {formatDateMarathi(new Date().toISOString().split('T')[0], language)}</div>
+                <div className="text-[10px] text-slate-500">• संगणकीकृत प्रत: सुषांत भिशी व्यवस्थापन प्रणाली</div>
+              </div>
+              <div className="text-center pr-4">
+                <div className="h-10"></div>
+                <div className="border-t border-emerald-900 pt-1 min-w-36 text-emerald-950 font-black">
+                  अधिकृत स्वाक्षरी
+                </div>
+              </div>
+            </div>
+          </div>
         </>
       )}
 
       {/* Custom Report Note Display Banner */}
       {customReportNote && (
-        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center justify-between text-xs font-bold text-emerald-900">
+        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center justify-between text-xs font-bold text-emerald-900 no-print">
           <div className="flex items-center space-x-2">
             <span className="font-extrabold text-emerald-800">{language === 'EN' ? 'Report Note:' : 'अहवाल शेरा / टीप:'}</span>
             <span>{customReportNote}</span>
