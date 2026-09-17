@@ -21,23 +21,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const checkAdminState = () => {
-      let exists = StorageService.hasAdmin();
-      
-      // Auto-create default admin account if none exists yet
-      if (!exists) {
-        try {
-          const defaultAdmin = StorageService.createAdmin({
-            name: 'सुषांत भिशी प्रशासक',
-            mobile: '9876543210',
-            email: 'admin@sushantbishi.com',
-          });
-          localStorage.setItem('sb_admin_pass', '123456');
-          exists = true;
-        } catch {
-          // ignore if already created
-        }
-      }
-
+      const exists = StorageService.hasAdmin();
       setHasAdminRegistered(exists);
 
       const savedAdminSession = localStorage.getItem('sb_active_session');
@@ -57,17 +41,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (identifier: string, pass: string): Promise<boolean> => {
     const admins = StorageService.getAdmins();
-    const storedPass = localStorage.getItem('sb_admin_pass') || '123456';
+    const storedPass = localStorage.getItem('sb_admin_pass');
 
     const cleanInput = identifier.trim().toLowerCase();
     const matched = admins.find(
       (a) =>
         a.mobile.trim() === identifier.trim() ||
-        (a.email && a.email.trim().toLowerCase() === cleanInput) ||
-        cleanInput === 'admin'
+        (a.email && a.email.trim().toLowerCase() === cleanInput)
     );
 
-    if (matched && (storedPass === pass || pass === '123456' || pass === 'admin123')) {
+    if (matched && storedPass && storedPass === pass) {
       setCurrentAdmin(matched);
       localStorage.setItem('sb_active_session', JSON.stringify(matched));
       return true;

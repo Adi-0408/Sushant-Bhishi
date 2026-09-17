@@ -41,6 +41,7 @@ interface AppContextType {
   removeToast: (id: string) => void;
   syncStatus: 'idle' | 'syncing' | 'synced' | 'error';
   syncWithFirebase: () => Promise<void>;
+  clearAllData: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -99,6 +100,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const clearAllData = async () => {
+    try {
+      await StorageService.clearAllData();
+      refreshData();
+      showToast('सर्व डेटा यशस्वीपणे हटवला गेला.', 'info');
+    } catch (err: any) {
+      showToast('डेटा हटवताना त्रुटी आली: ' + (err?.message || 'अज्ञात त्रुटी'), 'error');
+    }
+  };
+
   useEffect(() => {
     refreshData();
 
@@ -106,11 +117,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const unsubscribe = StorageService.setupFirestoreListeners(() => {
       refreshData();
     });
-
-    // Auto-sync initial local customers & data to Firestore in background
-    StorageService.syncAllToFirestore()
-      .then(() => setSyncStatus('synced'))
-      .catch(() => setSyncStatus('error'));
 
     return () => {
       if (unsubscribe) unsubscribe();
@@ -152,6 +158,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         removeToast,
         syncStatus,
         syncWithFirebase,
+        clearAllData,
       }}
     >
       {children}

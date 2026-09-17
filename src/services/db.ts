@@ -5,6 +5,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
   query,
   where,
   getDoc,
@@ -430,7 +431,7 @@ export const StorageService = {
       deleteFromFirestore('collections', c.id, enriched);
     });
 
-    // Directly sweep Firestore 'collections' to remove any leftover documents for this customer
+    // Directly sweep Firestore 'collections', 'loans', and 'loanPayments' to remove any leftover documents for this customer
     if (customerToDelete) {
       (async () => {
         try {
@@ -443,8 +444,16 @@ export const StorageService = {
             const snapAcc = await getDocs(qAcc);
             snapAcc.forEach((d: any) => deleteDoc(d.ref).catch(() => {}));
           }
+
+          const qLoans = query(collection(db, 'loans'), where('customerId', '==', id));
+          const snapLoans = await getDocs(qLoans);
+          snapLoans.forEach((d: any) => deleteDoc(d.ref).catch(() => {}));
+
+          const qPayments = query(collection(db, 'loanPayments'), where('customerId', '==', id));
+          const snapPayments = await getDocs(qPayments);
+          snapPayments.forEach((d: any) => deleteDoc(d.ref).catch(() => {}));
         } catch (e) {
-          console.warn('Firestore sweep note for deleted customer collections:', e);
+          console.warn('Firestore sweep note for deleted customer collections/loans/payments:', e);
         }
       })();
     }
@@ -709,41 +718,54 @@ export const StorageService = {
     }
   },
 
+  // Complete Cloud Database Wipe / Reset: Clears all customer, collection, and loan data both locally and in Firestore
+  clearAllData: async (): Promise<void> => {
+    // 1. Clear local storage
+    setStoredData(STORAGE_KEYS.CUSTOMERS, []);
+    setStoredData(STORAGE_KEYS.COLLECTIONS, []);
+    setStoredData(STORAGE_KEYS.LOANS, []);
+    setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, []);
+    setStoredData(STORAGE_KEYS.SMS_LOGS, []);
+
+    // 2. Clear Firestore collections completely
+    const collectionsToWipe = ['customers', 'collections', 'loans', 'loanPayments', 'smsLogs'];
+    for (const collName of collectionsToWipe) {
+      try {
+        const snap = await getDocs(collection(db, collName));
+        if (!snap.empty) {
+          const batch = writeBatch(db);
+          snap.docs.forEach((d: any) => batch.delete(d.ref));
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn(`Error clearing Firestore collection ${collName}:`, err);
+      }
+    }
+  },
+
   // Real-time synchronization listeners with Firebase Firestore
   setupFirestoreListeners: (onUpdate: () => void): (() => void) => {
     const unsubscribes: (() => void)[] = [];
 
-    // 1. Listen for customers in Firestore
+    // 1. Listen for customers in Firestore (Firestore is source of truth)
     try {
       const unsubCust = onSnapshot(
         collection(db, 'customers'),
         (snapshot: any) => {
-          if (!snapshot.empty) {
-            const remoteList: Customer[] = [];
-            snapshot.forEach((d: any) => {
-              const raw = d.data();
-              const fullCustomer: Customer = {
-                ...raw,
-                id: raw.id || d.id,
-                name: raw.name || raw.customerName || '',
-                customerName: raw.customerName || raw.name || '',
-              };
-              remoteList.push(fullCustomer);
-            });
-            const localList = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
-            const map = new Map<string, Customer>();
-            localList.forEach((c) => map.set(c.id, c));
-            remoteList.forEach((c) => map.set(c.id, c));
-            const merged = Array.from(map.values());
-            setStoredData(STORAGE_KEYS.CUSTOMERS, merged);
-            onUpdate();
-          } else {
-            // If Firestore is empty, auto-seed with local data
-            const localList = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
-            if (localList.length > 0) {
-              localList.forEach((c) => syncToFirestore('customers', c.id, c));
-            }
-          }
+          const remoteList: Customer[] = [];
+          snapshot.forEach((d: any) => {
+            const raw = d.data();
+            const fullCustomer: Customer = {
+              ...raw,
+              id: raw.id || d.id,
+              name: raw.name || raw.customerName || '',
+              customerName: raw.customerName || raw.name || '',
+            };
+            remoteList.push(fullCustomer);
+          });
+          // Directly set local storage to remote list. Do NOT merge with stale local items!
+          setStoredData(STORAGE_KEYS.CUSTOMERS, remoteList);
+          onUpdate();
         },
         (err: any) => {
           console.warn('Firestore customers listener error:', err?.message || err);
@@ -759,24 +781,18 @@ export const StorageService = {
       const unsubLoans = onSnapshot(
         collection(db, 'loans'),
         (snapshot: any) => {
-          if (!snapshot.empty) {
-            const remoteList: Loan[] = [];
-            snapshot.forEach((d: any) => {
-              const raw = d.data();
-              const fullLoan: Loan = {
-                ...raw,
-                id: raw.id || d.id,
-                customerName: raw.customerName || '',
-              };
-              remoteList.push(fullLoan);
-            });
-            const localList = getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []);
-            const map = new Map<string, Loan>();
-            localList.forEach((l) => map.set(l.id, l));
-            remoteList.forEach((l) => map.set(l.id, l));
-            setStoredData(STORAGE_KEYS.LOANS, Array.from(map.values()));
-            onUpdate();
-          }
+          const remoteList: Loan[] = [];
+          snapshot.forEach((d: any) => {
+            const raw = d.data();
+            const fullLoan: Loan = {
+              ...raw,
+              id: raw.id || d.id,
+              customerName: raw.customerName || '',
+            };
+            remoteList.push(fullLoan);
+          });
+          setStoredData(STORAGE_KEYS.LOANS, remoteList);
+          onUpdate();
         },
         (err: any) => console.warn('Firestore loans listener error:', err?.message || err)
       );
@@ -788,33 +804,61 @@ export const StorageService = {
       const unsubColls = onSnapshot(
         collection(db, 'collections'),
         (snapshot: any) => {
-          if (!snapshot.empty) {
-            const currentCustomers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
-            const validCustIds = new Set(currentCustomers.map((c) => c.id));
-            const validAccNums = new Set(currentCustomers.map((c) => String(c.accountNumber)));
+          const currentCustomers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
+          const validCustIds = new Set(currentCustomers.map((c) => c.id));
+          const validAccNums = new Set(currentCustomers.map((c) => String(c.accountNumber)));
 
-            const remoteList: CollectionEntry[] = [];
-            snapshot.forEach((d: any) => {
-              const raw = d.data();
-              const matchesCust =
-                (raw.customerId && validCustIds.has(raw.customerId)) ||
-                (raw.accountNumber && validAccNums.has(String(raw.accountNumber)));
-              if (matchesCust || currentCustomers.length === 0) {
-                const fullColl: CollectionEntry = {
-                  ...raw,
-                  id: raw.id || d.id,
-                  customerName: raw.customerName || '',
-                };
-                remoteList.push(fullColl);
-              }
-            });
-            setStoredData(STORAGE_KEYS.COLLECTIONS, remoteList);
-            onUpdate();
-          }
+          const remoteList: CollectionEntry[] = [];
+          snapshot.forEach((d: any) => {
+            const raw = d.data();
+            const matchesCust =
+              (raw.customerId && validCustIds.has(raw.customerId)) ||
+              (raw.accountNumber && validAccNums.has(String(raw.accountNumber)));
+            if (matchesCust) {
+              const fullColl: CollectionEntry = {
+                ...raw,
+                id: raw.id || d.id,
+                customerName: raw.customerName || '',
+              };
+              remoteList.push(fullColl);
+            }
+          });
+          setStoredData(STORAGE_KEYS.COLLECTIONS, remoteList);
+          onUpdate();
         },
         (err: any) => console.warn('Firestore collections listener error:', err?.message || err)
       );
       unsubscribes.push(unsubColls);
+    } catch (e) {}
+
+    // 4. Listen for loan payments in Firestore
+    try {
+      const unsubPayments = onSnapshot(
+        collection(db, 'loanPayments'),
+        (snapshot: any) => {
+          const currentCustomers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
+          const validCustIds = new Set(currentCustomers.map((c) => c.id));
+          const validAccNums = new Set(currentCustomers.map((c) => String(c.accountNumber)));
+
+          const remoteList: LoanPayment[] = [];
+          snapshot.forEach((d: any) => {
+            const raw = d.data();
+            const matchesCust =
+              (raw.customerId && validCustIds.has(raw.customerId)) ||
+              (raw.accountNumber && validAccNums.has(String(raw.accountNumber)));
+            if (matchesCust) {
+              remoteList.push({
+                ...raw,
+                id: raw.id || d.id,
+              });
+            }
+          });
+          setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, remoteList);
+          onUpdate();
+        },
+        (err: any) => console.warn('Firestore loanPayments listener error:', err?.message || err)
+      );
+      unsubscribes.push(unsubPayments);
     } catch (e) {}
 
     return () => {

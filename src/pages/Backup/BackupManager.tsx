@@ -23,13 +23,15 @@ import { formatDateMarathi } from '../../utils/formatters';
 import { ModalPortal } from '../../components/common/ModalPortal';
 
 export const BackupManager: React.FC = () => {
-  const { refreshData, showToast, syncStatus, syncWithFirebase, language } = useApp();
+  const { refreshData, showToast, syncStatus, syncWithFirebase, clearAllData, language } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [restoreError, setRestoreError] = useState('');
   const [autoConfig, setAutoConfig] = useState<AutoBackupConfig>(() => AutoBackupService.getConfig());
   const [snapshots, setSnapshots] = useState<LocalBackupSnapshot[]>(() => AutoBackupService.getLocalSnapshots());
   const [selectedSnapshotForRestore, setSelectedSnapshotForRestore] = useState<LocalBackupSnapshot | null>(null);
+  const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   useEffect(() => {
     setAutoConfig(AutoBackupService.getConfig());
@@ -493,6 +495,94 @@ export const BackupManager: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Danger Zone: Wipe All Data */}
+      <div className="bg-red-50/50 p-6 sm:p-8 rounded-3xl border border-red-200 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start space-x-4">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center shrink-0">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-red-900 mb-1">
+                {language === 'EN' ? 'Wipe / Reset All Data' : 'संपूर्ण डेटा हटवा (Delete All Data)'}
+              </h3>
+              <p className="text-xs text-red-700 font-bold leading-relaxed max-w-2xl">
+                {language === 'EN'
+                  ? 'Permanently deletes all customers, collection installments, loans, payments, and SMS logs from both local storage and cloud database.'
+                  : 'स्थानिक डिव्हाइस व क्लाउड डेटाबेसमधून सर्व खातेदार, जमा हप्ते, कर्जे, पावती नोंदी कायमस्वरूपी काढून टाकल्या जातील.'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setIsClearAllModalOpen(true)}
+            className="py-3 px-6 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-sm transition-all shadow-md flex items-center justify-center space-x-2 shrink-0 cursor-pointer"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>{language === 'EN' ? 'Clear All Data' : 'सर्व डेटा हटवा'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* CONFIRMATION CLEAR ALL DATA MODAL */}
+      {isClearAllModalOpen && (
+        <ModalPortal>
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-hidden no-print">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl my-auto animate-in fade-in zoom-in duration-150 overflow-hidden">
+              <div className="overflow-y-auto flex-1 space-y-4">
+                <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center">
+                  <Trash2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">
+                    {language === 'EN' ? 'Are you sure you want to delete all data?' : 'तुम्हाला खात्री आहे की सर्व डेटा हटवायचा आहे?'}
+                  </h3>
+                  <p className="text-xs font-bold text-slate-500 mt-2 leading-relaxed">
+                    {language === 'EN'
+                      ? 'This action cannot be undone. All customers, installments, loans, and cloud data will be wiped cleanly and will NOT return.'
+                      : 'ही कृती पूर्ववत करता येणार नाही. सर्व खातेदार, हप्ते आणि कर्जे पूर्णपणे हटवली जातील आणि ती परत येणार नाहीत.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-100 shrink-0 mt-4">
+                <button
+                  type="button"
+                  disabled={isClearing}
+                  onClick={() => setIsClearAllModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-black text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  {language === 'EN' ? 'Cancel' : 'रद्द करा'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isClearing}
+                  onClick={async () => {
+                    setIsClearing(true);
+                    try {
+                      await clearAllData();
+                      setIsClearAllModalOpen(false);
+                    } finally {
+                      setIsClearing(false);
+                    }
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-xs transition-colors flex items-center space-x-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isClearing ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>{language === 'EN' ? 'Deleting...' : 'हटवत आहे...'}</span>
+                    </>
+                  ) : (
+                    <span>{language === 'EN' ? 'Yes, Delete Everything' : 'होय, सर्व डेटा हटवा'}</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
 
       {/* CONFIRMATION RESTORE MODAL */}
       {selectedSnapshotForRestore && (
