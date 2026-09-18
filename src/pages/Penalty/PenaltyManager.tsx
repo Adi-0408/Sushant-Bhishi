@@ -5,7 +5,7 @@ import { formatCurrency } from '../../utils/formatters';
 import { AlertTriangle, Save, Clock } from 'lucide-react';
 
 export const PenaltyManager: React.FC = () => {
-  const { penaltySettings, refreshData, showToast } = useApp();
+  const { penaltySettings, refreshData, showToast, language } = useApp();
 
   const [weeklyPenalty, setWeeklyPenalty] = useState<number | ''>(
     penaltySettings?.weeklyPenalty || 50
@@ -26,7 +26,10 @@ export const PenaltyManager: React.FC = () => {
     };
 
     StorageService.savePenaltySettings(updated);
-    showToast('दंडाचे नियम यशस्वीपणे जतन झाले.', 'success');
+    showToast(
+      language === 'EN' ? 'Penalty settings saved successfully.' : 'दंडाचे नियम यशस्वीपणे जतन झाले.',
+      'success'
+    );
     refreshData();
   };
 
@@ -35,10 +38,12 @@ export const PenaltyManager: React.FC = () => {
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
           <AlertTriangle className="w-6 h-6 text-rose-600" />
-          <span>दंड व्यवस्थापन</span>
+          <span>{language === 'EN' ? 'Penalty Management' : 'दंड व्यवस्थापन'}</span>
         </h2>
         <p className="text-xs text-slate-500 font-medium mt-1">
-          विलंब दंडाची रक्कम व मुदतीचे नियम
+          {language === 'EN'
+            ? 'Late penalty amounts and grace period rules'
+            : 'विलंब दंडाची रक्कम व मुदतीचे नियम'}
         </p>
       </div>
 
@@ -47,7 +52,7 @@ export const PenaltyManager: React.FC = () => {
           {/* Grace Days */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              विंलबासाठी मुभेचा कालावधी (दिवस) <span className="text-rose-500">*</span>
+              {language === 'EN' ? 'Grace Period (Days)' : 'विंलबासाठी मुभेचा कालावधी (दिवस)'} <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
               <Clock className="w-5 h-5 absolute left-3 top-3 text-slate-400" />
@@ -57,19 +62,21 @@ export const PenaltyManager: React.FC = () => {
                 min={0}
                 value={graceDays}
                 onChange={(e) => setGraceDays(e.target.value ? Number(e.target.value) : '')}
-                placeholder="उदा. 2 (दोन दिवस)"
+                placeholder={language === 'EN' ? 'e.g. 2 (Two days)' : 'उदा. 2 (दोन दिवस)'}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold focus:ring-2 focus:ring-rose-500"
               />
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              देय तारीख संपल्यानंतर किती दिवसांनी दंड लागू करावा.
+              {language === 'EN'
+                ? 'Days after the due date before late penalty is applied.'
+                : 'देय तारीख संपल्यानंतर किती दिवसांनी दंड लागू करावा.'}
             </p>
           </div>
 
           {/* Weekly Penalty */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              साप्ताहिक दंडाची रक्कम (₹) <span className="text-rose-500">*</span>
+              {language === 'EN' ? 'Weekly Penalty Amount (₹)' : 'साप्ताहिक दंडाची रक्कम (₹)'} <span className="text-rose-500">*</span>
             </label>
             <input
               type="number"
@@ -77,7 +84,7 @@ export const PenaltyManager: React.FC = () => {
               min={0}
               value={weeklyPenalty}
               onChange={(e) => setWeeklyPenalty(e.target.value ? Number(e.target.value) : '')}
-              placeholder="उदा. 50"
+              placeholder={language === 'EN' ? 'e.g. 50' : 'उदा. 50'}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-extrabold text-rose-600 focus:ring-2 focus:ring-rose-500"
             />
           </div>
@@ -85,7 +92,7 @@ export const PenaltyManager: React.FC = () => {
           {/* Monthly Penalty */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              मासिक दंडाची रक्कम (₹) <span className="text-rose-500">*</span>
+              {language === 'EN' ? 'Monthly Penalty Amount (₹)' : 'मासिक दंडाची रक्कम (₹)'} <span className="text-rose-500">*</span>
             </label>
             <input
               type="number"
@@ -93,7 +100,7 @@ export const PenaltyManager: React.FC = () => {
               min={0}
               value={monthlyPenalty}
               onChange={(e) => setMonthlyPenalty(e.target.value ? Number(e.target.value) : '')}
-              placeholder="उदा. 200"
+              placeholder={language === 'EN' ? 'e.g. 200' : 'उदा. 200'}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-extrabold text-rose-600 focus:ring-2 focus:ring-rose-500"
             />
           </div>
@@ -104,7 +111,7 @@ export const PenaltyManager: React.FC = () => {
               className="w-full min-h-[44px] py-3 rounded-xl bg-slate-900 text-white font-extrabold text-sm hover:bg-slate-800 transition-colors shadow-md flex items-center justify-center space-x-2 cursor-pointer"
             >
               <Save className="w-5 h-5" />
-              <span>नियम जतन करा</span>
+              <span>{language === 'EN' ? 'Save Settings' : 'नियम जतन करा'}</span>
             </button>
           </div>
         </form>

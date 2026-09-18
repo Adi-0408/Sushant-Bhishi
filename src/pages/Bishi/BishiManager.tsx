@@ -507,8 +507,8 @@ export const BishiManager: React.FC = () => {
                           </span>
                           <span className="font-extrabold text-brand-800">
                             {currentModality === 'M'
-                              ? language === 'EN' ? 'Monthly (मासिक)' : 'मासिक (Monthly)'
-                              : language === 'EN' ? 'Weekly (साप्ताहिक)' : 'साप्ताहिक (Weekly)'}
+                              ? language === 'EN' ? 'Monthly' : 'मासिक (Monthly)'
+                              : language === 'EN' ? 'Weekly' : 'साप्ताहिक (Weekly)'}
                           </span>
                         </div>
 

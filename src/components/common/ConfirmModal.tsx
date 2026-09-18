@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { ModalPortal } from './ModalPortal';
+import { useApp } from '../../context/AppContext';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -15,14 +16,19 @@ interface ConfirmModalProps {
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   isOpen,
-  title = 'पुष्टी करा',
+  title,
   message,
-  confirmText = 'हटवा',
-  cancelText = 'रद्द करा',
+  confirmText,
+  cancelText,
   isDanger = true,
   onConfirm,
   onCancel,
 }) => {
+  const { language } = useApp();
+  const defaultTitle = language === 'EN' ? 'Confirm Action' : 'पुष्टी करा';
+  const defaultConfirmText = language === 'EN' ? 'Delete' : 'हटवा';
+  const defaultCancelText = language === 'EN' ? 'Cancel' : 'रद्द करा';
+
   if (!isOpen) return null;
 
   return (
@@ -33,7 +39,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           <div className={`p-2.5 rounded-full ${isDanger ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'}`}>
             <AlertTriangle className="w-6 h-6" />
           </div>
-          <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+          <h3 className="text-lg font-bold text-slate-900">{title || defaultTitle}</h3>
         </div>
 
         <p className="text-sm text-slate-600 font-medium leading-relaxed mb-6 overflow-y-auto flex-1">
@@ -46,7 +52,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             onClick={onCancel}
             className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-sm font-bold hover:bg-slate-50 transition-colors"
           >
-            {cancelText}
+            {cancelText || defaultCancelText}
           </button>
           <button
             type="button"
@@ -57,7 +63,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                 : 'bg-brand-600 hover:bg-brand-700 focus:ring-2 focus:ring-brand-500'
             }`}
           >
-            {confirmText}
+            {confirmText || defaultConfirmText}
           </button>
         </div>
       </div>

@@ -29,7 +29,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
         <button
           onClick={onMenuToggle}
           className="p-2 min-w-[44px] min-h-[44px] rounded-xl text-[#10241E] hover:bg-emerald-50 hover:text-[#0F7A5C] hover:scale-105 active:scale-95 transition-all duration-150 lg:hidden flex-shrink-0 cursor-pointer flex items-center justify-center touch-target"
-          aria-label="मेनू उघडा"
+          aria-label={language === 'EN' ? 'Open menu' : 'मेनू उघडा'}
         >
           <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
         </button>
@@ -88,7 +88,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
         {/* Cloud Sync Button */}
         <button
           onClick={syncWithFirebase}
-          title="Firebase डेटाबेस सिंक (Sync with Cloud Database)"
+          title={language === 'EN' ? 'Sync with Cloud Database' : 'Firebase डेटाबेस सिंक (Sync with Cloud Database)'}
           className={`h-9 sm:h-10 min-h-[44px] min-w-[44px] flex items-center justify-center space-x-1.5 px-3 py-1 rounded-xl border transition-all text-xs font-extrabold cursor-pointer shadow-2xs hover:scale-[1.02] active:scale-[0.98] touch-target ${
             syncStatus === 'syncing'
               ? 'bg-amber-50 border-amber-300 text-amber-700'
@@ -105,7 +105,11 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
             <Cloud className={`w-3.5 h-3.5 ${syncStatus === 'synced' ? 'text-emerald-600' : 'text-[#0F7A5C]'}`} />
           )}
           <span className="hidden xl:inline">
-            {syncStatus === 'syncing' ? 'सिंक...' : syncStatus === 'synced' ? 'सिंक झाले' : 'क्लाउड सिंक'}
+            {syncStatus === 'syncing'
+              ? (language === 'EN' ? 'Syncing...' : 'सिंक...')
+              : syncStatus === 'synced'
+              ? (language === 'EN' ? 'Synced' : 'सिंक झाले')
+              : (language === 'EN' ? 'Cloud Sync' : 'क्लाउड सिंक')}
           </span>
         </button>
 

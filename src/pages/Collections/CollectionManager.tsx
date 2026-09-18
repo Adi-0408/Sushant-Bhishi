@@ -259,7 +259,7 @@ export const CollectionManager: React.FC = () => {
                           </span>
                           {item.dueDate < todayStr && item.status !== 'PAID' && (
                             <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-black">
-                              थकीत
+                              {language === 'EN' ? 'Overdue' : 'थकीत'}
                             </span>
                           )}
                         </div>
@@ -283,7 +283,7 @@ export const CollectionManager: React.FC = () => {
                         </span>
                         {(item.penaltyAmount || 0) > 0 && (
                           <div className="text-[10px] font-extrabold text-amber-800">
-                            + दंड: {formatCurrency(item.penaltyAmount, language)} (एकूण: {formatCurrency(item.totalWithPenalty || ((item.collectedAmount || 0) + (item.penaltyAmount || 0)), language)})
+                            + {language === 'EN' ? 'Penalty' : 'दंड'}: {formatCurrency(item.penaltyAmount, language)} ({language === 'EN' ? 'Total' : 'एकूण'}: {formatCurrency(item.totalWithPenalty || ((item.collectedAmount || 0) + (item.penaltyAmount || 0)), language)})
                           </div>
                         )}
                       </div>
@@ -352,7 +352,7 @@ export const CollectionManager: React.FC = () => {
                           <div>{formatDateMarathi(item.dueDate, language)}</div>
                           {item.dueDate < todayStr && item.status !== 'PAID' && (
                             <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 text-[10px] font-black">
-                              थकीत (Overdue)
+                              {language === 'EN' ? 'Overdue' : 'थकीत (Overdue)'}
                             </span>
                           )}
                         </td>
@@ -363,7 +363,7 @@ export const CollectionManager: React.FC = () => {
                           <div>{formatCurrency(item.collectedAmount, language)}</div>
                           {(item.penaltyAmount || 0) > 0 && (
                             <div className="text-[10px] text-amber-800 font-extrabold whitespace-nowrap">
-                              + दंड ₹{item.penaltyAmount} (एकूण: {formatCurrency(item.totalWithPenalty || ((item.collectedAmount || 0) + (item.penaltyAmount || 0)), language)})
+                              + {language === 'EN' ? 'Penalty' : 'दंड'} {formatCurrency(item.penaltyAmount, language)} ({language === 'EN' ? 'Total' : 'एकूण'}: {formatCurrency(item.totalWithPenalty || ((item.collectedAmount || 0) + (item.penaltyAmount || 0)), language)})
                             </div>
                           )}
                         </td>

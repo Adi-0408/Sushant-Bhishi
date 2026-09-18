@@ -114,10 +114,10 @@ const ProtectedLayout: React.FC = () => {
       {/* Logout Confirmation Modal */}
       <ConfirmModal
         isOpen={isLogoutModalOpen}
-        title="बाहेर पडा"
-        message="तुम्हाला बाहेर पडायचे आहे का?"
-        confirmText="बाहेर पडा"
-        cancelText="रद्द करा"
+        title={language === 'EN' ? 'Logout' : 'बाहेर पडा'}
+        message={language === 'EN' ? 'Are you sure you want to log out?' : 'तुम्हाला बाहेर पडायचे आहे का?'}
+        confirmText={language === 'EN' ? 'Logout' : 'बाहेर पडा'}
+        cancelText={language === 'EN' ? 'Cancel' : 'रद्द करा'}
         isDanger={true}
         onConfirm={() => {
           logout();
@@ -131,13 +131,14 @@ const ProtectedLayout: React.FC = () => {
 
 export const AppContent: React.FC = () => {
   const { currentAdmin, loading } = useAuth();
+  const { language } = useApp();
   const [showSplash, setShowSplash] = useState(true);
 
   if (showSplash) {
     return (
       <SplashScreen
-        appName="सुषांत भिशी"
-        tagline="विश्वासाची साथ, समृद्धीची वाट"
+        appName={language === 'EN' ? 'Sushant Bishi' : 'सुषांत भिशी'}
+        tagline={language === 'EN' ? 'Trust & Prosperity Management' : 'विश्वासाची साथ, समृद्धीची वाट'}
         onFinish={() => setShowSplash(false)}
       />
     );
@@ -146,7 +147,7 @@ export const AppContent: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0B5C45] text-white flex items-center justify-center font-bold text-lg">
-        सुषांत भिशी लोड होत आहे...
+        {language === 'EN' ? 'Loading Sushant Bishi...' : 'सुषांत भिशी लोड होत आहे...'}
       </div>
     );
   }

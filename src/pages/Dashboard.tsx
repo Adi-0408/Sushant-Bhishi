@@ -181,9 +181,9 @@ export const Dashboard: React.FC = () => {
           {dashboardSearch.trim() !== '' && (
             <div className="space-y-2 pt-2 border-t border-slate-100">
               <div className="text-xs font-extrabold text-slate-600 flex justify-between items-center">
-                <span>शोध निकाल ({dashboardSearchResults.length} सापडले):</span>
+                <span>{language === 'EN' ? `Search results (${dashboardSearchResults.length} found):` : `शोध निकाल (${dashboardSearchResults.length} सापडले):`}</span>
                 {dashboardSearchResults.length === 0 && (
-                  <span className="text-rose-600 font-bold">कोणताही खातेदार सापडला नाही.</span>
+                  <span className="text-rose-600 font-bold">{language === 'EN' ? 'No customer found.' : 'कोणताही खातेदार सापडला नाही.'}</span>
                 )}
               </div>
 
@@ -216,16 +216,16 @@ export const Dashboard: React.FC = () => {
                             setIsQuickCollectOpen(true);
                           }}
                           className="px-2.5 py-1.5 rounded-lg bg-emerald-700 text-white font-extrabold text-xs hover:bg-emerald-800 transition-all flex items-center space-x-1 shadow-2xs cursor-pointer"
-                          title="हप्ता / जमा करा"
+                          title={language === 'EN' ? 'Record Collection' : 'हप्ता / जमा करा'}
                         >
                           <Wallet className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">जमा</span>
+                          <span className="hidden sm:inline">{language === 'EN' ? 'Collect' : 'जमा'}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => navigate(`/customers/${cust.id}`)}
                           className="p-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 font-bold text-xs transition-all cursor-pointer"
-                          title="खातेदार तपशील पहा"
+                          title={language === 'EN' ? 'View Customer Details' : 'खातेदार तपशील पहा'}
                         >
                           <ArrowUpRight className="w-4 h-4" />
                         </button>
@@ -551,7 +551,7 @@ export const Dashboard: React.FC = () => {
                           <span>{t.colRemaining}: {formatCurrency(item.remainingAmount, language)}</span>
                           {item.dueDate < todayStr && (
                             <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-black">
-                              थकीत ({formatDateMarathi(item.dueDate, language)})
+                              {language === 'EN' ? 'Overdue' : 'थकीत'} ({formatDateMarathi(item.dueDate, language)})
                             </span>
                           )}
                         </div>
@@ -594,7 +594,7 @@ export const Dashboard: React.FC = () => {
                             <span>{formatDateMarathi(item.dueDate, language)}</span>
                             {item.dueDate < todayStr && (
                               <span className="ml-1.5 px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-black">
-                                थकीत
+                                {language === 'EN' ? 'Overdue' : 'थकीत'}
                               </span>
                             )}
                           </td>
@@ -625,13 +625,13 @@ export const Dashboard: React.FC = () => {
       {/* Page Bottom Copyright & Trust Footer */}
       <div className="pt-6 border-t border-[#E4EAE7] flex flex-col sm:flex-row items-center justify-between text-xs font-bold text-[#5F6E68] gap-2">
         <div className="flex items-center space-x-2">
-          <span className="text-[#10241E] font-black">सुषांत भिशी</span>
+          <span className="text-[#10241E] font-black">{t.appName}</span>
           <span>|</span>
-          <span className="text-[#5F6E68] font-semibold">विश्वासाची साथ, समृद्धीची वाट</span>
+          <span className="text-[#5F6E68] font-semibold">{t.tagline}</span>
         </div>
         <div className="flex items-center space-x-1.5 text-[#0F7A5C] font-extrabold">
           <ShieldCheck className="w-4 h-4" />
-          <span>सुरक्षित आणि विश्वसनीय प्रणाली</span>
+          <span>{t.secureSystem}</span>
         </div>
       </div>
 

@@ -112,7 +112,7 @@ export const InterestManager: React.FC = () => {
                   }`}
                 >
                   <Calendar className="w-4 h-4" />
-                  <span>{language === 'EN' ? 'Monthly (मासिक)' : 'मासिक (Monthly)'}</span>
+                  <span>{language === 'EN' ? 'Monthly' : 'मासिक (Monthly)'}</span>
                 </button>
 
                 <button
@@ -125,7 +125,7 @@ export const InterestManager: React.FC = () => {
                   }`}
                 >
                   <Calendar className="w-4 h-4" />
-                  <span>{language === 'EN' ? 'Weekly (साप्ताहिक)' : 'साप्ताहिक (Weekly)'}</span>
+                  <span>{language === 'EN' ? 'Weekly' : 'साप्ताहिक (Weekly)'}</span>
                 </button>
               </div>
             </div>
@@ -142,7 +142,7 @@ export const InterestManager: React.FC = () => {
                 step="0.1"
                 value={rateInput}
                 onChange={(e) => setRateInput(e.target.value ? Number(e.target.value) : '')}
-                placeholder={rateTypeInput === 'MONTHLY' ? 'उदा. 10' : 'उदा. 2.5'}
+                placeholder={rateTypeInput === 'MONTHLY' ? (language === 'EN' ? 'e.g. 10' : 'उदा. 10') : (language === 'EN' ? 'e.g. 2.5' : 'उदा. 2.5')}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-base font-extrabold focus:ring-2 focus:ring-brand-500"
               />
             </div>

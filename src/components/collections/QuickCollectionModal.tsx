@@ -352,12 +352,12 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
               </span>
             </div>
             <div className="flex justify-between items-center text-sm">
-              <span className="text-slate-500 font-medium">एकूण जमा रक्कम:</span>
-              <span className="font-black text-emerald-700 text-base">₹{successDeposit.collectedAmount} ({paymentMode === 'ONLINE' ? 'ऑनलाइन' : 'रोख'})</span>
+              <span className="text-slate-500 font-medium">{language === 'EN' ? 'Total Collected Amount:' : 'एकूण जमा रक्कम:'}</span>
+              <span className="font-black text-emerald-700 text-base">₹{successDeposit.collectedAmount} ({paymentMode === 'ONLINE' ? (language === 'EN' ? 'Online' : 'ऑनलाइन') : (language === 'EN' ? 'Cash' : 'रोख')})</span>
             </div>
             {successDeposit.penaltyAmount > 0 && (
               <div className="flex justify-between items-center text-xs text-rose-700 font-bold bg-rose-50/70 px-2.5 py-1 rounded-lg border border-rose-200">
-                <span>समाविष्ट दंड (Penalty):</span>
+                <span>{language === 'EN' ? 'Included Late Fee (Penalty):' : 'समाविष्ट दंड (Penalty):'}</span>
                 <span className="font-extrabold">+₹{successDeposit.penaltyAmount}</span>
               </div>
             )}
@@ -549,7 +549,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                     <span>{t.colInstallmentAmount}</span>
                   </div>
                   <span className="text-xs sm:text-sm font-black text-[#0F7A5C] truncate w-full">
-                    {isLoanOnly ? '₹0 (कर्ज खाते)' : `₹${selectedCustomer.amount}`}
+                    {isLoanOnly ? (language === 'EN' ? '₹0 (Loan Account)' : '₹0 (कर्ज खाते)') : `₹${selectedCustomer.amount}`}
                   </span>
                 </div>
               </div>
@@ -559,10 +559,10 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
           {/* Deposit Breakdown Section - 3 Clear Options */}
           <div className="space-y-3 bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200">
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center justify-between border-b border-slate-200 pb-2">
-              <span>जमा रक्कम पर्याय (Deposit Options)</span>
+              <span>{language === 'EN' ? 'Deposit Options' : 'जमा रक्कम पर्याय (Deposit Options)'}</span>
               {hasActiveLoan && (
                 <span className="text-[11px] font-extrabold text-amber-900 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
-                  बाकी कर्ज: ₹{activeLoan?.remainingAmount}
+                  {language === 'EN' ? 'Remaining Loan: ₹' : 'बाकी कर्ज: ₹'}{activeLoan?.remainingAmount}
                 </span>
               )}
             </h4>
@@ -575,15 +575,19 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                     <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
                       <p className="text-xs font-black text-emerald-800 flex items-center justify-center space-x-1">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 inline mr-1" />
-                        <span>चालू तारखेचा हप्ता पूर्ण भरलेला आहे!</span>
+                        <span>{language === 'EN' ? 'Installment for current date is fully paid!' : 'चालू तारखेचा हप्ता पूर्ण भरलेला आहे!'}</span>
                       </p>
                       {selectedCustomerStatus?.nextUpcomingEntry ? (
                         <p className="text-[11px] text-emerald-700 mt-1 font-medium">
-                          ⏳ पुढील हप्ता तारीख: <strong className="font-extrabold">{formatDateMarathi(selectedCustomerStatus.nextUpcomingEntry.dueDate, language)}</strong> रोजी आहे. (त्या तारखेलाच जमा पर्याय सुरू होईल)
+                          {language === 'EN' ? (
+                            <>⏳ Next installment date: <strong className="font-extrabold">{formatDateMarathi(selectedCustomerStatus.nextUpcomingEntry.dueDate, language)}</strong>. (Deposit option will be active on that date)</>
+                          ) : (
+                            <>⏳ पुढील हप्ता तारीख: <strong className="font-extrabold">{formatDateMarathi(selectedCustomerStatus.nextUpcomingEntry.dueDate, language)}</strong> रोजी आहे. (त्या तारखेलाच जमा पर्याय सुरू होईल)</>
+                          )}
                         </p>
                       ) : (
                         <p className="text-[11px] text-emerald-700 mt-1 font-medium">
-                          या भिशीचे सर्व हप्ते पूर्ण जमा झाले आहेत.
+                          {language === 'EN' ? 'All installments for this Bishi are fully paid.' : 'या भिशीचे सर्व हप्ते पूर्ण जमा झाले आहेत.'}
                         </p>
                       )}
                     </div>
@@ -593,10 +597,10 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                         <div>
                           <div className="flex justify-between items-center mb-1">
                             <label className="block text-xs font-extrabold text-emerald-900">
-                              १. भिशी हप्ता जमा (₹) <span className="text-emerald-700 font-normal text-[10px]">(नियमित हप्ता)</span>
+                              {language === 'EN' ? '1. Bishi Installment (₹)' : '१. भिशी हप्ता जमा (₹)'} <span className="text-emerald-700 font-normal text-[10px]">({language === 'EN' ? 'Regular Installment' : 'नियमित हप्ता'})</span>
                             </label>
                             <span className="text-[10px] font-bold text-slate-500">
-                              अपेक्षित: ₹{selectedCustomerStatus?.pendingEntry?.remainingAmount || selectedCustomer?.amount}
+                              {language === 'EN' ? 'Expected: ₹' : 'अपेक्षित: ₹'}{selectedCustomerStatus?.pendingEntry?.remainingAmount || selectedCustomer?.amount}
                             </span>
                           </div>
                           <input
@@ -604,7 +608,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                             min={0}
                             value={collectedInput}
                             onChange={(e) => setCollectedInput(e.target.value ? Number(e.target.value) : '')}
-                            placeholder="उदा. 500"
+                            placeholder={language === 'EN' ? 'e.g. 500' : 'उदा. 500'}
                             className="w-full px-3.5 py-2 rounded-xl border border-emerald-400 text-sm font-black text-emerald-900 bg-white focus:ring-2 focus:ring-emerald-500"
                           />
                         </div>
@@ -612,7 +616,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                         <div>
                           <div className="flex justify-between items-center mb-1">
                             <label className="block text-xs font-extrabold text-rose-900">
-                              लेट फी / दंड (Penalty ₹) <span className="text-rose-700 font-normal text-[10px]">(उशिरा भरल्यास)</span>
+                              {language === 'EN' ? 'Late Fee / Penalty (₹)' : 'लेट फी / दंड (Penalty ₹)'} <span className="text-rose-700 font-normal text-[10px]">({language === 'EN' ? 'If paid late' : 'उशिरा भरल्यास'})</span>
                             </label>
                           </div>
                           <input
@@ -620,7 +624,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                             min={0}
                             value={penaltyInput}
                             onChange={(e) => setPenaltyInput(e.target.value ? Number(e.target.value) : '')}
-                            placeholder="उदा. 50"
+                            placeholder={language === 'EN' ? 'e.g. 50' : 'उदा. 50'}
                             className="w-full px-3.5 py-2 rounded-xl border border-rose-300 text-sm font-black text-rose-900 bg-rose-50/40 focus:ring-2 focus:ring-rose-500"
                           />
                         </div>
@@ -628,8 +632,8 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
 
                       {bishiPenaltyVal > 0 && (
                         <div className="text-[11px] font-bold text-rose-800 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200 flex justify-between items-center">
-                          <span>हप्ता: ₹{bishiVal} + दंड: ₹{bishiPenaltyVal}</span>
-                          <span className="font-extrabold">दंडासह भिशी जमा: ₹{bishiVal + bishiPenaltyVal}</span>
+                          <span>{language === 'EN' ? `Installment: ₹${bishiVal} + Penalty: ₹${bishiPenaltyVal}` : `हप्ता: ₹${bishiVal} + दंड: ₹${bishiPenaltyVal}`}</span>
+                          <span className="font-extrabold">{language === 'EN' ? `Total Bishi Deposit: ₹${bishiVal + bishiPenaltyVal}` : `दंडासह भिशी जमा: ₹${bishiVal + bishiPenaltyVal}`}</span>
                         </div>
                       )}
                     </div>
@@ -644,10 +648,10 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="block text-[11px] font-extrabold text-amber-950">
-                        २. कर्ज व्याज जमा (₹)
+                        {language === 'EN' ? '2. Loan Interest Deposit (₹)' : '२. कर्ज व्याज जमा (₹)'}
                       </label>
                       <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-200">
-                        ऑटो {activeLoan.interestRate}%
+                        {language === 'EN' ? `Auto ${activeLoan.interestRate}%` : `ऑटो ${activeLoan.interestRate}%`}
                       </span>
                     </div>
                     <input
@@ -655,11 +659,11 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                       min={0}
                       value={loanInterestInput}
                       onChange={(e) => setLoanInterestInput(e.target.value ? Number(e.target.value) : '')}
-                      placeholder={`उदा. ${dueInterest}`}
+                      placeholder={language === 'EN' ? `e.g. ${dueInterest}` : `उदा. ${dueInterest}`}
                       className="w-full px-3 py-2 rounded-xl border border-amber-400 text-xs font-black text-amber-950 focus:ring-2 focus:ring-amber-500 bg-amber-50/30"
                     />
                     <span className="text-[10px] font-semibold text-slate-500 block mt-0.5">
-                      (ऑटो कॅल्क्युलेट व्याज: ₹{dueInterest})
+                      ({language === 'EN' ? `Auto calculated interest: ₹${dueInterest}` : `ऑटो कॅल्क्युलेट व्याज: ₹${dueInterest}`})
                     </span>
                   </div>
 
@@ -667,7 +671,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="block text-[11px] font-extrabold text-amber-950">
-                        ३. कर्ज मुद्दल जमा (₹)
+                        {language === 'EN' ? '3. Loan Principal Repayment (₹)' : '३. कर्ज मुद्दल जमा (₹)'}
                       </label>
                     </div>
                     <input
@@ -675,11 +679,11 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                       min={0}
                       value={loanPrincipalInput}
                       onChange={(e) => setLoanPrincipalInput(e.target.value ? Number(e.target.value) : '')}
-                      placeholder="उदा. 2000"
+                      placeholder={language === 'EN' ? 'e.g. 2000' : 'उदा. 2000'}
                       className="w-full px-3 py-2 rounded-xl border border-amber-400 text-xs font-black text-amber-950 focus:ring-2 focus:ring-amber-500 bg-white"
                     />
                     <span className="text-[10px] font-semibold text-slate-500 block mt-0.5">
-                      (मुद्दल भरल्यास बाकी कर्ज कमी होते)
+                      ({language === 'EN' ? 'Paying principal reduces remaining loan' : 'मुद्दल भरल्यास बाकी कर्ज कमी होते'})
                     </span>
                   </div>
 
@@ -687,14 +691,14 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                   <div className="sm:col-span-2 pt-1 border-t border-slate-200/80">
                     <div className="flex items-center justify-between">
                       <label className="block text-[11px] font-extrabold text-emerald-900">
-                        ४. कर्ज डिस्काउंट / सूट (Discount ₹) <span className="text-emerald-700 font-normal text-[10px]">(पर्यायी / जर सूट द्यायची असल्यास)</span>
+                        {language === 'EN' ? '4. Loan Discount (₹)' : '४. कर्ज डिस्काउंट / सूट (Discount ₹)'} <span className="text-emerald-700 font-normal text-[10px]">({language === 'EN' ? 'Optional discount' : 'पर्यायी / जर सूट द्यायची असल्यास'})</span>
                       </label>
                       <input
                         type="number"
                         min={0}
                         value={loanDiscountInput}
                         onChange={(e) => setLoanDiscountInput(e.target.value ? Number(e.target.value) : '')}
-                        placeholder="उदा. 300"
+                        placeholder={language === 'EN' ? 'e.g. 300' : 'उदा. 300'}
                         className="w-48 px-3 py-1.5 rounded-xl border border-emerald-400 text-xs font-bold text-emerald-950 focus:ring-2 focus:ring-emerald-500 bg-emerald-50/40 text-right"
                       />
                     </div>
@@ -707,16 +711,16 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
             {hasActiveLoan && activeLoan && (
               <div className="text-[11px] font-semibold text-amber-900 bg-amber-100/80 p-2.5 rounded-xl border border-amber-200 space-y-1 mt-2">
                 <div className="flex justify-between items-center">
-                  <span>चालू महिन्याचे व्याज ({activeLoan.interestRate}%): <strong className="text-amber-950 font-black">₹{dueInterest}</strong></span>
+                  <span>{language === 'EN' ? `Current month's interest (${activeLoan.interestRate}%): ` : `चालू महिन्याचे व्याज (${activeLoan.interestRate}%): `}<strong className="text-amber-950 font-black">₹{dueInterest}</strong></span>
                   {unpaidInterest > 0 && (
                     <span className="text-rose-700 font-extrabold">
-                      ⚠️ थकबाकी व्याज ₹{unpaidInterest} दंडासह वर्ग होईल
+                      {language === 'EN' ? `⚠️ Overdue interest ₹${unpaidInterest} will be added with penalty` : `⚠️ थकबाकी व्याज ₹${unpaidInterest} दंडासह वर्ग होईल`}
                     </span>
                   )}
                 </div>
                 {loanPrinVal > 0 && (
                   <div className="flex justify-between items-center pt-1 border-t border-amber-200/80 text-blue-900 font-bold">
-                    <span>💡 मुद्दल परतीनंतर पुढील महिन्याचे ऑटो व्याज:</span>
+                    <span>{language === 'EN' ? '💡 Auto interest for next month after principal repayment:' : '💡 मुद्दल परतीनंतर पुढील महिन्याचे ऑटो व्याज:'}</span>
                     <span className="font-black text-blue-950">
                       ₹{Math.round((Math.max(0, loanPrinRemaining - loanPrinVal - (Number(loanDiscountInput) || 0)) * activeLoan.interestRate) / 100)}
                     </span>
@@ -734,13 +738,13 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
             </div>
             {bishiPenaltyVal > 0 && (
               <div className="flex justify-between items-center text-[11px] font-bold text-rose-700 pt-1 border-t border-slate-200">
-                <span>समाविष्ट लेट दंड (Penalty Included):</span>
+                <span>{language === 'EN' ? 'Penalty Included:' : 'समाविष्ट लेट दंड (Penalty Included):'}</span>
                 <span>+₹{bishiPenaltyVal}</span>
               </div>
             )}
             <div className="flex justify-between items-center text-[11px] text-slate-500 font-medium">
-              <span>भरणा पद्धत:</span>
-              <span className="font-bold text-slate-800">{paymentMode === 'ONLINE' ? '📱 ऑनलाइन (UPI)' : '💵 रोख (Cash)'}</span>
+              <span>{language === 'EN' ? 'Payment Mode:' : 'भरणा पद्धत:'}</span>
+              <span className="font-bold text-slate-800">{paymentMode === 'ONLINE' ? (language === 'EN' ? '📱 Online (UPI)' : '📱 ऑनलाइन (UPI)') : (language === 'EN' ? '💵 Cash' : '💵 रोख (Cash)')}</span>
             </div>
           </div>
 

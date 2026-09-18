@@ -93,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onLogoutClick
           <button
             onClick={onClose}
             className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-colors lg:hidden cursor-pointer touch-target"
-            aria-label="मेनू बंद करा"
+            aria-label={language === 'EN' ? 'Close menu' : 'मेनू बंद करा'}
           >
             <X className="w-5 h-5" />
           </button>

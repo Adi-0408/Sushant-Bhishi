@@ -6,7 +6,7 @@ import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 
 export const ProfileManager: React.FC = () => {
   const { currentAdmin, updateAdminProfile, changePassword } = useAuth();
-  const { showToast } = useApp();
+  const { showToast, language } = useApp();
 
   // Profile info state
   const [name, setName] = useState(currentAdmin?.name || '');
@@ -34,9 +34,15 @@ export const ProfileManager: React.FC = () => {
         mobile: mobile.trim(),
         email: email.trim(),
       });
-      showToast('प्रशासकाची माहिती यशस्वीपणे अपडेट झाली.', 'success');
+      showToast(
+        language === 'EN' ? 'Admin profile updated successfully.' : 'प्रशासकाची माहिती यशस्वीपणे अपडेट झाली.',
+        'success'
+      );
     } catch {
-      showToast('माहिती अपडेट करताना त्रुटी आली.', 'error');
+      showToast(
+        language === 'EN' ? 'Error updating profile.' : 'माहिती अपडेट करताना त्रुटी आली.',
+        'error'
+      );
     } finally {
       setSaving(false);
     }
@@ -48,29 +54,50 @@ export const ProfileManager: React.FC = () => {
     setPassSuccess('');
 
     if (!newPassword || !confirmPassword) {
-      setPassError('कृपया नवीन पासवर्ड आणि पुष्टीकरण पासवर्ड भरा.');
+      setPassError(
+        language === 'EN'
+          ? 'Please enter new password and confirm password.'
+          : 'कृपया नवीन पासवर्ड आणि पुष्टीकरण पासवर्ड भरा.'
+      );
       return;
     }
 
     if (newPassword.length < 4) {
-      setPassError('नवीन पासवर्ड किमान ४ अक्षरांचा असावा.');
+      setPassError(
+        language === 'EN'
+          ? 'New password must be at least 4 characters.'
+          : 'नवीन पासवर्ड किमान ४ अक्षरांचा असावा.'
+      );
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setPassError('नवीन पासवर्ड आणि पुन्हा टाकलेला पासवर्ड जुळत नाही.');
+      setPassError(
+        language === 'EN'
+          ? 'New password and confirmation password do not match.'
+          : 'नवीन पासवर्ड आणि पुन्हा टाकलेला पासवर्ड जुळत नाही.'
+      );
       return;
     }
 
     setChangingPass(true);
     try {
       await changePassword(newPassword);
-      setPassSuccess('पासवर्ड यशस्वीपणे बदलला आहे! पुढील वेळी लॉगिनसाठी हाच पासवर्ड वापरा.');
-      showToast('पासवर्ड यशस्वीपणे अपडेट झाला.', 'success');
+      setPassSuccess(
+        language === 'EN'
+          ? 'Password changed successfully! Use this password for future logins.'
+          : 'पासवर्ड यशस्वीपणे बदलला आहे! पुढील वेळी लॉगिनसाठी हाच पासवर्ड वापरा.'
+      );
+      showToast(
+        language === 'EN' ? 'Password updated successfully.' : 'पासवर्ड यशस्वीपणे अपडेट झाला.',
+        'success'
+      );
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'पासवर्ड बदलताना त्रुटी आली.';
+      const msg = err instanceof Error
+        ? err.message
+        : (language === 'EN' ? 'Failed to update password.' : 'पासवर्ड बदलताना त्रुटी आली.');
       setPassError(msg);
       showToast(msg, 'error');
     } finally {
@@ -84,10 +111,12 @@ export const ProfileManager: React.FC = () => {
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
           <UserCheck className="w-6 h-6 text-brand-700" />
-          <span>माझी माहिती व सुरक्षा (Profile & Security)</span>
+          <span>{language === 'EN' ? 'Profile & Security' : 'माझी माहिती व सुरक्षा (Profile & Security)'}</span>
         </h2>
         <p className="text-xs text-slate-500 font-medium mt-1">
-          प्रशासकाची प्रोफाइल माहिती बदला आणि सुरक्षा पासवर्ड अपडेट करा
+          {language === 'EN'
+            ? 'Update administrator profile information and change login password'
+            : 'प्रशासकाची प्रोफाइल माहिती बदला आणि सुरक्षा पासवर्ड अपडेट करा'}
         </p>
       </div>
 
@@ -99,22 +128,26 @@ export const ProfileManager: React.FC = () => {
               <UserCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-black text-slate-900">प्रशासक तपशील</h3>
-              <p className="text-xs text-slate-500 font-medium">नाव, ईमेल आणि मोबाईल क्रमांक</p>
+              <h3 className="text-base font-black text-slate-900">
+                {language === 'EN' ? 'Administrator Details' : 'प्रशासक तपशील'}
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">
+                {language === 'EN' ? 'Name, Email ID, and Mobile Number' : 'नाव, ईमेल आणि मोबाईल क्रमांक'}
+              </p>
             </div>
           </div>
 
           <form onSubmit={handleProfileSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                प्रशासकाचे नाव <span className="text-rose-500">*</span>
+                {language === 'EN' ? 'Administrator Name' : 'प्रशासकाचे नाव'} <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <MarathiTextInput
                   required
                   value={name}
                   onChange={(val) => setName(val)}
-                  placeholder="प्रशासकाचे नाव (उदा. sushant -> सुशांत)"
+                  placeholder={language === 'EN' ? 'Admin Name (e.g. Sushant)' : 'प्रशासकाचे नाव (उदा. sushant -> सुशांत)'}
                   className="w-full pl-4 pr-20 py-2.5 rounded-xl border border-slate-300 text-sm font-bold"
                 />
               </div>
@@ -122,7 +155,7 @@ export const ProfileManager: React.FC = () => {
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                ईमेल आयडी (Email ID) <span className="text-rose-500">*</span>
+                {language === 'EN' ? 'Email Address' : 'ईमेल आयडी (Email ID)'} <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <Mail className="w-5 h-5 absolute left-3 top-3 text-slate-400" />
@@ -139,7 +172,7 @@ export const ProfileManager: React.FC = () => {
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                मोबाईल क्रमांक <span className="text-rose-500">*</span>
+                {language === 'EN' ? 'Mobile Number' : 'मोबाईल क्रमांक'} <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <Phone className="w-5 h-5 absolute left-3 top-3 text-slate-400" />
@@ -161,7 +194,11 @@ export const ProfileManager: React.FC = () => {
                 className="w-full min-h-[44px] py-3 rounded-xl bg-brand-900 text-white font-extrabold text-sm hover:bg-brand-800 transition-colors shadow-md flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
               >
                 <Save className="w-5 h-5" />
-                <span>{saving ? 'जतन होत आहे...' : 'माहिती जतन करा'}</span>
+                <span>
+                  {saving
+                    ? (language === 'EN' ? 'Saving...' : 'जतन होत आहे...')
+                    : (language === 'EN' ? 'Save Profile' : 'माहिती जतन करा')}
+                </span>
               </button>
             </div>
           </form>
@@ -174,8 +211,12 @@ export const ProfileManager: React.FC = () => {
               <KeyRound className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-black text-slate-900">पासवर्ड बदला (Change Password)</h3>
-              <p className="text-xs text-slate-500 font-medium">खाते सुरक्षित ठेवण्यासाठी नवीन पासवर्ड सेट करा</p>
+              <h3 className="text-base font-black text-slate-900">
+                {language === 'EN' ? 'Change Password' : 'पासवर्ड बदला (Change Password)'}
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">
+                {language === 'EN' ? 'Set a new password to keep account secure' : 'खाते सुरक्षित ठेवण्यासाठी नवीन पासवर्ड सेट करा'}
+              </p>
             </div>
           </div>
 
@@ -195,7 +236,7 @@ export const ProfileManager: React.FC = () => {
           <form onSubmit={handlePasswordSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                नवीन पासवर्ड (New Password) <span className="text-rose-500">*</span>
+                {language === 'EN' ? 'New Password' : 'नवीन पासवर्ड (New Password)'} <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <KeyRound className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
@@ -204,14 +245,14 @@ export const ProfileManager: React.FC = () => {
                   required
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="नवीन पासवर्ड टाका (किमान ४ अक्षरे)"
+                  placeholder={language === 'EN' ? 'Enter new password (min 4 chars)' : 'नवीन पासवर्ड टाका (किमान ४ अक्षरे)'}
                   className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={() => setShowNewPassword(!showNewPassword)}
                   className="absolute right-2 top-2 p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  aria-label="नवीन पासवर्ड दाखवा/लपवा"
+                  aria-label={language === 'EN' ? 'Toggle password visibility' : 'नवीन पासवर्ड दाखवा/लपवा'}
                 >
                   {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -220,7 +261,7 @@ export const ProfileManager: React.FC = () => {
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                नवीन पासवर्ड पुन्हा टाका (Confirm New Password) <span className="text-rose-500">*</span>
+                {language === 'EN' ? 'Confirm New Password' : 'नवीन पासवर्ड पुन्हा टाका (Confirm New Password)'} <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <ShieldCheck className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
@@ -229,14 +270,14 @@ export const ProfileManager: React.FC = () => {
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="नवीन पासवर्ड पुन्हा लिहा"
+                  placeholder={language === 'EN' ? 'Re-enter new password' : 'नवीन पासवर्ड पुन्हा लिहा'}
                   className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   className="absolute right-2 top-2 p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  aria-label="पुन्हा पासवर्ड दाखवा/लपवा"
+                  aria-label={language === 'EN' ? 'Toggle password visibility' : 'पुन्हा पासवर्ड दाखवा/लपवा'}
                 >
                   {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -244,7 +285,7 @@ export const ProfileManager: React.FC = () => {
             </div>
 
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-xs font-medium">
-              💡 <strong>टीप:</strong> पासवर्ड बदलल्यानंतर पुढील सर्व लॉगिनसाठी हाच नवीन पासवर्ड वापरला जाईल.
+              💡 <strong>{language === 'EN' ? 'Note:' : 'टीप:'}</strong> {language === 'EN' ? 'Once changed, this new password will be required for all future logins.' : 'पासवर्ड बदलल्यानंतर पुढील सर्व लॉगिनसाठी हाच नवीन पासवर्ड वापरला जाईल.'}
             </div>
 
             <div className="pt-3 border-t border-slate-100">
@@ -254,7 +295,11 @@ export const ProfileManager: React.FC = () => {
                 className="w-full min-h-[44px] py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-sm transition-colors shadow-md flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
               >
                 <KeyRound className="w-5 h-5" />
-                <span>{changingPass ? 'पासवर्ड बदलत आहे...' : 'पासवर्ड अपडेट करा'}</span>
+                <span>
+                  {changingPass
+                    ? (language === 'EN' ? 'Updating Password...' : 'पासवर्ड बदलत आहे...')
+                    : (language === 'EN' ? 'Update Password' : 'पासवर्ड अपडेट करा')}
+                </span>
               </button>
             </div>
           </form>

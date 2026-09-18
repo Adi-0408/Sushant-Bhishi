@@ -526,14 +526,14 @@ export const ReportManager: React.FC = () => {
               {/* Header Box */}
               <div className="flex flex-col sm:flex-row justify-between items-center border-b-2 border-amber-900/40 pb-3 gap-2">
                 <div>
-                  <h2 className="text-sm font-black text-amber-900">सुषांत भिशी</h2>
+                  <h2 className="text-sm font-black text-amber-900">{language === 'EN' ? 'Sushant Bishi' : 'सुषांत भिशी'}</h2>
                   <h1 className="text-lg sm:text-xl font-black text-amber-950 tracking-tight">
-                    खातेदार खाते उतारा (Member Ledger Card)
+                    {language === 'EN' ? 'Member Ledger Card' : 'खातेदार खाते उतारा (Member Ledger Card)'}
                   </h1>
                 </div>
                 <div className="text-right text-xs font-extrabold text-amber-950">
-                  <div>कार्यालय: {getOfficeNameMarathi(activeOffice, language)}</div>
-                  <div>दिनांक: {formatDateMarathi(new Date().toISOString().split('T')[0], language)}</div>
+                  <div>{language === 'EN' ? 'Office: ' : 'कार्यालय: '}{getOfficeNameMarathi(activeOffice, language)}</div>
+                  <div>{language === 'EN' ? 'Date: ' : 'दिनांक: '}{formatDateMarathi(new Date().toISOString().split('T')[0], language)}</div>
                 </div>
               </div>
 
@@ -542,21 +542,21 @@ export const ReportManager: React.FC = () => {
                 <table className="w-full text-xs font-bold border-collapse border border-amber-900/40 bg-[#fffde7]">
                   <tbody>
                     <tr className="border-b border-amber-900/30">
-                      <td className="p-2.5 bg-[#8B4513] text-white font-extrabold w-28 sm:w-36">खाते नंबर</td>
+                      <td className="p-2.5 bg-[#8B4513] text-white font-extrabold w-28 sm:w-36">{language === 'EN' ? 'Account No' : 'खाते नंबर'}</td>
                       <td className="p-2.5 font-black text-slate-900 text-sm sm:text-base border-r border-amber-900/30">
                         {activeLedgerCustomer.accountNumber}
                       </td>
-                      <td className="p-2.5 bg-[#8B4513] text-white font-extrabold w-32 sm:w-40">खातेदाराचे नाव</td>
+                      <td className="p-2.5 bg-[#8B4513] text-white font-extrabold w-32 sm:w-40">{language === 'EN' ? 'Customer Name' : 'खातेदाराचे नाव'}</td>
                       <td className="p-2.5 font-black text-slate-900 text-sm sm:text-base">
                         {activeLedgerCustomer.name}
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-2.5 bg-[#8B4513] text-white font-extrabold">हप्ता रुपये</td>
+                      <td className="p-2.5 bg-[#8B4513] text-white font-extrabold">{language === 'EN' ? 'Installment (₹)' : 'हप्ता रुपये'}</td>
                       <td className="p-2.5 font-extrabold text-emerald-900 border-r border-amber-900/30">
-                        ₹{activeLedgerCustomer.amount} ({activeLedgerCustomer.modality === 'W' ? 'साप्ताहिक' : 'मासिक'})
+                        ₹{activeLedgerCustomer.amount} ({activeLedgerCustomer.modality === 'W' ? (language === 'EN' ? 'Weekly' : 'साप्ताहिक') : (language === 'EN' ? 'Monthly' : 'मासिक')})
                       </td>
-                      <td className="p-2.5 bg-[#8B4513] text-white font-extrabold">पत्ता / मोबाईल</td>
+                      <td className="p-2.5 bg-[#8B4513] text-white font-extrabold">{language === 'EN' ? 'Address / Mobile' : 'पत्ता / मोबाईल'}</td>
                       <td className="p-2.5 font-extrabold text-slate-800">
                         {activeLedgerCustomer.address || '-'} ({activeLedgerCustomer.mobile})
                       </td>
@@ -567,7 +567,7 @@ export const ReportManager: React.FC = () => {
 
               {/* Mobile swipe helper cue */}
               <div className="md:hidden flex items-center justify-between text-[11px] font-bold text-amber-800 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 mb-2 no-print">
-                <span>👉 संपूर्ण तक्ता पाहण्यासाठी डावीकडे/उजवीकडे स्वाइप करा (Swipe to view full ledger)</span>
+                <span>{language === 'EN' ? '👉 Swipe horizontally to view full ledger table' : '👉 संपूर्ण तक्ता पाहण्यासाठी डावीकडे/उजवीकडे स्वाइप करा (Swipe to view full ledger)'}</span>
               </div>
 
               {/* Main Ledger Table (Multi-level columns matching photo & excel mockup) */}
@@ -575,20 +575,20 @@ export const ReportManager: React.FC = () => {
                 <table className="w-full text-center text-xs font-bold border-collapse border border-amber-900/40">
                   <thead>
                     <tr className="bg-[#f5e6d3] text-slate-900 border-b border-amber-900/40">
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 w-12">अ. क्र.</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 w-24">तारीख</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-emerald-900">खात्यात जमा रुपये</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-emerald-950">एकूण जमा रुपये</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-rose-900">दंड</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40">देणे</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-amber-900">दिलेले कर्ज</th>
-                      <th colSpan={2} className="p-2.5 border border-amber-900/40 text-brand-900">कर्ज परत फेड</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-rose-900">दंड</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-rose-950">देणे बाकी</th>
+                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 w-12">{language === 'EN' ? 'Sr.' : 'अ. क्र.'}</th>
+                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 w-24">{language === 'EN' ? 'Date' : 'तारीख'}</th>
+                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-emerald-900">{language === 'EN' ? 'Deposit (₹)' : 'खात्यात जमा रुपये'}</th>
+                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-emerald-950">{language === 'EN' ? 'Total Deposit (₹)' : 'एकूण जमा रुपये'}</th>
+                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-rose-900">{language === 'EN' ? 'Penalty' : 'दंड'}</th>
+                      <th rowSpan={2} className="p-2.5 border border-amber-900/40">{language === 'EN' ? 'Expected' : 'देणे'}</th>
+                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-amber-900">{language === 'EN' ? 'Loan Given' : 'दिलेले कर्ज'}</th>
+                      <th colSpan={2} className="p-2.5 border border-amber-900/40 text-brand-900">{language === 'EN' ? 'Loan Repayment' : 'कर्ज परत फेड'}</th>
+                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-rose-900">{language === 'EN' ? 'Penalty' : 'दंड'}</th>
+                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-rose-950">{language === 'EN' ? 'Balance Due' : 'देणे बाकी'}</th>
                     </tr>
                     <tr className="bg-[#faebd7] text-slate-900 border-b border-amber-900/40">
-                      <th className="p-2 border border-amber-900/40">कर्ज</th>
-                      <th className="p-2 border border-amber-900/40">व्याज</th>
+                      <th className="p-2 border border-amber-900/40">{language === 'EN' ? 'Principal' : 'कर्ज'}</th>
+                      <th className="p-2 border border-amber-900/40">{language === 'EN' ? 'Interest' : 'व्याज'}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -664,7 +664,7 @@ export const ReportManager: React.FC = () => {
                   <tfoot>
                     <tr className="bg-[#8B4513] text-white font-extrabold text-xs">
                       <td className="p-2 border border-amber-900/40 text-center">-</td>
-                      <td className="p-2 border border-amber-900/40 text-center">एकूण</td>
+                      <td className="p-2 border border-amber-900/40 text-center">{language === 'EN' ? 'TOTAL' : 'एकूण'}</td>
                       <td className="p-2 border border-amber-900/40 text-right text-emerald-200 font-black">{ledgerTotalDeposit > 0 ? formatCurrency(ledgerTotalDeposit, language) : '-'}</td>
                       <td className="p-2 border border-amber-900/40 text-right text-emerald-100 font-black">{cumulativeDeposit > 0 ? formatCurrency(cumulativeDeposit, language) : '-'}</td>
                       <td className="p-2 border border-amber-900/40 text-right text-rose-200">{ledgerTotalPenalty > 0 ? formatCurrency(ledgerTotalPenalty, language) : '-'}</td>
@@ -682,18 +682,18 @@ export const ReportManager: React.FC = () => {
               {/* Footer Block matching media_1789461835687.jpg */}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 pt-4 border-t border-amber-900/30 text-xs font-extrabold text-slate-800">
                 <div className="bg-[#fffde7] border border-amber-900/30 p-3 rounded-lg space-y-1 w-full sm:w-64">
-                  <div>१) टाकणी: ___________________</div>
-                  <div>२) डिव्हिडंड: ___________________</div>
-                  <div>३) खाते नं.: {activeLedgerCustomer.accountNumber}</div>
-                  <div>४) शेरा: ___________________</div>
+                  <div>{language === 'EN' ? '1) Bid/Draw: ___________________' : '१) टाकणी: ___________________'}</div>
+                  <div>{language === 'EN' ? '2) Dividend: ___________________' : '२) डिव्हिडंड: ___________________'}</div>
+                  <div>{language === 'EN' ? '3) Acc No: ' : '३) खाते नं.: '}{activeLedgerCustomer.accountNumber}</div>
+                  <div>{language === 'EN' ? '4) Note: ___________________' : '४) शेरा: ___________________'}</div>
                 </div>
 
                 <div className="text-right w-full sm:w-auto pr-4">
                   <p className="mb-8 font-extrabold text-slate-700">
-                    सदर भिशीची रक्कम मिळाल्या बद्दल...
+                    {language === 'EN' ? 'Acknowledged receipt of Bishi amount...' : 'सदर भिशीची रक्कम मिळाल्या बद्दल...'}
                   </p>
                   <div className="border-t border-slate-900 pt-1 inline-block min-w-40 text-center font-black text-slate-900">
-                    सेक्रेटरी / अध्यक्ष
+                    {language === 'EN' ? 'Secretary / President' : 'सेक्रेटरी / अध्यक्ष'}
                   </div>
                 </div>
               </div>
@@ -713,13 +713,13 @@ export const ReportManager: React.FC = () => {
           <div className="print-only mb-6 border-b-2 border-emerald-900 pb-4">
             <div className="flex justify-between items-center">
               <div>
-                <h1 className="text-2xl font-black text-emerald-900 tracking-tight">सुषांत भिशी</h1>
+                <h1 className="text-2xl font-black text-emerald-900 tracking-tight">{language === 'EN' ? 'Sushant Bishi' : 'सुषांत भिशी'}</h1>
                 <h2 className="text-base font-extrabold text-slate-800">{customReportNote ? `${reportTitle} - ${customReportNote}` : reportTitle}</h2>
               </div>
               <div className="text-right text-xs font-bold text-slate-600 leading-relaxed">
-                <div>कार्यालय: <strong className="text-emerald-900">{getOfficeNameMarathi(activeOffice, language)}</strong></div>
-                <div>भिशी योजना: <strong className="text-emerald-900">{bishiFilter === 'ALL' ? t.allBishi : getBishiNameMarathi(bishiFilter, language)}</strong></div>
-                <div>दिनांक: <strong className="text-slate-900">{formatDateMarathi(new Date().toISOString().split('T')[0], language)}</strong> | एकूण: <strong className="text-slate-900">{filteredRows.length}</strong></div>
+                <div>{language === 'EN' ? 'Office: ' : 'कार्यालय: '}<strong className="text-emerald-900">{getOfficeNameMarathi(activeOffice, language)}</strong></div>
+                <div>{language === 'EN' ? 'Bishi Scheme: ' : 'भिशी योजना: '}<strong className="text-emerald-900">{bishiFilter === 'ALL' ? t.allBishi : getBishiNameMarathi(bishiFilter, language)}</strong></div>
+                <div>{language === 'EN' ? 'Date: ' : 'दिनांक: '}<strong className="text-slate-900">{formatDateMarathi(new Date().toISOString().split('T')[0], language)}</strong> | {language === 'EN' ? 'Total: ' : 'एकूण: '}<strong className="text-slate-900">{filteredRows.length}</strong></div>
               </div>
             </div>
           </div>
@@ -805,7 +805,7 @@ export const ReportManager: React.FC = () => {
                         <th className="p-3 text-right border border-emerald-800">{t.colExpectedAmount}</th>
                         <th className="p-3 text-right border border-emerald-800">{t.colCollectedAmount}</th>
                         <th className="p-3 text-right border border-emerald-800">{t.colRemainingAmount}</th>
-                        <th className="p-3 text-right border border-emerald-800">व्याज/दंड (₹)</th>
+                        <th className="p-3 text-right border border-emerald-800">{language === 'EN' ? 'Interest/Penalty (₹)' : 'व्याज/दंड (₹)'}</th>
                         <th className="p-3 text-center border border-emerald-800">{t.colStatus}</th>
                       </tr>
                     </thead>
@@ -821,8 +821,8 @@ export const ReportManager: React.FC = () => {
                           <td className="p-3 text-right font-extrabold text-emerald-700 border border-slate-300">{formatCurrency(coll, language)}</td>
                           <td className="p-3 text-right font-black text-rose-600 border border-slate-300">{formatCurrency(rem, language)}</td>
                           <td className="p-3 text-right text-slate-800 border border-slate-300">
-                            {int > 0 && <div className="text-blue-700 font-bold">व्याज: {formatCurrency(int, language)}</div>}
-                            {pen > 0 && <div className="text-amber-800 font-bold">दंड: {formatCurrency(pen, language)}</div>}
+                            {int > 0 && <div className="text-blue-700 font-bold">{language === 'EN' ? 'Interest: ' : 'व्याज: '}{formatCurrency(int, language)}</div>}
+                            {pen > 0 && <div className="text-amber-800 font-bold">{language === 'EN' ? 'Penalty: ' : 'दंड: '}{formatCurrency(pen, language)}</div>}
                             {int === 0 && pen === 0 && '-'}
                           </td>
                           <td className="p-3 text-center border border-slate-300">
@@ -852,8 +852,8 @@ export const ReportManager: React.FC = () => {
                         <td className="p-3 text-right border border-emerald-800 text-emerald-300">{formatCurrency(grandCollected, language)}</td>
                         <td className="p-3 text-right border border-emerald-800 text-rose-300">{formatCurrency(grandRemaining, language)}</td>
                         <td className="p-3 text-right border border-emerald-800 text-amber-200 font-bold">
-                          {grandInterest > 0 && <div>व्याज: {formatCurrency(grandInterest, language)}</div>}
-                          {grandPenalty > 0 && <div>दंड: {formatCurrency(grandPenalty, language)}</div>}
+                          {grandInterest > 0 && <div>{language === 'EN' ? 'Interest: ' : 'व्याज: '}{formatCurrency(grandInterest, language)}</div>}
+                          {grandPenalty > 0 && <div>{language === 'EN' ? 'Penalty: ' : 'दंड: '}{formatCurrency(grandPenalty, language)}</div>}
                           {grandInterest === 0 && grandPenalty === 0 && '-'}
                         </td>
                         <td className="p-3 text-center border border-emerald-800">-</td>
@@ -869,13 +869,13 @@ export const ReportManager: React.FC = () => {
           <div className="print-only mt-8 pt-4 border-t border-dashed border-slate-300 text-xs font-bold text-slate-600">
             <div className="flex justify-between items-end">
               <div>
-                <div>अहवाल निर्मिती दिनांक: {formatDateMarathi(new Date().toISOString().split('T')[0], language)}</div>
-                <div className="text-[10px] text-slate-500">• संगणकीकृत प्रत: सुषांत भिशी व्यवस्थापन प्रणाली</div>
+                <div>{language === 'EN' ? 'Report Generation Date: ' : 'अहवाल निर्मिती दिनांक: '}{formatDateMarathi(new Date().toISOString().split('T')[0], language)}</div>
+                <div className="text-[10px] text-slate-500">• {language === 'EN' ? 'Computer Generated Copy: Sushant Bishi Management System' : 'संगणकीकृत प्रत: सुषांत भिशी व्यवस्थापन प्रणाली'}</div>
               </div>
               <div className="text-center pr-4">
                 <div className="h-10"></div>
                 <div className="border-t border-emerald-900 pt-1 min-w-36 text-emerald-950 font-black">
-                  अधिकृत स्वाक्षरी
+                  {language === 'EN' ? 'Authorized Signature' : 'अधिकृत स्वाक्षरी'}
                 </div>
               </div>
             </div>

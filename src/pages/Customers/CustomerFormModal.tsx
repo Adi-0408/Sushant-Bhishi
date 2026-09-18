@@ -24,7 +24,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
   onSuccess,
   initialLoanOnly = false,
 }) => {
-  const { customers, activeOffice, bishiConfigs, interestRates, penaltySettings, showToast, refreshData } = useApp();
+  const { customers, activeOffice, bishiConfigs, interestRates, penaltySettings, showToast, refreshData, language, t } = useApp();
 
   const defaultInterestRate = interestRates[0]?.rate || 10;
   const defaultPenaltyRate = penaltySettings?.weeklyPenalty || 50;
@@ -133,32 +133,34 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             </div>
 
             <h2 className="text-2xl font-black text-slate-900 mb-1">
-              खातेदार यशस्वीपणे जोडला गेला!
+              {language === 'EN' ? 'Customer Added Successfully!' : 'खातेदार यशस्वीपणे जोडला गेला!'}
             </h2>
             <p className="text-xs text-slate-500 font-medium mb-6">
-              सुषांत भिशी सिस्टीममध्ये नवीन खातेदाराची नोंद जतन झाली आहे.
+              {language === 'EN'
+                ? 'New customer record has been saved in Sushant Bishi system.'
+                : 'सुषांत भिशी सिस्टीममध्ये नवीन खातेदाराची नोंद जतन झाली आहे.'}
             </p>
 
             {/* Details Summary Card */}
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-left space-y-2 mb-6">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-500 font-medium">खाते क्रमांक:</span>
+                <span className="text-slate-500 font-medium">{t.colAccountNo}:</span>
                 <span className="font-extrabold text-slate-900 bg-white px-2.5 py-0.5 rounded-md border border-slate-200">
                   {successCustomer.accountNumber}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-500 font-medium">खातेदाराचे नाव:</span>
+                <span className="text-slate-500 font-medium">{t.colFullName}:</span>
                 <span className="font-bold text-slate-900">{successCustomer.name}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-500 font-medium">मोबाईल नंबर:</span>
+                <span className="text-slate-500 font-medium">{t.colMobile}:</span>
                 <span className="font-bold text-slate-900">{successCustomer.mobile}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-500 font-medium">भिशी रक्कम:</span>
+                <span className="text-slate-500 font-medium">{t.colInstallmentAmount}:</span>
                 <span className="font-extrabold text-emerald-700">
-                  ₹{successCustomer.amount} ({successCustomer.modality === 'W' ? 'साप्ताहिक' : 'मासिक'})
+                  ₹{successCustomer.amount} ({successCustomer.modality === 'W' ? (language === 'EN' ? 'Weekly' : 'साप्ताहिक') : (language === 'EN' ? 'Monthly' : 'मासिक')})
                 </span>
               </div>
             </div>
@@ -174,9 +176,9 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                   onSuccess(createdId);
                   onClose();
                 }}
-                className="flex-1 py-3 px-4 rounded-xl bg-emerald-700 text-white font-extrabold text-sm hover:bg-emerald-800 transition-colors shadow-md"
+                className="flex-1 py-3 px-4 rounded-xl bg-emerald-700 text-white font-extrabold text-sm hover:bg-emerald-800 transition-colors shadow-md cursor-pointer"
               >
-                ठीक आहे (OK)
+                {language === 'EN' ? 'OK' : 'ठीक आहे (OK)'}
               </button>
             </div>
           </div>
@@ -190,24 +192,24 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
     setError('');
 
     if (!accountNumber.trim()) {
-      setError('कृपया खाते क्रमांक भरा.');
+      setError(language === 'EN' ? 'Please enter account number.' : 'कृपया खाते क्रमांक भरा.');
       return;
     }
     if (!name.trim()) {
-      setError('कृपया खातेदाराचे पूर्ण नाव भरा.');
+      setError(language === 'EN' ? 'Please enter customer name.' : 'कृपया खातेदाराचे पूर्ण नाव भरा.');
       return;
     }
     if (!mobile.trim() || mobile.length < 10) {
-      setError('मोबाईल क्रमांक चुकीचा आहे.');
+      setError(language === 'EN' ? 'Invalid 10-digit mobile number.' : 'मोबाईल क्रमांक चुकीचा आहे.');
       return;
     }
     if (bishiType !== 'LOAN_ONLY' && (!amount || Number(amount) <= 0)) {
-      setError('कृपया योग्य भिशी रक्कम टाका.');
+      setError(language === 'EN' ? 'Please enter valid bishi installment amount.' : 'कृपया योग्य भिशी रक्कम टाका.');
       return;
     }
 
     if (hasLoan && (!loanPrincipal || Number(loanPrincipal) <= 0)) {
-      setError('कृपया कर्जाची योग्य रक्कम भरा.');
+      setError(language === 'EN' ? 'Please enter valid loan principal amount.' : 'कृपया कर्जाची योग्य रक्कम भरा.');
       return;
     }
 
@@ -258,7 +260,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           });
         }
 
-        showToast('खातेदाराची माहिती यशस्वीपणे अपडेट झाली.', 'success');
+        showToast(language === 'EN' ? 'Customer updated successfully.' : 'खातेदाराची माहिती यशस्वीपणे अपडेट झाली.', 'success');
       } else {
         // Add new customer
         const isLoanOnly = bishiType === 'LOAN_ONLY';
@@ -327,7 +329,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           });
         }
 
-        showToast('नवीन खातेदार यशस्वीपणे जोडला गेला.', 'success');
+        showToast(language === 'EN' ? 'New customer added successfully.' : 'नवीन खातेदार यशस्वीपणे जोडला गेला.', 'success');
         setSuccessCustomer({
           id: newCustomer.id,
           accountNumber: newCustomer.accountNumber,
@@ -344,7 +346,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
         onClose();
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'खातेदार जतन करताना त्रुटी आली.';
+      const msg = err instanceof Error ? err.message : (language === 'EN' ? 'Error saving customer.' : 'खातेदार जतन करताना त्रुटी आली.');
       setError(msg);
     } finally {
       setSubmitting(false);
@@ -364,18 +366,22 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             <div>
               <h2 className="text-base sm:text-lg font-extrabold text-slate-900">
                 {editingCustomer
-                  ? (bishiType === 'LOAN_ONLY' ? 'कर्ज खातेदार माहिती बदला' : 'खातेदार माहिती बदला')
-                  : (initialLoanOnly || bishiType === 'LOAN_ONLY' ? 'नवीन कर्ज खातेदार जोडा' : 'नवीन भिशी खातेदार जोडा')}
+                  ? (bishiType === 'LOAN_ONLY'
+                      ? (language === 'EN' ? 'Edit Loan Customer Details' : 'कर्ज खातेदार माहिती बदला')
+                      : (language === 'EN' ? 'Edit Customer Details' : 'खातेदार माहिती बदला'))
+                  : (initialLoanOnly || bishiType === 'LOAN_ONLY'
+                      ? (language === 'EN' ? 'Add Loan Customer' : 'नवीन कर्ज खातेदार जोडा')
+                      : (language === 'EN' ? 'Add New Customer' : 'नवीन भिशी खातेदार जोडा'))}
               </h2>
               <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
-                सर्व आवश्यक माहिती अचूकपणे भरा
+                {language === 'EN' ? 'Fill all required details accurately' : 'सर्व आवश्यक माहिती अचूकपणे भरा'}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="p-2 min-w-[40px] min-h-[40px] text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 flex items-center justify-center cursor-pointer transition-colors"
-            aria-label="फॉर्म बंद करा"
+            aria-label={language === 'EN' ? 'Close form' : 'फॉर्म बंद करा'}
           >
             <X className="w-5 h-5" />
           </button>
@@ -396,14 +402,14 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             {/* Account Number */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                खाते क्रमांक <span className="text-rose-500">*</span>
+                {t.colAccountNo} <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 required
                 value={accountNumber}
                 onChange={(e) => setAccountNumber(e.target.value)}
-                placeholder="उदा. 101"
+                placeholder={language === 'EN' ? 'e.g. 101' : 'उदा. 101'}
                 className="w-full px-4 py-2.5 rounded-xl border border-emerald-300 text-sm font-extrabold text-emerald-900 bg-emerald-50/20 focus:ring-2 focus:ring-brand-500 focus:outline-none"
               />
             </div>
@@ -411,13 +417,13 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             {/* Name */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                खातेदाराचे पूर्ण नाव <span className="text-rose-500">*</span>
+                {t.colFullName} <span className="text-rose-500">*</span>
               </label>
               <MarathiTextInput
                 required
                 value={name}
                 onChange={(val) => setName(val)}
-                placeholder="इंग्रजीत टाईप करा (उदा. rahul -> राहुल)"
+                placeholder={language === 'EN' ? 'Type customer full name' : 'इंग्रजीत टाईप करा (उदा. rahul -> राहुल)'}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-brand-500 focus:outline-none"
               />
             </div>
@@ -425,7 +431,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             {/* Mobile */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                मोबाईल क्रमांक <span className="text-rose-500">*</span>
+                {t.colMobile} <span className="text-rose-500">*</span>
               </label>
               <input
                 type="tel"
@@ -433,7 +439,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                 maxLength={10}
                 value={mobile}
                 onChange={(e) => setMobile(e.target.value)}
-                placeholder="१० अंकी मोबाईल नंबर"
+                placeholder={language === 'EN' ? '10-digit mobile number' : '१० अंकी मोबाईल नंबर'}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-brand-500 focus:outline-none"
               />
             </div>
@@ -441,14 +447,14 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             {/* Office */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                कार्यालय <span className="text-rose-500">*</span>
+                {t.colOffice} <span className="text-rose-500">*</span>
               </label>
               <CustomDropdown<OfficeId>
                 value={officeId}
                 onChange={(val) => setOfficeId(val)}
                 options={[
-                  { value: 'MAIN', label: 'मुख्य कार्यालय' },
-                  { value: 'HOME', label: 'गृह कार्यालय' },
+                  { value: 'MAIN', label: t.mainOffice },
+                  { value: 'HOME', label: t.homeOffice },
                 ]}
                 size="lg"
               />
@@ -457,7 +463,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             {/* Bishi Type */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                भिशी प्रकार <span className="text-rose-500">*</span>
+                {t.colBishi} <span className="text-rose-500">*</span>
               </label>
               <CustomDropdown<BishiType>
                 value={bishiType}
@@ -468,7 +474,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                     label: cfg.name,
                   })),
                   ...((initialLoanOnly || bishiType === 'LOAN_ONLY')
-                    ? [{ value: 'LOAN_ONLY' as BishiType, label: 'फक्त कर्ज खातेदार (Loan Only)' }]
+                    ? [{ value: 'LOAN_ONLY' as BishiType, label: language === 'EN' ? 'Loan Only Customer' : 'फक्त कर्ज खातेदार (Loan Only)' }]
                     : []),
                 ]}
                 size="lg"
@@ -478,7 +484,10 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             {/* Bishi Start Date */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                {bishiType === 'LOAN_ONLY' ? 'खाते सुरु तारीख' : 'भिशीची तारीख'} <span className="text-rose-500">*</span>
+                {bishiType === 'LOAN_ONLY'
+                  ? (language === 'EN' ? 'Account Opening Date' : 'खाते सुरु तारीख')
+                  : (language === 'EN' ? 'Bishi Start Date' : 'भिशीची तारीख')}{' '}
+                <span className="text-rose-500">*</span>
               </label>
               <input
                 type="date"
@@ -493,7 +502,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             {bishiType !== 'LOAN_ONLY' && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  भिशीची पद्धत <span className="text-rose-500">*</span>
+                  {t.colModality} <span className="text-rose-500">*</span>
                 </label>
                 <CustomDropdown<Modality>
                   value={modality}
@@ -504,8 +513,8 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                     }
                   }}
                   options={[
-                    { value: 'W', label: 'साप्ताहिक (Weekly)' },
-                    { value: 'M', label: 'मासिक (Monthly)' },
+                    { value: 'W', label: t.modalityWeekly },
+                    { value: 'M', label: t.modalityMonthly },
                   ]}
                   size="lg"
                 />
@@ -516,7 +525,9 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             {bishiType !== 'LOAN_ONLY' && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  {modality === 'W' ? 'एकूण आठवडे (Total Weeks)' : 'एकूण महिने (Total Months)'}{' '}
+                  {modality === 'W'
+                    ? (language === 'EN' ? 'Total Weeks' : 'एकूण आठवडे (Total Weeks)')
+                    : (language === 'EN' ? 'Total Months' : 'एकूण महिने (Total Months)')}{' '}
                   <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -526,7 +537,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                   max={200}
                   value={totalInstallments}
                   onChange={(e) => setTotalInstallments(e.target.value ? Number(e.target.value) : '')}
-                  placeholder={modality === 'W' ? 'उदा. 40 किंवा 52' : 'उदा. 10 किंवा 12'}
+                  placeholder={modality === 'W' ? (language === 'EN' ? 'e.g. 40 or 52' : 'उदा. 40 किंवा 52') : (language === 'EN' ? 'e.g. 10 or 12' : 'उदा. 10 किंवा 12')}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold focus:ring-2 focus:ring-brand-500 focus:outline-none"
                 />
               </div>
@@ -536,7 +547,9 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             {bishiType !== 'LOAN_ONLY' ? (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  {modality === 'W' ? 'साप्ताहिक रक्कम (₹)' : 'मासिक रक्कम (₹)'}{' '}
+                  {modality === 'W'
+                    ? (language === 'EN' ? 'Weekly Amount (₹)' : 'साप्ताहिक रक्कम (₹)')
+                    : (language === 'EN' ? 'Monthly Amount (₹)' : 'मासिक रक्कम (₹)')}{' '}
                   <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -545,18 +558,18 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                   min={100}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value ? Number(e.target.value) : '')}
-                  placeholder="उदा. 1000"
+                  placeholder={language === 'EN' ? 'e.g. 1000' : 'उदा. 1000'}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold focus:ring-2 focus:ring-brand-500 focus:outline-none"
                 />
               </div>
             ) : (
               <div>
                 <label className="block text-xs font-bold text-amber-800 mb-1">
-                  खातेदार प्रकार
+                  {language === 'EN' ? 'Customer Category' : 'खातेदार प्रकार'}
                 </label>
                 <div className="px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-bold text-xs flex items-center justify-between">
-                  <span>फक्त कर्ज खातेदार (Without Bishi)</span>
-                  <span className="text-[10px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-md font-extrabold">भिशी हप्ता ₹0</span>
+                  <span>{language === 'EN' ? 'Loan Only Customer (Without Bishi)' : 'फक्त कर्ज खातेदार (Without Bishi)'}</span>
+                  <span className="text-[10px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-md font-extrabold">{language === 'EN' ? 'Bishi Installment ₹0' : 'भिशी हप्ता ₹0'}</span>
                 </div>
               </div>
             )}
@@ -564,13 +577,13 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             {/* Interest */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                व्याजदर (%)
+                {language === 'EN' ? 'Interest Rate (%)' : 'व्याजदर (%)'}
               </label>
               <input
                 type="number"
                 value={interestRate}
                 onChange={(e) => setInterestRate(e.target.value ? Number(e.target.value) : '')}
-                placeholder="उदा. 10"
+                placeholder={language === 'EN' ? 'e.g. 10' : 'उदा. 10'}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-brand-500 focus:outline-none"
               />
             </div>
@@ -578,13 +591,13 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             {/* Penalty */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                दंड रक्कम (₹)
+                {language === 'EN' ? 'Penalty Amount (₹)' : 'दंड रक्कम (₹)'}
               </label>
               <input
                 type="number"
                 value={penaltyRate}
                 onChange={(e) => setPenaltyRate(e.target.value ? Number(e.target.value) : '')}
-                placeholder="उदा. 50"
+                placeholder={language === 'EN' ? 'e.g. 50' : 'उदा. 50'}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-brand-500 focus:outline-none"
               />
             </div>
@@ -592,17 +605,17 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
 
           {/* Address */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">पत्ता</label>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              {language === 'EN' ? 'Address' : 'पत्ता'}
+            </label>
             <MarathiTextInput
               rows={2}
               value={address}
               onChange={(val) => setAddress(val)}
-              placeholder="संपूर्ण पत्ता इंग्रजीत टाईप करा (उदा. mg road pune -> एमजी रोड पुणे)"
+              placeholder={language === 'EN' ? 'Type address...' : 'संपूर्ण पत्ता इंग्रजीत टाईप करा (उदा. mg road pune -> एमजी रोड पुणे)'}
               className="w-full px-4 py-2 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-brand-500 focus:outline-none"
             />
           </div>
-
-
 
           </div>
 
@@ -613,7 +626,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
               onClick={onClose}
               className="px-5 py-2.5 min-h-[44px] rounded-xl border border-slate-300 text-slate-700 text-sm font-bold hover:bg-white transition-colors cursor-pointer flex items-center justify-center shadow-2xs"
             >
-              रद्द करा
+              {t.btnCancel}
             </button>
             <button
               type="submit"
@@ -621,7 +634,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
               className="px-6 py-2.5 min-h-[44px] rounded-xl bg-brand-900 text-white text-sm font-bold shadow-md hover:bg-brand-800 transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
-              <span>{submitting ? 'जतन होत आहे...' : 'जतन करा'}</span>
+              <span>{submitting ? (language === 'EN' ? 'Saving...' : 'जतन होत आहे...') : t.btnSave}</span>
             </button>
           </div>
         </form>
