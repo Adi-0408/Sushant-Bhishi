@@ -806,11 +806,11 @@ export const CustomerDetail: React.FC = () => {
 
       {/* LOAN SECTION - STRICTLY HIDDEN IF NO LOAN (Requirements 17 & 48) */}
       {(customer.hasLoan || customer.bishiType === 'LOAN_ONLY') && loan ? (
-        <div className="bg-white rounded-2xl border border-amber-200 shadow-xs overflow-hidden">
-          <div className="p-5 bg-amber-50/50 border-b border-amber-200 flex items-center justify-between">
+        <div className="bg-white rounded-2xl print:rounded-xl border border-amber-200 print:border-slate-300 shadow-xs print:shadow-none overflow-hidden print:mt-2.5 print:break-inside-avoid">
+          <div className="p-5 print:p-2 bg-amber-50/50 border-b border-amber-200 print:border-slate-200 flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Landmark className="w-5 h-5 text-amber-700" />
-              <h3 className="text-base font-extrabold text-amber-900">
+              <Landmark className="w-5 h-5 print:w-4 print:h-4 text-amber-700" />
+              <h3 className="text-base print:text-xs font-extrabold text-amber-900">
                 {language === 'EN' ? 'Loan Details' : 'कर्जाची माहिती'}
               </h3>
             </div>
@@ -822,80 +822,80 @@ export const CustomerDetail: React.FC = () => {
             </button>
           </div>
 
-          <div className="p-6">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4">
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                <span className="text-[11px] font-bold text-slate-500 block">{language === 'EN' ? 'Loan Principal' : 'कर्जाची रक्कम'}</span>
-                <span className="text-base font-extrabold text-slate-900">
+          <div className="p-6 print:p-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 print:grid-cols-7 gap-3 sm:gap-4 print:gap-1.5">
+              <div className="bg-slate-50 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-slate-200 text-center">
+                <span className="text-[11px] print:text-[9px] font-bold text-slate-500 block leading-tight">{language === 'EN' ? 'Loan Principal' : 'कर्जाची रक्कम'}</span>
+                <span className="text-base print:text-xs font-black text-slate-900 block mt-0.5">
                   {formatCurrency(loan.principalAmount, language)}
                 </span>
                 {loanPrincipalRemaining < loan.principalAmount && (
-                  <span className="text-[10px] font-bold text-amber-800 block mt-0.5">
-                    ({language === 'EN' ? 'Remaining Principal' : 'उर्वरित मुद्दल'}: {formatCurrency(loanPrincipalRemaining, language)})
+                  <span className="text-[10px] print:text-[8px] font-bold text-amber-800 block mt-0.5 leading-none">
+                    ({language === 'EN' ? 'Rem' : 'उर्वरित'}: {formatCurrency(loanPrincipalRemaining, language)})
                   </span>
                 )}
               </div>
 
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                <span className="text-[11px] font-bold text-slate-500 block">{language === 'EN' ? 'Interest Rate' : 'व्याज दर'}</span>
-                <span className="text-base font-extrabold text-slate-900">
+              <div className="bg-slate-50 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-slate-200 text-center">
+                <span className="text-[11px] print:text-[9px] font-bold text-slate-500 block leading-tight">{language === 'EN' ? 'Interest Rate' : 'व्याज दर'}</span>
+                <span className="text-base print:text-xs font-black text-slate-900 block mt-0.5">
                   {loan.interestRate}%
                 </span>
-                <span className="text-[10px] font-bold text-amber-800 block mt-0.5">
-                  ({language === 'EN' ? 'Monthly' : 'मासिक'}: {formatCurrency(loanDueInterest, language)})
+                <span className="text-[10px] print:text-[8px] font-bold text-amber-800 block mt-0.5 leading-none">
+                  ({language === 'EN' ? 'Mo' : 'मासिक'}: {formatCurrency(loanDueInterest, language)})
                 </span>
               </div>
 
-              <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200">
-                <span className="text-[11px] font-bold text-amber-800 block">{language === 'EN' ? 'Total Payable' : 'एकूण देय'}</span>
-                <span className="text-base font-black text-amber-900">
+              <div className="bg-amber-50 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-amber-200 text-center">
+                <span className="text-[11px] print:text-[9px] font-bold text-amber-800 block leading-tight">{language === 'EN' ? 'Total Payable' : 'एकूण देय'}</span>
+                <span className="text-base print:text-xs font-black text-amber-900 block mt-0.5">
                   {formatCurrency(loan.totalPayable, language)}
                 </span>
               </div>
 
-              <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-200">
-                <span className="text-[11px] font-bold text-emerald-800 block">{language === 'EN' ? 'Paid Principal' : 'भरलेली मुद्दल'}</span>
-                <span className="text-base font-black text-emerald-700">
+              <div className="bg-emerald-50 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-emerald-200 text-center">
+                <span className="text-[11px] print:text-[9px] font-bold text-emerald-800 block leading-tight">{language === 'EN' ? 'Paid Principal' : 'भरलेली मुद्दल'}</span>
+                <span className="text-base print:text-xs font-black text-emerald-700 block mt-0.5">
                   {formatCurrency(loan.paidAmount, language)}
                 </span>
               </div>
 
-              <div className="bg-amber-100/70 p-3.5 rounded-xl border border-amber-300">
-                <span className="text-[11px] font-extrabold text-amber-950 block">{language === 'EN' ? 'Interest Paid' : 'भरलेले व्याज'}</span>
-                <span className="text-base font-black text-amber-900">
+              <div className="bg-amber-100/70 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-amber-300 text-center">
+                <span className="text-[11px] print:text-[9px] font-extrabold text-amber-950 block leading-tight">{language === 'EN' ? 'Interest Paid' : 'भरलेले व्याज'}</span>
+                <span className="text-base print:text-xs font-black text-amber-900 block mt-0.5">
                   {formatCurrency(totalInterestPaid, language)}
                 </span>
               </div>
 
               {Boolean(loan.discountAmount && loan.discountAmount > 0) && (
-                <div className="bg-emerald-100/70 p-3.5 rounded-xl border border-emerald-300">
-                  <span className="text-[11px] font-extrabold text-emerald-900 block">{language === 'EN' ? 'Discount Given' : 'दिलेली सूट (Discount)'}</span>
-                  <span className="text-base font-black text-emerald-800">
+                <div className="bg-emerald-100/70 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-emerald-300 text-center">
+                  <span className="text-[11px] print:text-[9px] font-extrabold text-emerald-900 block leading-tight">{language === 'EN' ? 'Discount Given' : 'दिलेली सूट'}</span>
+                  <span className="text-base print:text-xs font-black text-emerald-800 block mt-0.5">
                     {formatCurrency(loan.discountAmount || 0, language)}
                   </span>
                 </div>
               )}
 
-              <div className={`p-3.5 rounded-xl border-2 transition-all ${
+              <div className={`p-3.5 print:p-1.5 rounded-xl print:rounded-lg border-2 text-center transition-all ${
                 loan.remainingAmount > 0
-                  ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-200/60 shadow-xs'
+                  ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-200/60 shadow-xs print:border-rose-300 print:ring-0'
                   : 'bg-slate-50 border-slate-200'
               }`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold text-rose-900 block">{language === 'EN' ? 'Loan Balance' : 'कर्जाची बाकी'}</span>
+                <div className="flex items-center justify-center space-x-1">
+                  <span className="text-[11px] print:text-[9px] font-extrabold text-rose-900 block leading-tight">{language === 'EN' ? 'Loan Balance' : 'कर्जाची बाकी'}</span>
                   {loan.remainingAmount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-600 text-white animate-pulse">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] print:hidden font-black bg-rose-600 text-white animate-pulse">
                       {language === 'EN' ? 'DUE' : 'बाकी'}
                     </span>
                   )}
                 </div>
-                <span className="text-base font-black text-rose-700 block mt-0.5">
+                <span className="text-base print:text-xs font-black text-rose-700 block mt-0.5">
                   {formatCurrency(loan.remainingAmount, language)}
                 </span>
               </div>
 
-              <div className="bg-slate-100 p-3.5 rounded-xl border border-slate-200 flex items-center justify-center">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusBadgeClass(loan.status)}`}>
+              <div className="bg-slate-100 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-slate-200 flex items-center justify-center text-center">
+                <span className={`px-3 py-1 print:px-1.5 print:py-0.5 rounded-full text-xs print:text-[9px] font-bold ${getStatusBadgeClass(loan.status)}`}>
                   {loan.status === 'ACTIVE'
                     ? (language === 'EN' ? 'Active Loan' : 'कर्ज सुरू')
                     : (language === 'EN' ? 'Closed' : 'कर्ज पूर्ण बंद')}
@@ -905,22 +905,22 @@ export const CustomerDetail: React.FC = () => {
 
             {/* Loan Payment History Table */}
             {customerLoanPayments.length > 0 && (
-              <div className="mt-6 border-t border-slate-100 pt-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center space-x-2">
-                    <History className="w-4 h-4 text-emerald-700 shrink-0" />
+              <div className="mt-6 print:mt-2.5 border-t border-slate-100 print:border-slate-200 pt-5 print:pt-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 print:mb-1.5">
+                  <h4 className="text-xs print:text-[10px] font-black text-slate-800 uppercase tracking-wider flex items-center space-x-2">
+                    <History className="w-4 h-4 print:w-3.5 print:h-3.5 text-emerald-700 shrink-0" />
                     <span>{language === 'EN' ? 'Loan Payment History' : 'कर्ज भरणा इतिहास (Loan Payment History)'}</span>
                   </h4>
 
                   <div className="flex items-center flex-wrap gap-2">
-                    <span className="text-[11px] text-slate-600 font-bold bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                    <span className="text-[11px] print:text-[9px] text-slate-600 font-bold bg-slate-100 px-2.5 py-1 print:px-1.5 print:py-0.5 rounded-lg border border-slate-200">
                       {language === 'EN'
                         ? `Entries: ${customerLoanPayments.length} | Total Interest: ${formatCurrency(totalInterestPaid, language)}`
                         : `नोंदी: ${customerLoanPayments.length} | एकूण व्याज: ${formatCurrency(totalInterestPaid, language)}`}
                     </span>
 
-                    {/* Mobile View Toggle (Table vs Cards) */}
-                    <div className="flex md:hidden bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[11px] font-bold">
+                    {/* Mobile View Toggle (Table vs Cards) - Strictly Hidden in Print */}
+                    <div className="flex md:hidden bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[11px] font-bold no-print">
                       <button
                         type="button"
                         onClick={() => setLoanHistoryMobileView('table')}
@@ -1080,7 +1080,7 @@ export const CustomerDetail: React.FC = () => {
       ) : null}
 
       {/* Print-Only Verification & Signature Block */}
-      <div className="print-only mt-6 pt-4 border-t border-dashed border-slate-400 text-xs font-bold text-slate-600">
+      <div className="print-only mt-6 print:mt-3 pt-4 print:pt-2 border-t border-dashed border-slate-400 text-xs font-bold text-slate-600 break-inside-avoid">
         <div className="flex justify-between items-end">
           <div>
             <p className="text-[9px] text-slate-500 leading-tight">

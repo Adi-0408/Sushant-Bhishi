@@ -10,6 +10,7 @@ import {
 } from '../utils/formatters';
 import { calculateCustomerFinancials, calculateLoanDueInterest, getLoanRemainingPrincipal } from '../utils/calculations';
 import { StorageService } from './db';
+import { calculateMemberLedger } from './ledger';
 
 /**
  * Creates an off-screen container positioned safely behind viewport elements
@@ -570,120 +571,31 @@ export const generateMemberLedgerPDF = async (
   // A4 Landscape target width: 1122px
   const container = createPdfContainer(1122);
 
-  const custLoanPayments = loanPayments.filter((lp) => lp.customerId === customer.id);
-
-  const allCustomerCollections = collections
-    .filter((c) => c.customerId === customer.id)
-    .sort((a, b) => a.periodIndex - b.periodIndex);
-
-  // If customer has loan payments on dates without bishi collections, synthesize rows so they are never missed
-  const collectionDueDates = new Set(allCustomerCollections.map((c) => c.dueDate));
-  const missingLoanPaymentDates = Array.from(
-    new Set(
-      custLoanPayments
-        .filter((lp) => !collectionDueDates.has(lp.paymentDate))
-        .map((lp) => lp.paymentDate)
-    )
-  ).sort();
-
-  const synthesizedLoanRows: CollectionEntry[] = missingLoanPaymentDates.map((pDate, idx) => ({
-    id: `synth-loan-${idx}-${pDate}`,
-    customerId: customer.id,
-    customerName: customer.name,
-    accountNumber: customer.accountNumber,
-    officeId: customer.officeId,
-    bishiType: customer.bishiType || 'DIWALI',
-    periodIndex: 900 + idx,
-    periodLabel: 'कर्ज परतफेड',
-    dueDate: pDate,
-    expectedAmount: 0,
-    collectedAmount: 0,
-    remainingAmount: 0,
-    interestAmount: 0,
-    historicalInterestRate: 0,
-    penaltyAmount: 0,
-    historicalPenaltyRate: 0,
-    totalPaid: 0,
-    status: 'PAID',
-    paymentDate: pDate,
-    updatedAt: pDate,
-  }));
-
-  const mergedCustomerCollections = [...allCustomerCollections, ...synthesizedLoanRows].sort((a, b) =>
-    a.dueDate.localeCompare(b.dueDate)
+  const ledgerCalculation = calculateMemberLedger(
+    customer,
+    collections,
+    loan,
+    loanPayments,
+    showAllWeeks
   );
 
-  const customerCollections = showAllWeeks
-    ? mergedCustomerCollections
-    : mergedCustomerCollections.filter((c) => {
-        const hasDeposit = (c.collectedAmount || 0) > 0;
-        const isPaid = c.status === 'PAID';
-        const hasLoanPayment = custLoanPayments.some((lp) => lp.paymentDate === c.dueDate);
-        return hasDeposit || isPaid || hasLoanPayment;
-      });
-
-  let totalCumulative = 0;
-  let totalDeposit = 0;
-  let totalBishiPenalty = 0;
-  let totalExpected = 0;
-  let totalLoanIssued = customer.hasLoan && loan ? (loan.principalAmount || 0) : 0;
-  let totalLoanPrincipalPaid = 0;
-  let totalLoanInterestPaid = 0;
-  let totalLoanPenalty = 0;
-  let runningLoanPrincipalBalance = customer.hasLoan && loan ? (loan.principalAmount || 0) : 0;
-  const finalRemainingBalance =
-    (customer.hasLoan && loan ? loan.remainingAmount : 0) +
-    (customerCollections.length > 0 ? (customerCollections[customerCollections.length - 1].remainingAmount || 0) : 0);
-
-  const tableRowsHtml = customerCollections.length === 0
+  const tableRowsHtml = ledgerCalculation.rows.length === 0
     ? `<tr><td colspan="11" style="padding: 18px; text-align: center; color: #64748b; font-weight: 700; border: 1px solid #b8a99a;">या खातेदाराची अद्याप कोणतीही पूर्ण जमा नोंद झालेली नाही.</td></tr>`
-    : customerCollections
-        .map((item, idx) => {
-          const deposit = item.collectedAmount || 0;
-          totalDeposit += deposit;
-          totalCumulative += deposit;
-          const penalty = item.penaltyAmount || 0;
-          totalBishiPenalty += penalty;
-          const expected = item.expectedAmount || 0;
-          totalExpected += expected;
-
-          // Filter ALL loan payments matching this customer and date
-          const periodPayments = custLoanPayments.filter(
-            (lp) => lp.paymentDate === item.dueDate
-          );
-
-          const loanPrincipalPaid = periodPayments.reduce((sum, lp) => sum + (lp.paidAmount || 0), 0);
-          totalLoanPrincipalPaid += loanPrincipalPaid;
-
-          const loanInterestPaid = periodPayments.reduce((sum, lp) => sum + (lp.interestPaid || 0), 0);
-          totalLoanInterestPaid += loanInterestPaid;
-
-          const loanPenalty = periodPayments.reduce((sum, lp) => sum + (lp.penaltyPaid || 0), 0);
-          totalLoanPenalty += loanPenalty;
-
-          const loanDiscount = periodPayments.reduce((sum, lp) => sum + (lp.discountAmount || 0), 0);
-
-          if (customer.hasLoan) {
-            runningLoanPrincipalBalance = Math.max(0, runningLoanPrincipalBalance - loanPrincipalPaid - loanDiscount);
-          }
-
-          const loanIssued = idx === 0 && customer.hasLoan && loan ? (loan.principalAmount || 0) : 0;
-
-          const balanceRemaining = (customer.hasLoan ? runningLoanPrincipalBalance : 0) + (item.remainingAmount || 0);
-
+    : ledgerCalculation.rows
+        .map((row, idx) => {
           return `
             <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#fcf8f2'};">
-              <td style="padding: 5px 4px; border: 1px solid #b8a99a; text-align: center; font-weight: 700;">${idx + 1}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: center; font-weight: 700;">${formatDateMarathi(item.dueDate)}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 800; color: #15803d;">${deposit > 0 ? deposit : '-'}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #0b5c45;">${totalCumulative > 0 ? totalCumulative : '-'}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #be123c;">${penalty > 0 ? penalty : '-'}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 700;">${expected > 0 ? expected : '-'}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #c2410c; font-weight: 700;">${loanIssued > 0 ? loanIssued : '-'}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #15803d; font-weight: 800;">${loanPrincipalPaid > 0 ? loanPrincipalPaid : '-'}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #15803d; font-weight: 800;">${loanInterestPaid > 0 ? loanInterestPaid : '-'}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #be123c;">${loanPenalty > 0 ? loanPenalty : '-'}</td>
-              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #be123c;">${balanceRemaining > 0 ? balanceRemaining : '0'}</td>
+              <td style="padding: 5px 4px; border: 1px solid #b8a99a; text-align: center; font-weight: 700;">${row.srNo}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: center; font-weight: 700;">${formatDateMarathi(row.date)}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 800; color: #15803d;">${row.deposit > 0 ? row.deposit : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #0b5c45;">${row.cumulativeDeposit > 0 ? row.cumulativeDeposit : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #be123c;">${row.bishiPenalty > 0 ? row.bishiPenalty : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 700;">${row.expected > 0 ? row.expected : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #c2410c; font-weight: 700;">${row.loanIssued > 0 ? row.loanIssued : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #15803d; font-weight: 800;">${row.loanPrincipalPaid > 0 ? row.loanPrincipalPaid : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #15803d; font-weight: 800;">${row.loanInterestPaid > 0 ? row.loanInterestPaid : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; color: #be123c;">${row.loanPenalty > 0 ? row.loanPenalty : '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #be123c;">${row.balanceRemaining > 0 ? row.balanceRemaining : '0'}</td>
             </tr>
           `;
         })
@@ -746,15 +658,15 @@ export const generateMemberLedgerPDF = async (
           <tr style="background: #8B4513; color: #ffffff; font-weight: 900; font-size: 11px;">
             <td style="padding: 6px 4px; border: 1px solid #5c3a21; text-align: center;">-</td>
             <td style="padding: 6px 8px; border: 1px solid #5c3a21; text-align: center;">एकूण</td>
-            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalDeposit > 0 ? totalDeposit : '-'}</td>
-            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalCumulative > 0 ? totalCumulative : '-'}</td>
-            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalBishiPenalty > 0 ? totalBishiPenalty : '-'}</td>
-            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalExpected > 0 ? totalExpected : '-'}</td>
-            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalLoanIssued > 0 ? totalLoanIssued : '-'}</td>
-            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalLoanPrincipalPaid > 0 ? totalLoanPrincipalPaid : '-'}</td>
-            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalLoanInterestPaid > 0 ? totalLoanInterestPaid : '-'}</td>
-            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${totalLoanPenalty > 0 ? totalLoanPenalty : '-'}</td>
-            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${finalRemainingBalance > 0 ? finalRemainingBalance : '0'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${ledgerCalculation.totalDeposit > 0 ? ledgerCalculation.totalDeposit : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${ledgerCalculation.totalCumulativeDeposit > 0 ? ledgerCalculation.totalCumulativeDeposit : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${ledgerCalculation.totalBishiPenalty > 0 ? ledgerCalculation.totalBishiPenalty : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${ledgerCalculation.totalExpected > 0 ? ledgerCalculation.totalExpected : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${ledgerCalculation.totalLoanIssued > 0 ? ledgerCalculation.totalLoanIssued : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${ledgerCalculation.totalLoanPrincipalPaid > 0 ? ledgerCalculation.totalLoanPrincipalPaid : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${ledgerCalculation.totalLoanInterestPaid > 0 ? ledgerCalculation.totalLoanInterestPaid : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${ledgerCalculation.totalLoanPenalty > 0 ? ledgerCalculation.totalLoanPenalty : '-'}</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21; text-align: right;">${ledgerCalculation.finalRemainingBalance > 0 ? ledgerCalculation.finalRemainingBalance : '0'}</td>
           </tr>
         </tfoot>
       </table>
