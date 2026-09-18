@@ -22,7 +22,6 @@ import { SettingsManager } from './pages/Settings/SettingsManager';
 
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
-import { BottomNav } from './components/layout/BottomNav';
 import { ToastContainer } from './components/common/ToastContainer';
 import { ConfirmModal } from './components/common/ConfirmModal';
 
@@ -83,7 +82,7 @@ const ProtectedLayout: React.FC = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col lg:pl-64 min-w-0 bg-[#F4F6F5]">
         <Header onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)} />
-        <main className="flex-1 p-3 sm:p-6 pb-24 lg:pb-6 max-w-7xl w-full mx-auto bg-[#F4F6F5]">
+        <main className="flex-1 p-3 sm:p-6 pb-6 max-w-7xl w-full mx-auto bg-[#F4F6F5]">
           <div key={location.pathname} className="animate-page-enter">
             <Routes location={location}>
               <Route path="/dashboard" element={<Dashboard />} />
@@ -104,9 +103,6 @@ const ProtectedLayout: React.FC = () => {
           </div>
         </main>
       </div>
-
-      {/* Mobile Bottom Navigation Bar */}
-      <BottomNav onMenuToggle={() => setIsSidebarOpen(true)} />
 
       {/* Toast Notifications */}
       <ToastContainer />
