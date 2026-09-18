@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { StorageService } from '../../services/db';
 import { generateWeeklyEntries, generateMonthlyEntries } from '../../utils/calculations';
 import { generateNextAccountNumber } from '../../utils/formatters';
-import { MarathiTextInput } from '../../components/common/MarathiTextInput';
+import { MarathiTextInput, convertTextToMarathi } from '../../components/common/MarathiTextInput';
 import { CustomDropdown } from '../../components/common/CustomDropdown';
 import { ModalPortal } from '../../components/common/ModalPortal';
 import { X, UserPlus, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -187,7 +187,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
     );
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -215,11 +215,19 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
 
     setSubmitting(true);
     try {
+      const finalName = language === 'MR' ? await convertTextToMarathi(name.trim()) : name.trim();
+      const finalAddress = address.trim()
+        ? language === 'MR'
+          ? await convertTextToMarathi(address.trim())
+          : address.trim()
+        : '';
+
       if (editingCustomer) {
         // Update customer
         const updated = StorageService.updateCustomer(editingCustomer.id, {
           accountNumber: accountNumber.trim(),
-          name: name.trim(),
+          name: finalName,
+          customerName: finalName,
           mobile: mobile.trim(),
           bishiType,
           bishiDate,
@@ -229,7 +237,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           interestRate: Number(interestRate) || 0,
           penaltyRate: Number(penaltyRate) || 0,
           officeId,
-          address: address.trim(),
+          address: finalAddress,
           photoURL: photoURL.trim() || undefined,
           hasLoan: bishiType === 'LOAN_ONLY' ? true : hasLoan,
         });
@@ -268,8 +276,8 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
         const finalInstallments = Number(totalInstallments) || (modality === 'W' ? 40 : 10);
         const newCustomer = StorageService.addCustomer({
           accountNumber: accountNumber.trim(),
-          name: name.trim(),
-          customerName: name.trim(),
+          name: finalName,
+          customerName: finalName,
           mobile: mobile.trim(),
           bishiType,
           bishiDate,
@@ -279,7 +287,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           interestRate: Number(interestRate) || 0,
           penaltyRate: Number(penaltyRate) || 0,
           officeId,
-          address: address.trim(),
+          address: finalAddress,
           photoURL: photoURL.trim() || undefined,
           hasLoan: isLoanOnly ? true : hasLoan,
           status: 'ACTIVE',

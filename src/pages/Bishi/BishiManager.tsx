@@ -6,6 +6,7 @@ import { formatDateMarathi, getOfficeNameMarathi } from '../../utils/formatters'
 import { Calendar, Save, Edit3, Plus, X, Trash2 } from 'lucide-react';
 import { ModalPortal } from '../../components/common/ModalPortal';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
+import { MarathiTextInput, convertTextToMarathi } from '../../components/common/MarathiTextInput';
 
 export const BishiManager: React.FC = () => {
   const { bishiConfigs, customers, activeOffice, refreshData, showToast, language } = useApp();
@@ -60,7 +61,7 @@ export const BishiManager: React.FC = () => {
     setEditingId(null);
   };
 
-  const handleAddBishi = (e: React.FormEvent) => {
+  const handleAddBishi = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBishiName.trim()) {
       showToast(
@@ -70,10 +71,13 @@ export const BishiManager: React.FC = () => {
       return;
     }
 
-    const schemeId = newBishiName.trim().toUpperCase().replace(/\s+/g, '_');
+    const trimmedName = newBishiName.trim();
+    const finalName = language === 'MR' ? await convertTextToMarathi(trimmedName) : trimmedName;
+
+    const schemeId = finalName.trim().toUpperCase().replace(/\s+/g, '_');
     const newConfig: BishiConfig = {
       id: schemeId,
-      name: newBishiName.trim(),
+      name: finalName.trim(),
       startDate: newStartDate,
       endDate: newEndDate,
       modality: newModality,
@@ -615,12 +619,11 @@ export const BishiManager: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     {language === 'EN' ? 'Bishi Scheme Name' : 'भिशी योजनेचे नाव'} <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="text"
+                  <MarathiTextInput
                     required
                     value={newBishiName}
-                    onChange={(e) => setNewBishiName(e.target.value)}
-                    placeholder={language === 'EN' ? 'e.g. Diwali Bishi, Ganesh Bishi' : 'उदा. दिवाळी भिशी, गणेश भिशी'}
+                    onChange={(val) => setNewBishiName(val)}
+                    placeholder={language === 'EN' ? 'e.g. Diwali Bishi, Ganesh Bishi' : 'उदा. diwali -> दिवाळी भिशी, ganesh -> गणेश'}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { UserCheck, Phone, Save, Mail, KeyRound, Eye, EyeOff, ShieldCheck, CheckCircle2 } from 'lucide-react';
-import { MarathiTextInput } from '../../components/common/MarathiTextInput';
+import { MarathiTextInput, convertTextToMarathi } from '../../components/common/MarathiTextInput';
 
 export const ProfileManager: React.FC = () => {
   const { currentAdmin, updateAdminProfile, changePassword } = useAuth();
@@ -29,8 +29,9 @@ export const ProfileManager: React.FC = () => {
 
     setSaving(true);
     try {
+      const finalName = language === 'MR' ? await convertTextToMarathi(name.trim()) : name.trim();
       await updateAdminProfile({
-        name: name.trim(),
+        name: finalName,
         mobile: mobile.trim(),
         email: email.trim(),
       });

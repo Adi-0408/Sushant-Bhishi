@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { StorageService } from '../../services/db';
 import { formatDateMarathi } from '../../utils/formatters';
 import { TrendingUp, Plus, ShieldAlert, Calendar } from 'lucide-react';
-import { MarathiTextInput } from '../../components/common/MarathiTextInput';
+import { MarathiTextInput, convertTextToMarathi } from '../../components/common/MarathiTextInput';
 
 export const InterestManager: React.FC = () => {
   const { interestRates, refreshData, showToast, language } = useApp();
@@ -15,11 +15,17 @@ export const InterestManager: React.FC = () => {
   const activeMonthly = interestRates.find((r) => (r.rateType || 'MONTHLY') === 'MONTHLY');
   const activeWeekly = interestRates.find((r) => r.rateType === 'WEEKLY');
 
-  const handleSaveRate = (e: React.FormEvent) => {
+  const handleSaveRate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rateInput || Number(rateInput) <= 0) return;
 
-    StorageService.addInterestRate(Number(rateInput), rateTypeInput, noteInput.trim());
+    const finalNote = noteInput.trim()
+      ? language === 'MR'
+        ? await convertTextToMarathi(noteInput.trim())
+        : noteInput.trim()
+      : undefined;
+
+    StorageService.addInterestRate(Number(rateInput), rateTypeInput, finalNote);
     showToast(
       language === 'EN'
         ? `New ${rateTypeInput === 'MONTHLY' ? 'Monthly' : 'Weekly'} interest rate applied.`
