@@ -38,6 +38,7 @@ import {
   Clock,
   Eye,
   EyeOff,
+  History,
 } from 'lucide-react';
 
 export const CustomerDetail: React.FC = () => {
@@ -59,6 +60,7 @@ export const CustomerDetail: React.FC = () => {
   const [selectedEntry, setSelectedEntry] = useState<CollectionEntry | null>(null);
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false);
   const [showAllWeeks, setShowAllWeeks] = useState(false);
+  const [loanHistoryMobileView, setLoanHistoryMobileView] = useState<'table' | 'cards'>('table');
 
   const getCurrentTimeStr = () => {
     const now = new Date();
@@ -904,52 +906,166 @@ export const CustomerDetail: React.FC = () => {
             {/* Loan Payment History Table */}
             {customerLoanPayments.length > 0 && (
               <div className="mt-6 border-t border-slate-100 pt-5">
-                <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider mb-3 flex items-center justify-between">
-                  <span>{language === 'EN' ? 'Loan Payment History' : 'कर्ज भरणा इतिहास (Loan Payment History)'}</span>
-                  <span className="text-[11px] text-slate-500 font-bold">
-                    {language === 'EN'
-                      ? `Total Entries: ${customerLoanPayments.length} | Total Interest Paid: ${formatCurrency(totalInterestPaid, language)}`
-                      : `एकूण नोंदी: ${customerLoanPayments.length} | एकूण जमा व्याज: ${formatCurrency(totalInterestPaid, language)}`}
-                  </span>
-                </h4>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center space-x-2">
+                    <History className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span>{language === 'EN' ? 'Loan Payment History' : 'कर्ज भरणा इतिहास (Loan Payment History)'}</span>
+                  </h4>
 
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full text-left text-xs">
+                  <div className="flex items-center flex-wrap gap-2">
+                    <span className="text-[11px] text-slate-600 font-bold bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                      {language === 'EN'
+                        ? `Entries: ${customerLoanPayments.length} | Total Interest: ${formatCurrency(totalInterestPaid, language)}`
+                        : `नोंदी: ${customerLoanPayments.length} | एकूण व्याज: ${formatCurrency(totalInterestPaid, language)}`}
+                    </span>
+
+                    {/* Mobile View Toggle (Table vs Cards) */}
+                    <div className="flex md:hidden bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[11px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setLoanHistoryMobileView('table')}
+                        className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                          loanHistoryMobileView === 'table'
+                            ? 'bg-emerald-700 text-white shadow-2xs font-extrabold'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        📋 {language === 'EN' ? 'Table' : 'तक्ता'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLoanHistoryMobileView('cards')}
+                        className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                          loanHistoryMobileView === 'cards'
+                            ? 'bg-emerald-700 text-white shadow-2xs font-extrabold'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        📱 {language === 'EN' ? 'Cards' : 'कार्ड्स'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mobile Swipe Cue (visible in Table mode on mobile) */}
+                {loanHistoryMobileView === 'table' && (
+                  <div className="md:hidden flex items-center justify-between text-[11px] font-bold text-amber-800 bg-amber-50/90 px-3 py-1.5 rounded-lg border border-amber-200 mb-2.5 no-print">
+                    <span>👉 {language === 'EN' ? 'Swipe horizontally to view all columns' : 'सर्व रकाने पाहण्यासाठी डावीकडे/उजवीकडे स्वाइप करा'}</span>
+                  </div>
+                )}
+
+                {/* Mobile Cards View (< md screens when 'cards' view selected) */}
+                {loanHistoryMobileView === 'cards' && (
+                  <div className="block md:hidden space-y-2.5 no-print">
+                    {customerLoanPayments.map((lp, idx) => (
+                      <div
+                        key={lp.id}
+                        className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                          <div className="flex items-center space-x-2">
+                            <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 font-black text-xs flex items-center justify-center shrink-0">
+                              {idx + 1}
+                            </span>
+                            <span className="font-extrabold text-slate-900 text-xs">
+                              {formatDateMarathi(lp.paymentDate, language)}
+                            </span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-bold text-slate-700">
+                            {lp.paymentMode === 'ONLINE'
+                              ? (language === 'EN' ? '📱 Online' : '📱 ऑनलाइन')
+                              : (language === 'EN' ? '💵 Cash' : '💵 नगद')}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="bg-emerald-50/70 p-2 rounded-lg border border-emerald-100/80">
+                            <span className="text-[10px] font-bold text-emerald-800 block">
+                              {language === 'EN' ? 'Paid Principal' : 'भरलेली मुद्दल'}:
+                            </span>
+                            <span className="font-black text-emerald-700 text-sm">
+                              {formatCurrency(lp.paidAmount, language)}
+                            </span>
+                          </div>
+                          <div className="bg-amber-50/70 p-2 rounded-lg border border-amber-100/80">
+                            <span className="text-[10px] font-bold text-amber-800 block">
+                              {language === 'EN' ? 'Interest Paid' : 'भरलेले व्याज'}:
+                            </span>
+                            <span className="font-black text-amber-800 text-sm">
+                              {formatCurrency(lp.interestPaid, language)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
+                          <div className="text-slate-500 text-[11px]">
+                            {lp.discountAmount ? (
+                              <span className="font-bold text-emerald-700">
+                                {language === 'EN' ? 'Discount' : 'सूट'}: {formatCurrency(lp.discountAmount, language)}
+                              </span>
+                            ) : lp.note ? (
+                              <span>{lp.note}</span>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] font-extrabold text-slate-500 block">
+                              {language === 'EN' ? 'Remaining Loan' : 'उर्वरित बाकी'}:
+                            </span>
+                            <span className="font-black text-rose-600 text-sm">
+                              {formatCurrency(lp.remainingLoan, language)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Table View (Aligned with min-w-[640px] and whitespace-nowrap for flawless horizontal mobile scroll and desktop display) */}
+                <div className={`${loanHistoryMobileView === 'cards' ? 'hidden md:block' : 'block'} overflow-x-auto rounded-xl border border-slate-200 shadow-2xs bg-white`}>
+                  <table className="w-full min-w-[640px] text-left text-xs border-collapse">
                     <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
                       <tr>
-                        <th className="p-3 pl-4">{language === 'EN' ? 'Date' : 'दिनांक'}</th>
-                        <th className="p-3 text-right">{language === 'EN' ? 'Paid Principal' : 'भरलेली मुद्दल'}</th>
-                        <th className="p-3 text-right text-amber-900 font-black">{language === 'EN' ? 'Interest Paid' : 'भरलेले व्याज'}</th>
-                        <th className="p-3 text-right">{language === 'EN' ? 'Discount' : 'सूट (Discount)'}</th>
-                        <th className="p-3 text-right">{language === 'EN' ? 'Remaining Balance' : 'उर्वरित बाकी'}</th>
-                        <th className="p-3">{t.colModality}</th>
-                        <th className="p-3">{language === 'EN' ? 'Details / Note' : 'तपशील / टीप'}</th>
+                        <th className="p-2.5 sm:p-3 pl-3 sm:pl-4 text-left whitespace-nowrap">{language === 'EN' ? 'Date' : 'दिनांक'}</th>
+                        <th className="p-2.5 sm:p-3 text-right whitespace-nowrap">{language === 'EN' ? 'Paid Principal' : 'भरलेली मुद्दल'}</th>
+                        <th className="p-2.5 sm:p-3 text-right text-amber-900 font-black whitespace-nowrap">{language === 'EN' ? 'Interest Paid' : 'भरलेले व्याज'}</th>
+                        <th className="p-2.5 sm:p-3 text-right whitespace-nowrap">{language === 'EN' ? 'Discount' : 'सूट (Discount)'}</th>
+                        <th className="p-2.5 sm:p-3 text-right whitespace-nowrap text-rose-900">{language === 'EN' ? 'Remaining Balance' : 'उर्वरित बाकी'}</th>
+                        <th className="p-2.5 sm:p-3 text-center whitespace-nowrap">{t.colModality}</th>
+                        <th className="p-2.5 sm:p-3 text-left whitespace-nowrap pr-3 sm:pr-4">{language === 'EN' ? 'Details / Note' : 'तपशील / टीप'}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                      {customerLoanPayments.map((lp) => (
-                        <tr key={lp.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="p-3 pl-4 font-bold text-slate-900">{formatDateMarathi(lp.paymentDate, language)}</td>
-                          <td className="p-3 text-right font-black text-emerald-700">
+                      {customerLoanPayments.map((lp, idx) => (
+                        <tr
+                          key={lp.id}
+                          className={`hover:bg-slate-50/80 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}
+                        >
+                          <td className="p-2.5 sm:p-3 pl-3 sm:pl-4 font-bold text-slate-900 whitespace-nowrap">
+                            {formatDateMarathi(lp.paymentDate, language)}
+                          </td>
+                          <td className="p-2.5 sm:p-3 text-right font-black text-emerald-700 whitespace-nowrap">
                             {formatCurrency(lp.paidAmount, language)}
                           </td>
-                          <td className="p-3 text-right font-black text-amber-800">
+                          <td className="p-2.5 sm:p-3 text-right font-black text-amber-800 whitespace-nowrap">
                             {formatCurrency(lp.interestPaid, language)}
                           </td>
-                          <td className="p-3 text-right text-slate-600">
+                          <td className="p-2.5 sm:p-3 text-right text-slate-600 whitespace-nowrap">
                             {lp.discountAmount ? formatCurrency(lp.discountAmount, language) : '-'}
                           </td>
-                          <td className="p-3 text-right font-black text-rose-600">
+                          <td className="p-2.5 sm:p-3 text-right font-black text-rose-600 whitespace-nowrap">
                             {formatCurrency(lp.remainingLoan, language)}
                           </td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-bold text-slate-700">
+                          <td className="p-2.5 sm:p-3 text-center whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-bold text-slate-700 inline-block">
                               {lp.paymentMode === 'ONLINE'
                                 ? (language === 'EN' ? '📱 Online' : '📱 ऑनलाइन')
                                 : (language === 'EN' ? '💵 Cash' : '💵 नगद')}
                             </span>
                           </td>
-                          <td className="p-3 text-slate-500 text-[11px] font-medium">
+                          <td className="p-2.5 sm:p-3 text-slate-500 text-[11px] font-medium whitespace-nowrap pr-3 sm:pr-4">
                             {lp.note || '-'}
                           </td>
                         </tr>
