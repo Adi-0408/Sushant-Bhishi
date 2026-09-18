@@ -279,7 +279,7 @@ export const CustomerDetail: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 pb-16 print-container">
+    <div className="space-y-6 pb-16 print:space-y-3 print:pb-0 print-container">
       {/* Top Navigation & Print / Action Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs no-print">
         <button
@@ -320,32 +320,32 @@ export const CustomerDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* Print-Only Header */}
-      <div className="print-only mb-6 border-b-2 border-emerald-900 pb-4">
+      {/* Print-Only Header - Clean Slate Border & Layout */}
+      <div className="print-only mb-3 border-b-2 border-slate-700 pb-2.5">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-black text-emerald-900 tracking-tight">{t.appName}</h1>
-            <p className="text-sm font-extrabold text-slate-700">
+            <h1 className="text-xl font-black text-slate-900 tracking-tight">{t.appName}</h1>
+            <p className="text-xs font-extrabold text-slate-700">
               {language === 'EN' ? 'Customer Account Statement' : 'खातेदार व्यवहार अहवाल (Customer Account Statement)'}
             </p>
           </div>
-          <div className="text-right text-xs font-bold text-slate-600">
+          <div className="text-right text-[11px] font-bold text-slate-600 leading-tight">
             <div>{language === 'EN' ? 'Date:' : 'दिनांक:'} <strong className="text-slate-900">{formatDateMarathi(new Date().toISOString().split('T')[0], language)}</strong></div>
-            <div>{t.colOffice}: <strong className="text-emerald-900">{getOfficeNameMarathi(customer.officeId, language)}</strong></div>
+            <div>{t.colOffice}: <strong className="text-slate-900">{getOfficeNameMarathi(customer.officeId, language)}</strong></div>
           </div>
         </div>
       </div>
 
       {/* Customer Header Info Card */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs print:border-slate-300">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-          <div className="flex items-center space-x-4">
-            <div className="w-14 h-14 rounded-2xl bg-brand-900 text-white flex items-center justify-center text-xl font-black shadow-md flex-shrink-0">
+      <div className="bg-white p-6 print:p-3 rounded-2xl print:rounded-xl border border-slate-200 print:border-slate-300 shadow-xs print:shadow-none">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5 print:flex-row print:items-center print:pb-2.5 print:border-slate-200">
+          <div className="flex items-center space-x-3 sm:space-x-4">
+            <div className="w-14 h-14 print:w-10 print:h-10 rounded-2xl print:rounded-xl bg-brand-900 text-white flex items-center justify-center text-xl print:text-base font-black shadow-md flex-shrink-0">
               {customer.photoURL ? (
                 <img
                   src={customer.photoURL}
                   alt={customer.name}
-                  className="w-full h-full rounded-2xl object-cover"
+                  className="w-full h-full rounded-2xl print:rounded-xl object-cover"
                 />
               ) : (
                 customer.name.charAt(0)
@@ -353,8 +353,8 @@ export const CustomerDetail: React.FC = () => {
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl sm:text-2xl font-black text-slate-900">{customer.name}</h1>
-                <span className="px-3 py-0.5 rounded-full text-xs font-black bg-brand-100 text-brand-900">
+                <h1 className="text-xl sm:text-2xl print:text-base font-black text-slate-900">{customer.name}</h1>
+                <span className="px-3 py-0.5 rounded-full text-xs print:text-[10px] font-black bg-brand-100 text-brand-900">
                   {customer.accountNumber}
                 </span>
                 <button
@@ -366,87 +366,87 @@ export const CustomerDetail: React.FC = () => {
                   <span>{language === 'EN' ? 'Edit Details' : 'माहिती बदला (Edit)'}</span>
                 </button>
               </div>
-              <p className="text-xs text-slate-500 font-bold mt-1">
+              <p className="text-xs print:text-[10px] text-slate-500 font-bold mt-1 print:mt-0.5">
                 {t.colMobile}: {customer.mobile} | {t.colOffice}: {getOfficeNameMarathi(customer.officeId, language)}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
+          <div className="flex items-center space-x-3 bg-slate-50 p-3 print:p-1.5 print:text-[10px] rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase">{t.colBishi}</span>
+              <span className="text-slate-400 block text-[10px] print:text-[8px] uppercase">{t.colBishi}</span>
               {getBishiNameMarathi(customer.bishiType, language)}
             </div>
             <div className="h-6 w-px bg-slate-300"></div>
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase">{t.colModality}</span>
+              <span className="text-slate-400 block text-[10px] print:text-[8px] uppercase">{t.colModality}</span>
               {getModalityShort(customer.modality, language)} ({customer.modality})
             </div>
           </div>
         </div>
 
         {/* Financial Summary Grid - Requirement 11 */}
-        <div className="mt-6">
-          <h3 className="text-sm font-extrabold text-slate-900 mb-3 flex items-center space-x-2">
-            <Wallet className="w-4 h-4 text-brand-700" />
+        <div className="mt-6 print:mt-2.5">
+          <h3 className="text-sm print:text-xs font-extrabold text-slate-900 mb-3 print:mb-1.5 flex items-center space-x-2">
+            <Wallet className="w-4 h-4 print:w-3.5 print:h-3.5 text-brand-700" />
             <span>{language === 'EN' ? 'Financial Summary' : 'आर्थिक माहिती'}</span>
           </h3>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-              <span className="text-[11px] font-bold text-slate-500 block">{language === 'EN' ? 'Total Bishi Amount' : 'एकूण भिशी रक्कम'}</span>
-              <span className="text-base font-extrabold text-slate-900">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 print:grid-cols-6 gap-3 print:gap-1.5">
+            <div className="bg-slate-50 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-slate-200 text-center">
+              <span className="text-[11px] print:text-[9px] font-bold text-slate-500 block leading-tight">{language === 'EN' ? 'Total Bishi Amount' : 'एकूण भिशी रक्कम'}</span>
+              <span className="text-base print:text-xs font-black text-slate-900 block mt-0.5">
                 {formatCurrency(financials.totalExpectedBishi, language)}
               </span>
             </div>
 
-            <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-200">
-              <span className="text-[11px] font-bold text-emerald-800 block">{language === 'EN' ? 'Total Collected' : 'आतापर्यंत जमा'}</span>
-              <span className="text-base font-black text-emerald-700">
+            <div className="bg-emerald-50 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-emerald-200 text-center">
+              <span className="text-[11px] print:text-[9px] font-bold text-emerald-800 block leading-tight">{language === 'EN' ? 'Total Collected' : 'आतापर्यंत जमा'}</span>
+              <span className="text-base print:text-xs font-black text-emerald-700 block mt-0.5">
                 {formatCurrency(financials.totalCollectedBishi, language)}
               </span>
             </div>
 
-            <div className={`p-3.5 rounded-xl border-2 transition-all ${
+            <div className={`p-3.5 print:p-1.5 rounded-xl print:rounded-lg border-2 text-center transition-all ${
               financials.totalRemainingBishi > 0
-                ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-200/60 shadow-xs'
+                ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-200/60 shadow-xs print:border-rose-300 print:ring-0'
                 : 'bg-slate-50 border-slate-200'
             }`}>
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-extrabold text-rose-900 block">{t.colRemaining}</span>
+              <div className="flex items-center justify-center space-x-1">
+                <span className="text-[11px] print:text-[9px] font-extrabold text-rose-900 block leading-tight">{t.colRemaining}</span>
                 {financials.totalRemainingBishi > 0 && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-600 text-white animate-pulse">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] print:hidden font-black bg-rose-600 text-white animate-pulse">
                     {language === 'EN' ? 'TO PAY' : 'देय बाकी'}
                   </span>
                 )}
               </div>
-              <span className="text-base font-black text-rose-700 block mt-0.5">
+              <span className="text-base print:text-xs font-black text-rose-700 block mt-0.5">
                 {formatCurrency(financials.totalRemainingBishi, language)}
               </span>
             </div>
 
-            <div className="bg-blue-50 p-3.5 rounded-xl border border-blue-200">
-              <span className="text-[11px] font-bold text-blue-800 block">{language === 'EN' ? 'Total Interest' : 'एकूण व्याज'}</span>
-              <span className="text-base font-extrabold text-blue-900">
+            <div className="bg-blue-50 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-blue-200 text-center">
+              <span className="text-[11px] print:text-[9px] font-bold text-blue-800 block leading-tight">{language === 'EN' ? 'Total Interest' : 'एकूण व्याज'}</span>
+              <span className="text-base print:text-xs font-black text-blue-900 block mt-0.5">
                 {formatCurrency(financials.totalInterest, language)}
               </span>
             </div>
 
-            <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200">
-              <span className="text-[11px] font-bold text-amber-800 block">{language === 'EN' ? 'Total Penalty' : 'एकूण दंड'}</span>
-              <span className="text-base font-extrabold text-amber-900">
+            <div className="bg-amber-50 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-amber-200 text-center">
+              <span className="text-[11px] print:text-[9px] font-bold text-amber-800 block leading-tight">{language === 'EN' ? 'Total Penalty' : 'एकूण दंड'}</span>
+              <span className="text-base print:text-xs font-black text-amber-900 block mt-0.5">
                 {formatCurrency(financials.totalPenalty, language)}
               </span>
             </div>
 
-            <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-3.5 rounded-xl shadow-md border-2 border-emerald-400/40">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-emerald-300 block">{language === 'EN' ? 'Total Payable Amount' : 'एकूण देय रक्कम'}</span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-emerald-600 text-white">
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-3.5 print:p-1.5 rounded-xl print:rounded-lg shadow-md border-2 border-slate-700 text-center">
+              <div className="flex items-center justify-center space-x-1">
+                <span className="text-[11px] print:text-[9px] font-bold text-slate-300 block leading-tight">{language === 'EN' ? 'Total Payable Amount' : 'एकूण देय रक्कम'}</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] print:hidden font-black bg-emerald-600 text-white">
                   {language === 'EN' ? 'PAYABLE' : 'ग्राहकाकडून देय'}
                 </span>
               </div>
-              <span className="text-base font-black text-white block mt-0.5">
+              <span className="text-base print:text-xs font-black text-white block mt-0.5">
                 {formatCurrency(financials.totalPayableBishi, language)}
               </span>
             </div>
@@ -455,16 +455,16 @@ export const CustomerDetail: React.FC = () => {
 
         {/* Bishi Completion & Settlement Status Card */}
         {customer.bishiType !== 'LOAN_ONLY' && (
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="mt-4 print:mt-2 bg-white p-4 print:p-2.5 rounded-xl border border-slate-200 print:border-slate-300 shadow-xs print:shadow-none">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:gap-1.5 border-b border-slate-100 print:border-slate-200 pb-3 print:pb-1.5">
               <div className="flex items-center space-x-2">
-                <CheckCircle2 className={`w-5 h-5 ${financials.isBishiCompleted ? 'text-emerald-600' : 'text-amber-500'}`} />
-                <h4 className="text-sm font-extrabold text-slate-900">
+                <CheckCircle2 className={`w-5 h-5 print:w-4 print:h-4 ${financials.isBishiCompleted ? 'text-emerald-600' : 'text-amber-500'}`} />
+                <h4 className="text-sm print:text-xs font-extrabold text-slate-900">
                   {language === 'EN' ? 'Bishi Final Settlement & Dividend Return' : 'भिशी समाप्ती व व्याज लाभांश परतावा (Bishi Final Settlement)'}
                 </h4>
               </div>
 
-              <span className={`px-3 py-1 rounded-full text-xs font-black ${
+              <span className={`px-3 py-1 print:px-2 print:py-0.5 rounded-full text-xs print:text-[10px] font-black ${
                 financials.isBishiCompleted
                   ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                   : 'bg-amber-100 text-amber-900 border border-amber-300'
@@ -476,22 +476,22 @@ export const CustomerDetail: React.FC = () => {
             </div>
 
             {financials.isBishiCompleted ? (
-              <div className="mt-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="mt-4 print:mt-1.5 p-4 print:p-2 rounded-2xl print:rounded-lg bg-emerald-50 border border-emerald-200 grid grid-cols-1 sm:grid-cols-3 gap-4 print:gap-2">
                 <div>
-                  <span className="text-[11px] font-bold text-emerald-800 block">{language === 'EN' ? 'Total Collected Bishi Amount' : 'एकूण जमा भिशी रक्कम'}</span>
-                  <span className="text-lg font-black text-emerald-900">{formatCurrency(financials.totalCollectedBishi, language)}</span>
+                  <span className="text-[11px] print:text-[9px] font-bold text-emerald-800 block leading-tight">{language === 'EN' ? 'Total Collected Bishi Amount' : 'एकूण जमा भिशी रक्कम'}</span>
+                  <span className="text-lg print:text-sm font-black text-emerald-900">{formatCurrency(financials.totalCollectedBishi, language)}</span>
                 </div>
                 <div>
-                  <span className="text-[11px] font-bold text-emerald-800 block">{language === 'EN' ? `Final Interest / Dividend (${customer.interestRate}%)` : `अंतिम व्याज / लाभांश (${customer.interestRate}%)`}</span>
-                  <span className="text-lg font-black text-emerald-700">+{formatCurrency(financials.finalBishiPayoutInterest, language)}</span>
+                  <span className="text-[11px] print:text-[9px] font-bold text-emerald-800 block leading-tight">{language === 'EN' ? `Final Interest / Dividend (${customer.interestRate}%)` : `अंतिम व्याज / लाभांश (${customer.interestRate}%)`}</span>
+                  <span className="text-lg print:text-sm font-black text-emerald-700">+{formatCurrency(financials.finalBishiPayoutInterest, language)}</span>
                 </div>
                 <div>
-                  <span className="text-[11px] font-bold text-emerald-900 block">{language === 'EN' ? 'Total Final Return to Customer' : 'खातेदाराला मिळणारा एकूण अंतिम परतावा'}</span>
-                  <span className="text-xl font-black text-emerald-900">{formatCurrency(financials.finalBishiTotalReturn, language)}</span>
+                  <span className="text-[11px] print:text-[9px] font-bold text-emerald-900 block leading-tight">{language === 'EN' ? 'Total Final Return to Customer' : 'खातेदाराला मिळणारा एकूण अंतिम परतावा'}</span>
+                  <span className="text-xl print:text-sm font-black text-emerald-900">{formatCurrency(financials.finalBishiTotalReturn, language)}</span>
                 </div>
               </div>
             ) : (
-              <div className="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 font-semibold flex items-center justify-between">
+              <div className="mt-3 print:mt-1.5 p-3 print:p-2 rounded-xl border border-slate-200 text-xs print:text-[10px] text-slate-600 font-semibold flex items-center justify-between">
                 <span>
                   {language === 'EN' ? (
                     <>💡 Final dividend interest return will be added only after paying all <strong>{financials.totalInstallmentsCount} installments</strong> ({customer.modality === 'W' ? `${financials.totalInstallmentsCount} weeks` : `${financials.totalInstallmentsCount} months`}).</>
@@ -499,7 +499,7 @@ export const CustomerDetail: React.FC = () => {
                     <>💡 सर्व <strong>{financials.totalInstallmentsCount} हप्ते</strong> ({customer.modality === 'W' ? `${financials.totalInstallmentsCount} आठवडे` : `${financials.totalInstallmentsCount} महिने`}) पूर्ण भरल्यावरच शेवटी अंतिम लाभांश व्याज परतावा जोडला जाईल.</>
                   )}
                 </span>
-                <span className="font-extrabold text-amber-900 bg-amber-100 px-2 py-1 rounded shrink-0 ml-2">
+                <span className="font-extrabold text-amber-900 bg-amber-100 px-2 py-0.5 rounded shrink-0 ml-2 print:text-[9px]">
                   {language === 'EN' ? `Remaining: ${financials.totalInstallmentsCount - financials.completedInstallmentsCount} installments` : `बाकी: ${financials.totalInstallmentsCount - financials.completedInstallmentsCount} हप्ते`}
                 </span>
               </div>
@@ -509,11 +509,11 @@ export const CustomerDetail: React.FC = () => {
       </div>
 
       {/* 52-Week or Monthly Collection Table - Requirements 13 & 14 */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+      <div className="bg-white rounded-2xl print:rounded-xl border border-slate-200 print:border-slate-300 shadow-xs print:shadow-none overflow-hidden print:mt-2">
+        <div className="p-5 print:p-2.5 border-b border-slate-100 print:border-slate-200 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Calendar className="w-5 h-5 text-brand-700" />
-            <h3 className="text-base font-extrabold text-slate-900">
+            <Calendar className="w-5 h-5 print:w-4 print:h-4 text-brand-700" />
+            <h3 className="text-base print:text-xs font-extrabold text-slate-900">
               {language === 'EN'
                 ? (customer.modality === 'W' ? 'Weekly Bishi Collection Records' : 'Monthly Bishi Collection Records')
                 : (customer.modality === 'W' ? 'साप्ताहिक भिशी जमा नोंदी' : 'मासिक भिशी जमा नोंदी')}
@@ -673,83 +673,83 @@ export const CustomerDetail: React.FC = () => {
         </div>
 
         {/* Desktop & Print Table View */}
-        <div className="hidden md:block print:block overflow-x-auto">
-          <table className="w-full text-left text-xs sm:text-sm">
+        <div className="hidden md:block print:block overflow-x-auto print:overflow-visible">
+          <table className="w-full text-left text-xs sm:text-sm print:text-[10px] print:leading-tight">
             <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
               <tr>
-                <th className="p-3.5 pl-5">
+                <th className="p-3.5 pl-5 print:p-1.5 print:pl-2">
                   {language === 'EN'
                     ? (customer.modality === 'W' ? 'Week' : 'Month')
                     : (customer.modality === 'W' ? 'आठवडा' : 'महिना')}
                 </th>
-                <th className="p-3.5">{language === 'EN' ? 'Due Date / Time' : 'देय तारीख / जमा वेळ'}</th>
-                <th className="p-3.5 text-right">{t.colExpectedAmount}</th>
-                <th className="p-3.5 text-right">{t.colCollectedAmount}</th>
-                <th className="p-3.5 text-right">{t.colRemainingAmount}</th>
-                <th className="p-3.5 text-right">{language === 'EN' ? 'Interest (₹)' : 'व्याज (₹)'}</th>
-                <th className="p-3.5 text-right">{language === 'EN' ? 'Penalty (₹)' : 'दंड (₹)'}</th>
-                <th className="p-3.5 text-center">{t.colModality}</th>
-                <th className="p-3.5 text-center">{t.colStatus}</th>
+                <th className="p-3.5 print:p-1.5">{language === 'EN' ? 'Due Date / Time' : 'देय तारीख / जमा वेळ'}</th>
+                <th className="p-3.5 print:p-1.5 text-right">{t.colExpectedAmount}</th>
+                <th className="p-3.5 print:p-1.5 text-right">{t.colCollectedAmount}</th>
+                <th className="p-3.5 print:p-1.5 text-right">{t.colRemainingAmount}</th>
+                <th className="p-3.5 print:p-1.5 text-right">{language === 'EN' ? 'Interest (₹)' : 'व्याज (₹)'}</th>
+                <th className="p-3.5 print:p-1.5 text-right">{language === 'EN' ? 'Penalty (₹)' : 'दंड (₹)'}</th>
+                <th className="p-3.5 print:p-1.5 text-center">{t.colModality}</th>
+                <th className="p-3.5 print:p-1.5 text-center">{t.colStatus}</th>
                 <th className="p-3.5 text-center no-print">{t.colActions}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
               {visibleCollections.map((entry) => (
                 <tr key={entry.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-3.5 pl-5 font-bold text-slate-900">{entry.periodLabel}</td>
-                  <td className="p-3.5 text-slate-600">
+                  <td className="p-3.5 pl-5 print:p-1.5 print:pl-2 font-bold text-slate-900">{entry.periodLabel}</td>
+                  <td className="p-3.5 print:p-1.5 text-slate-600">
                     <div>{formatDateMarathi(entry.paymentDate || entry.dueDate, language)}</div>
                     {entry.paymentTime && (
-                      <div className="text-[11px] font-bold text-slate-400 flex items-center space-x-1 mt-0.5">
-                        <Clock className="w-3 h-3 text-slate-400" />
+                      <div className="text-[11px] print:text-[9px] font-bold text-slate-400 flex items-center space-x-1 mt-0.5">
+                        <Clock className="w-3 h-3 print:w-2.5 print:h-2.5 text-slate-400" />
                         <span>{entry.paymentTime}</span>
                       </div>
                     )}
                   </td>
-                  <td className="p-3.5 text-right font-bold text-slate-800">
+                  <td className="p-3.5 print:p-1.5 text-right font-bold text-slate-800">
                     {formatCurrency(entry.expectedAmount, language)}
                   </td>
-                  <td className="p-3.5 text-right font-bold text-emerald-700">
+                  <td className="p-3.5 print:p-1.5 text-right font-bold text-emerald-700">
                     <div>{formatCurrency(entry.collectedAmount, language)}</div>
                     {(entry.penaltyAmount || 0) > 0 && (
-                      <div className="text-[10px] text-amber-800 font-extrabold whitespace-nowrap">
+                      <div className="text-[10px] print:text-[8px] text-amber-800 font-extrabold whitespace-nowrap">
                         {language === 'EN' ? 'With Penalty:' : 'दंडासह:'} {formatCurrency(entry.totalWithPenalty || ((entry.collectedAmount || 0) + (entry.penaltyAmount || 0)), language)}
                       </div>
                     )}
                   </td>
-                  <td className="p-3.5 text-right font-extrabold">
+                  <td className="p-3.5 print:p-1.5 text-right font-extrabold">
                     {entry.remainingAmount > 0 ? (
-                      <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 font-black shadow-2xs">
+                      <span className="inline-block px-2.5 py-1 print:px-1 print:py-0 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 font-black shadow-2xs print:bg-transparent print:border-none print:shadow-none print:text-rose-700 print:text-[10px]">
                         {formatCurrency(entry.remainingAmount, language)}
                       </span>
                     ) : (
-                      <span className="text-emerald-700 font-extrabold">₹0</span>
+                      <span className="text-emerald-700 font-extrabold print:text-[10px]">₹0</span>
                     )}
                   </td>
-                  <td className="p-3.5 text-right text-slate-700">
+                  <td className="p-3.5 print:p-1.5 text-right text-slate-700 print:text-[10px]">
                     {formatCurrency(entry.interestAmount, language)}
                   </td>
-                  <td className="p-3.5 text-right font-bold text-rose-600">
+                  <td className="p-3.5 print:p-1.5 text-right font-bold text-rose-600 print:text-[10px]">
                     {(entry.penaltyAmount || 0) > 0 ? (
-                      <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 font-extrabold border border-rose-200">
+                      <span className="px-1.5 py-0.5 print:px-0.5 print:py-0 rounded bg-rose-50 text-rose-700 font-extrabold border border-rose-200 print:bg-transparent print:border-none print:text-[10px]">
                         {formatCurrency(entry.penaltyAmount, language)}
                       </span>
                     ) : (
                       <span className="text-slate-400 font-normal">₹0</span>
                     )}
                   </td>
-                  <td className="p-3.5 text-center font-bold text-slate-700">
-                    <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-bold">
+                  <td className="p-3.5 print:p-1.5 text-center font-bold text-slate-700 print:text-[10px]">
+                    <span className="px-2 py-0.5 print:px-1 print:py-0 rounded-md bg-slate-100 print:bg-transparent text-[11px] print:text-[9px] font-bold">
                       {entry.paymentMode === 'ONLINE'
-                        ? (language === 'EN' ? 'Online (UPI)' : 'ऑनलाइन (UPI)')
+                        ? (language === 'EN' ? 'Online' : 'ऑनलाइन')
                         : entry.paymentMode === 'BANK'
                         ? (language === 'EN' ? 'Bank' : 'बँक')
                         : (language === 'EN' ? 'Cash' : 'नगद')}
                     </span>
                   </td>
-                  <td className="p-3.5 text-center">
+                  <td className="p-3.5 print:p-1.5 text-center print:text-[10px]">
                     <span
-                      className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                      className={`px-2.5 py-1 print:px-1 print:py-0 rounded-full text-xs print:text-[9px] font-bold ${
                         entry.status === 'PAID'
                           ? getStatusBadgeClass('PAID')
                           : isPayableEntry(entry)
@@ -1024,17 +1024,17 @@ export const CustomerDetail: React.FC = () => {
                 )}
 
                 {/* Table View (Aligned with min-w-[640px] and whitespace-nowrap for flawless horizontal mobile scroll and desktop display) */}
-                <div className={`${loanHistoryMobileView === 'cards' ? 'hidden md:block' : 'block'} overflow-x-auto rounded-xl border border-slate-200 shadow-2xs bg-white`}>
-                  <table className="w-full min-w-[640px] text-left text-xs border-collapse">
+                <div className={`${loanHistoryMobileView === 'cards' ? 'hidden md:block' : 'block'} print:block overflow-x-auto print:overflow-visible rounded-xl border border-slate-200 print:border-slate-300 shadow-2xs print:shadow-none bg-white`}>
+                  <table className="w-full min-w-[640px] print:min-w-0 text-left text-xs print:text-[10px] border-collapse print:leading-tight">
                     <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
                       <tr>
-                        <th className="p-2.5 sm:p-3 pl-3 sm:pl-4 text-left whitespace-nowrap">{language === 'EN' ? 'Date' : 'दिनांक'}</th>
-                        <th className="p-2.5 sm:p-3 text-right whitespace-nowrap">{language === 'EN' ? 'Paid Principal' : 'भरलेली मुद्दल'}</th>
-                        <th className="p-2.5 sm:p-3 text-right text-amber-900 font-black whitespace-nowrap">{language === 'EN' ? 'Interest Paid' : 'भरलेले व्याज'}</th>
-                        <th className="p-2.5 sm:p-3 text-right whitespace-nowrap">{language === 'EN' ? 'Discount' : 'सूट (Discount)'}</th>
-                        <th className="p-2.5 sm:p-3 text-right whitespace-nowrap text-rose-900">{language === 'EN' ? 'Remaining Balance' : 'उर्वरित बाकी'}</th>
-                        <th className="p-2.5 sm:p-3 text-center whitespace-nowrap">{t.colModality}</th>
-                        <th className="p-2.5 sm:p-3 text-left whitespace-nowrap pr-3 sm:pr-4">{language === 'EN' ? 'Details / Note' : 'तपशील / टीप'}</th>
+                        <th className="p-2.5 sm:p-3 print:p-1.5 pl-3 sm:pl-4 print:pl-2 text-left whitespace-nowrap">{language === 'EN' ? 'Date' : 'दिनांक'}</th>
+                        <th className="p-2.5 sm:p-3 print:p-1.5 text-right whitespace-nowrap">{language === 'EN' ? 'Paid Principal' : 'भरलेली मुद्दल'}</th>
+                        <th className="p-2.5 sm:p-3 print:p-1.5 text-right text-amber-900 font-black whitespace-nowrap">{language === 'EN' ? 'Interest Paid' : 'भरलेले व्याज'}</th>
+                        <th className="p-2.5 sm:p-3 print:p-1.5 text-right whitespace-nowrap">{language === 'EN' ? 'Discount' : 'सूट (Discount)'}</th>
+                        <th className="p-2.5 sm:p-3 print:p-1.5 text-right whitespace-nowrap text-rose-900">{language === 'EN' ? 'Remaining Balance' : 'उर्वरित बाकी'}</th>
+                        <th className="p-2.5 sm:p-3 print:p-1.5 text-center whitespace-nowrap">{t.colModality}</th>
+                        <th className="p-2.5 sm:p-3 print:p-1.5 text-left whitespace-nowrap pr-3 sm:pr-4 print:pr-2">{language === 'EN' ? 'Details / Note' : 'तपशील / टीप'}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
@@ -1043,29 +1043,29 @@ export const CustomerDetail: React.FC = () => {
                           key={lp.id}
                           className={`hover:bg-slate-50/80 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}
                         >
-                          <td className="p-2.5 sm:p-3 pl-3 sm:pl-4 font-bold text-slate-900 whitespace-nowrap">
+                          <td className="p-2.5 sm:p-3 print:p-1.5 pl-3 sm:pl-4 print:pl-2 font-bold text-slate-900 whitespace-nowrap">
                             {formatDateMarathi(lp.paymentDate, language)}
                           </td>
-                          <td className="p-2.5 sm:p-3 text-right font-black text-emerald-700 whitespace-nowrap">
+                          <td className="p-2.5 sm:p-3 print:p-1.5 text-right font-black text-emerald-700 whitespace-nowrap">
                             {formatCurrency(lp.paidAmount, language)}
                           </td>
-                          <td className="p-2.5 sm:p-3 text-right font-black text-amber-800 whitespace-nowrap">
+                          <td className="p-2.5 sm:p-3 print:p-1.5 text-right font-black text-amber-800 whitespace-nowrap">
                             {formatCurrency(lp.interestPaid, language)}
                           </td>
-                          <td className="p-2.5 sm:p-3 text-right text-slate-600 whitespace-nowrap">
+                          <td className="p-2.5 sm:p-3 print:p-1.5 text-right text-slate-600 whitespace-nowrap">
                             {lp.discountAmount ? formatCurrency(lp.discountAmount, language) : '-'}
                           </td>
-                          <td className="p-2.5 sm:p-3 text-right font-black text-rose-600 whitespace-nowrap">
+                          <td className="p-2.5 sm:p-3 print:p-1.5 text-right font-black text-rose-600 whitespace-nowrap">
                             {formatCurrency(lp.remainingLoan, language)}
                           </td>
-                          <td className="p-2.5 sm:p-3 text-center whitespace-nowrap">
-                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-bold text-slate-700 inline-block">
+                          <td className="p-2.5 sm:p-3 print:p-1.5 text-center whitespace-nowrap">
+                            <span className="px-2 py-0.5 print:px-1 print:py-0 rounded-md bg-slate-100 print:bg-transparent text-[11px] print:text-[9px] font-bold text-slate-700 inline-block">
                               {lp.paymentMode === 'ONLINE'
-                                ? (language === 'EN' ? '📱 Online' : '📱 ऑनलाइन')
-                                : (language === 'EN' ? '💵 Cash' : '💵 नगद')}
+                                ? (language === 'EN' ? 'Online' : 'ऑनलाइन')
+                                : (language === 'EN' ? 'Cash' : 'नगद')}
                             </span>
                           </td>
-                          <td className="p-2.5 sm:p-3 text-slate-500 text-[11px] font-medium whitespace-nowrap pr-3 sm:pr-4">
+                          <td className="p-2.5 sm:p-3 print:p-1.5 text-slate-500 text-[11px] print:text-[9px] font-medium whitespace-nowrap pr-3 sm:pr-4 print:pr-2">
                             {lp.note || '-'}
                           </td>
                         </tr>
@@ -1080,30 +1080,30 @@ export const CustomerDetail: React.FC = () => {
       ) : null}
 
       {/* Print-Only Verification & Signature Block */}
-      <div className="print-only mt-8 pt-6 border-t border-dashed border-slate-400 text-xs font-bold text-slate-600">
+      <div className="print-only mt-6 pt-4 border-t border-dashed border-slate-400 text-xs font-bold text-slate-600">
         <div className="flex justify-between items-end">
           <div>
-            <p className="text-[10px] text-slate-500">
+            <p className="text-[9px] text-slate-500 leading-tight">
               {language === 'EN'
                 ? '• This report is computer-generated by Sushant Bishi Management System.'
                 : '• सदर अहवाल सुषांत भिशी व्यवस्थापन प्रणालीद्वारे संगणकीकृत तयार करण्यात आला आहे.'}
             </p>
-            <p className="text-[10px] text-slate-500">
+            <p className="text-[9px] text-slate-500 leading-tight">
               {language === 'EN'
                 ? '• In case of any discrepancy, please contact the office immediately.'
                 : '• कोणतीही तफावत आढळल्यास त्वरित कार्यालयाशी संपर्क साधावा.'}
             </p>
           </div>
-          <div className="flex gap-10 text-center">
+          <div className="flex gap-8 text-center">
             <div>
-              <div className="h-10"></div>
-              <div className="border-t border-slate-600 pt-1 min-w-32 text-slate-800 font-bold">
+              <div className="h-8"></div>
+              <div className="border-t border-slate-600 pt-1 min-w-28 text-slate-800 font-bold text-[11px]">
                 {language === 'EN' ? 'Customer Signature' : 'खातेदार स्वाक्षरी'}
               </div>
             </div>
             <div>
-              <div className="h-10"></div>
-              <div className="border-t border-emerald-900 pt-1 min-w-36 text-emerald-950 font-black">
+              <div className="h-8"></div>
+              <div className="border-t border-slate-800 pt-1 min-w-32 text-slate-900 font-black text-[11px]">
                 {language === 'EN' ? 'Authorized Stamp / Sign' : 'अधिकृत स्वाक्षरी / शिक्का'}
               </div>
             </div>
