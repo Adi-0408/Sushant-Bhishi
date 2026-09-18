@@ -84,6 +84,7 @@ export const ReportManager: React.FC = () => {
     return true;
   };
 
+  // Office & filter filtered customers strictly for the General Summary Report tab
   const officeCustomers = customers.filter((c) => {
     if (activeOffice !== 'ALL' && c.officeId !== activeOffice) return false;
     if (bishiFilter !== 'ALL' && c.bishiType !== bishiFilter) return false;
@@ -91,18 +92,33 @@ export const ReportManager: React.FC = () => {
     return true;
   });
 
-  const displayedLedgerCustomers = (ledgerSearch.trim() ? customers : officeCustomers).filter((c) => {
+  // For the Member Ledger Card:
+  // All customers are accessible. If an activeOffice is selected, sort customers from that office to the top.
+  // Never filter out customers by bishiFilter or modalityFilter in Member Ledger Card!
+  const sortedLedgerCustomers = [...customers].sort((a, b) => {
+    if (activeOffice !== 'ALL') {
+      if (a.officeId === activeOffice && b.officeId !== activeOffice) return -1;
+      if (a.officeId !== activeOffice && b.officeId === activeOffice) return 1;
+    }
+    const numA = Number(a.accountNumber);
+    const numB = Number(b.accountNumber);
+    if (!isNaN(numA) && !isNaN(numB)) {
+      return numA - numB;
+    }
+    return String(a.accountNumber).localeCompare(String(b.accountNumber));
+  });
+
+  const displayedLedgerCustomers = sortedLedgerCustomers.filter((c) => {
     if (!ledgerSearch.trim()) return true;
     return matchesCustomerSearch(c, ledgerSearch);
   });
 
   // Default active customer for Ledger Card
   const activeLedgerCustomer =
-    (selectedLedgerCustomerId && displayedLedgerCustomers.find((c) => c.id === selectedLedgerCustomerId)) ||
+    (selectedLedgerCustomerId && customers.find((c) => c.id === selectedLedgerCustomerId)) ||
     displayedLedgerCustomers[0] ||
-    officeCustomers.find((c) => c.id === selectedLedgerCustomerId) ||
-    officeCustomers[0] ||
-    customers[0];
+    customers[0] ||
+    null;
 
   let grandExpected = 0;
   let grandCollected = 0;
@@ -423,7 +439,7 @@ export const ReportManager: React.FC = () => {
                     value={ledgerSearch}
                     onChange={(val) => {
                       setLedgerSearch(val);
-                      const matches = (val.trim() ? customers : officeCustomers).filter((c) => matchesCustomerSearch(c, val));
+                      const matches = customers.filter((c) => matchesCustomerSearch(c, val));
                       if (matches.length > 0) {
                         setSelectedLedgerCustomerId(matches[0].id);
                       }
@@ -439,6 +455,7 @@ export const ReportManager: React.FC = () => {
                     options={displayedLedgerCustomers.map((cust) => ({
                       value: cust.id,
                       label: `#${cust.accountNumber} - ${cust.name}`,
+                      subLabel: cust.mobile ? `${cust.mobile} • ${getOfficeNameMarathi(cust.officeId, language)}` : getOfficeNameMarathi(cust.officeId, language),
                       badge: cust.modality === 'W' ? (language === 'EN' ? 'Weekly' : 'साप्ताहिक') : (language === 'EN' ? 'Monthly' : 'मासिक'),
                     }))}
                     placeholder={language === 'EN' ? 'Select Customer' : 'खातेदार निवडा'}

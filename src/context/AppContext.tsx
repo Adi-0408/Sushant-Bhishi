@@ -64,16 +64,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeOffice, setActiveOffice] = useState<OfficeId>('MAIN');
   const [selectedBishiFilter, setSelectedBishiFilter] = useState<'ALL' | BishiType>('ALL');
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [bishiConfigs, setBishiConfigs] = useState<BishiConfig[]>([]);
-  const [collections, setCollections] = useState<CollectionEntry[]>([]);
-  const [loans, setLoans] = useState<Loan[]>([]);
-  const [loanPayments, setLoanPayments] = useState<LoanPayment[]>([]);
-  const [interestRates, setInterestRates] = useState<InterestRateConfig[]>([]);
-  const [penaltySettings, setPenaltySettings] = useState<PenaltySetting>(
-    StorageService.getPenaltySettings()
-  );
-  const [smsLogs, setSmsLogs] = useState<SmsLog[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>(StorageService.getCustomers);
+  const [bishiConfigs, setBishiConfigs] = useState<BishiConfig[]>(StorageService.getBishiConfigs);
+  const [collections, setCollections] = useState<CollectionEntry[]>(StorageService.getCollections);
+  const [loans, setLoans] = useState<Loan[]>(StorageService.getLoans);
+  const [loanPayments, setLoanPayments] = useState<LoanPayment[]>(StorageService.getLoanPayments);
+  const [interestRates, setInterestRates] = useState<InterestRateConfig[]>(StorageService.getInterestRates);
+  const [penaltySettings, setPenaltySettings] = useState<PenaltySetting>(StorageService.getPenaltySettings);
+  const [smsLogs, setSmsLogs] = useState<SmsLog[]>(StorageService.getSmsLogs);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
 
   const [toasts, setToasts] = useState<Toast[]>([]);
