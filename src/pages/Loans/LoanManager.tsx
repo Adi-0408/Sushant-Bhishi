@@ -210,10 +210,14 @@ export const LoanManager: React.FC = () => {
                         </span>
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] text-amber-800 font-bold block">{t.statLoanRemaining}:</span>
-                        <span className="font-black text-rose-600">
-                          {formatCurrency(loan.remainingAmount, language)}
-                        </span>
+                        <span className="text-[10px] text-rose-800 font-bold block">{t.statLoanRemaining}:</span>
+                        {loan.remainingAmount > 0 ? (
+                          <span className="inline-block px-2 py-0.5 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 font-black shadow-2xs">
+                            {formatCurrency(loan.remainingAmount, language)}
+                          </span>
+                        ) : (
+                          <span className="font-black text-emerald-700">₹0</span>
+                        )}
                       </div>
                     </div>
 
@@ -279,8 +283,14 @@ export const LoanManager: React.FC = () => {
                         <td className="p-3.5 text-right font-black text-amber-800">
                           {formatCurrency(loanInterestPaid, language)}
                         </td>
-                        <td className="p-3.5 text-right font-black text-rose-600">
-                          {formatCurrency(loan.remainingAmount, language)}
+                        <td className="p-3.5 text-right font-black">
+                          {loan.remainingAmount > 0 ? (
+                            <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 font-black shadow-2xs">
+                              {formatCurrency(loan.remainingAmount, language)}
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700 font-extrabold">₹0</span>
+                          )}
                         </td>
                         <td className="p-3.5 text-center">
                           <Link

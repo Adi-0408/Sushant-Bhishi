@@ -366,12 +366,17 @@ export const Dashboard: React.FC = () => {
               <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 backdrop-blur-xs text-white flex items-center justify-center font-bold flex-shrink-0 group-hover:scale-110 transition-transform duration-200">
                 <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </div>
-              <button 
-                onClick={(e) => { e.stopPropagation(); navigate('/collections?filter=pending'); }} 
-                className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-xs font-black group-hover:bg-white group-hover:text-[#d94a4a] group-hover:scale-110 transition-all cursor-pointer"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center space-x-1.5">
+                <span className="px-2 py-0.5 rounded-full bg-white text-[#b33636] font-black text-[10px] uppercase shadow-xs">
+                  {language === 'EN' ? 'TO COLLECT' : 'येणे बाकी'}
+                </span>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); navigate('/collections?filter=pending'); }} 
+                  className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-xs font-black group-hover:bg-white group-hover:text-[#d94a4a] group-hover:scale-110 transition-all cursor-pointer"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
             <div className="mt-2 sm:mt-2.5 relative z-10">
               <span className="text-[11px] sm:text-xs font-bold text-white/90 truncate block">{t.statTodayPending}</span>
@@ -438,9 +443,14 @@ export const Dashboard: React.FC = () => {
               <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 backdrop-blur-xs text-white flex items-center justify-center font-bold flex-shrink-0 group-hover:scale-110 transition-transform duration-200">
                 <Wallet className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </div>
-              <button onClick={(e) => { e.stopPropagation(); navigate('/loans'); }} className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-xs font-black group-hover:bg-white group-hover:text-[#0d8a6a] group-hover:scale-110 transition-all cursor-pointer">
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center space-x-1.5">
+                <span className="px-2 py-0.5 rounded-full bg-amber-300 text-[#075f48] font-black text-[10px] uppercase shadow-xs">
+                  {language === 'EN' ? 'LOAN DUE' : 'कर्ज बाकी'}
+                </span>
+                <button onClick={(e) => { e.stopPropagation(); navigate('/loans'); }} className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-xs font-black group-hover:bg-white group-hover:text-[#0d8a6a] group-hover:scale-110 transition-all cursor-pointer">
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
             <div className="mt-2 sm:mt-2.5 relative z-10">
               <span className="text-[11px] sm:text-xs font-bold text-white/90 truncate block">{t.statLoanRemaining}</span>
@@ -547,10 +557,12 @@ export const Dashboard: React.FC = () => {
                             {cust.name}
                           </span>
                         </div>
-                        <div className="flex flex-wrap items-center gap-1.5 text-xs font-extrabold text-[#C4525B] mt-1">
-                          <span>{t.colRemaining}: {formatCurrency(item.remainingAmount, language)}</span>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          <span className="inline-block px-2.5 py-0.5 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 text-xs font-black shadow-2xs">
+                            {language === 'EN' ? 'Due to Pay: ' : 'येणे बाकी: '}{formatCurrency(item.remainingAmount, language)}
+                          </span>
                           {item.dueDate < todayStr && (
-                            <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-black">
+                            <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black animate-pulse">
                               {language === 'EN' ? 'Overdue' : 'थकीत'} ({formatDateMarathi(item.dueDate, language)})
                             </span>
                           )}
@@ -593,12 +605,16 @@ export const Dashboard: React.FC = () => {
                           <td className="p-3 font-semibold text-slate-700">
                             <span>{formatDateMarathi(item.dueDate, language)}</span>
                             {item.dueDate < todayStr && (
-                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-black">
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black">
                                 {language === 'EN' ? 'Overdue' : 'थकीत'}
                               </span>
                             )}
                           </td>
-                          <td className="p-3 text-right font-extrabold text-[#C4525B]">{formatCurrency(item.remainingAmount, language)}</td>
+                          <td className="p-3 text-right font-extrabold">
+                            <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 font-black shadow-2xs">
+                              {formatCurrency(item.remainingAmount, language)}
+                            </span>
+                          </td>
                           <td className="p-3 text-center">
                             <button
                               onClick={() => {

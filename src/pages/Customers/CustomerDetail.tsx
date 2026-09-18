@@ -405,9 +405,20 @@ export const CustomerDetail: React.FC = () => {
               </span>
             </div>
 
-            <div className="bg-rose-50 p-3.5 rounded-xl border border-rose-200">
-              <span className="text-[11px] font-bold text-rose-800 block">{t.colRemaining}</span>
-              <span className="text-base font-black text-rose-600">
+            <div className={`p-3.5 rounded-xl border-2 transition-all ${
+              financials.totalRemainingBishi > 0
+                ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-200/60 shadow-xs'
+                : 'bg-slate-50 border-slate-200'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-extrabold text-rose-900 block">{t.colRemaining}</span>
+                {financials.totalRemainingBishi > 0 && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-600 text-white animate-pulse">
+                    {language === 'EN' ? 'TO PAY' : 'देय बाकी'}
+                  </span>
+                )}
+              </div>
+              <span className="text-base font-black text-rose-700 block mt-0.5">
                 {formatCurrency(financials.totalRemainingBishi, language)}
               </span>
             </div>
@@ -426,9 +437,14 @@ export const CustomerDetail: React.FC = () => {
               </span>
             </div>
 
-            <div className="bg-brand-900 text-white p-3.5 rounded-xl shadow-xs">
-              <span className="text-[11px] font-bold text-brand-200 block">{language === 'EN' ? 'Total Payable Amount' : 'एकूण देय रक्कम'}</span>
-              <span className="text-base font-black text-white">
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-3.5 rounded-xl shadow-md border-2 border-emerald-400/40">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-emerald-300 block">{language === 'EN' ? 'Total Payable Amount' : 'एकूण देय रक्कम'}</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-emerald-600 text-white">
+                  {language === 'EN' ? 'PAYABLE' : 'ग्राहकाकडून देय'}
+                </span>
+              </div>
+              <span className="text-base font-black text-white block mt-0.5">
                 {formatCurrency(financials.totalPayableBishi, language)}
               </span>
             </div>
@@ -599,10 +615,16 @@ export const CustomerDetail: React.FC = () => {
                   )}
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] text-slate-500 font-bold block">{t.colRemaining}:</span>
-                  <span className="font-black text-rose-600">
-                    {formatCurrency(entry.remainingAmount, language)}
+                  <span className="text-[10px] text-rose-700 font-extrabold block">
+                    {language === 'EN' ? 'Due to Pay:' : 'ग्राहकाकडून येणे:'}
                   </span>
+                  {entry.remainingAmount > 0 ? (
+                    <span className="inline-block px-2 py-0.5 rounded-lg bg-rose-100 text-rose-800 border border-rose-300 font-black text-xs shadow-2xs">
+                      {formatCurrency(entry.remainingAmount, language)}
+                    </span>
+                  ) : (
+                    <span className="font-black text-emerald-700">₹0</span>
+                  )}
                 </div>
               </div>
 
@@ -693,8 +715,14 @@ export const CustomerDetail: React.FC = () => {
                       </div>
                     )}
                   </td>
-                  <td className="p-3.5 text-right font-extrabold text-rose-600">
-                    {formatCurrency(entry.remainingAmount, language)}
+                  <td className="p-3.5 text-right font-extrabold">
+                    {entry.remainingAmount > 0 ? (
+                      <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 font-black shadow-2xs">
+                        {formatCurrency(entry.remainingAmount, language)}
+                      </span>
+                    ) : (
+                      <span className="text-emerald-700 font-extrabold">₹0</span>
+                    )}
                   </td>
                   <td className="p-3.5 text-right text-slate-700">
                     {formatCurrency(entry.interestAmount, language)}
@@ -846,9 +874,20 @@ export const CustomerDetail: React.FC = () => {
                 </div>
               )}
 
-              <div className="bg-rose-50 p-3.5 rounded-xl border border-rose-200">
-                <span className="text-[11px] font-bold text-rose-800 block">{language === 'EN' ? 'Loan Balance' : 'कर्जाची बाकी'}</span>
-                <span className="text-base font-black text-rose-600">
+              <div className={`p-3.5 rounded-xl border-2 transition-all ${
+                loan.remainingAmount > 0
+                  ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-200/60 shadow-xs'
+                  : 'bg-slate-50 border-slate-200'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold text-rose-900 block">{language === 'EN' ? 'Loan Balance' : 'कर्जाची बाकी'}</span>
+                  {loan.remainingAmount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-600 text-white animate-pulse">
+                      {language === 'EN' ? 'DUE' : 'बाकी'}
+                    </span>
+                  )}
+                </div>
+                <span className="text-base font-black text-rose-700 block mt-0.5">
                   {formatCurrency(loan.remainingAmount, language)}
                 </span>
               </div>

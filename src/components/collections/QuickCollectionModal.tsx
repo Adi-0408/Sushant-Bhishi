@@ -553,6 +553,25 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* Prominent Due to Pay Banner */}
+              {((selectedCustomerStatus && !selectedCustomerStatus.isFullyPaid && !isLoanOnly) || hasActiveLoan) && (
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-rose-50 via-rose-100/60 to-amber-50 border-2 border-rose-300 shadow-xs">
+                  <div className="flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
+                    <span className="text-xs font-black text-rose-900">
+                      {language === 'EN' ? 'Total Due to Pay:' : 'ग्राहकाकडून येणे बाकी रक्कम:'}
+                    </span>
+                  </div>
+                  <span className="px-3 py-1 rounded-xl bg-rose-600 text-white font-black text-sm shadow-2xs">
+                    {formatCurrency(
+                      (!selectedCustomerStatus?.isFullyPaid && !isLoanOnly ? (selectedCustomerStatus?.pendingEntry?.remainingAmount || selectedCustomer.amount) : 0) +
+                      (activeLoan ? (loanPrinRemaining + dueInterest) : 0),
+                      language
+                    )}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -599,8 +618,8 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                             <label className="block text-xs font-extrabold text-emerald-900">
                               {language === 'EN' ? '1. Bishi Installment (₹)' : '१. भिशी हप्ता जमा (₹)'} <span className="text-emerald-700 font-normal text-[10px]">({language === 'EN' ? 'Regular Installment' : 'नियमित हप्ता'})</span>
                             </label>
-                            <span className="text-[10px] font-bold text-slate-500">
-                              {language === 'EN' ? 'Expected: ₹' : 'अपेक्षित: ₹'}{selectedCustomerStatus?.pendingEntry?.remainingAmount || selectedCustomer?.amount}
+                            <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-900 font-black text-[10px] border border-rose-200">
+                              {language === 'EN' ? 'Due: ' : 'येणे बाकी: '}{formatCurrency(selectedCustomerStatus?.pendingEntry?.remainingAmount || selectedCustomer?.amount || 0, language)}
                             </span>
                           </div>
                           <input

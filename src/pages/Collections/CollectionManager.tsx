@@ -288,10 +288,16 @@ export const CollectionManager: React.FC = () => {
                         )}
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] text-slate-500 font-bold block">{t.colRemainingAmount}:</span>
-                        <span className="font-black text-rose-600">
-                          {formatCurrency(item.remainingAmount, language)}
+                        <span className="text-[10px] text-rose-700 font-extrabold block">
+                          {language === 'EN' ? 'Due to Pay:' : 'ग्राहकाकडून येणे:'}
                         </span>
+                        {item.remainingAmount > 0 ? (
+                          <span className="inline-block px-2 py-0.5 rounded-lg bg-rose-100 text-rose-800 border border-rose-300 font-black text-xs shadow-2xs">
+                            {formatCurrency(item.remainingAmount, language)}
+                          </span>
+                        ) : (
+                          <span className="font-black text-emerald-700">₹0</span>
+                        )}
                       </div>
                     </div>
 
@@ -367,8 +373,14 @@ export const CollectionManager: React.FC = () => {
                             </div>
                           )}
                         </td>
-                        <td className="p-3.5 text-right font-extrabold text-rose-600">
-                          {formatCurrency(item.remainingAmount, language)}
+                        <td className="p-3.5 text-right font-extrabold">
+                          {item.remainingAmount > 0 ? (
+                            <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 font-black shadow-2xs">
+                              {formatCurrency(item.remainingAmount, language)}
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700 font-extrabold">₹0</span>
+                          )}
                         </td>
                         <td className="p-3.5 text-center">
                           <span

@@ -303,12 +303,30 @@ export const CustomerList: React.FC = () => {
                         </span>
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] text-slate-500 font-bold block">{t.colRemaining}:</span>
-                        <span className="font-black text-rose-600">
-                          {formatCurrency(financials.totalRemainingBishi, language)}
+                        <span className="text-[10px] text-rose-700 font-bold block">
+                          {language === 'EN' ? 'Due to Pay:' : 'ग्राहकाकडून येणे:'}
                         </span>
+                        {financials.totalRemainingBishi > 0 ? (
+                          <span className="inline-block px-2 py-0.5 rounded-lg bg-rose-100 text-rose-800 border border-rose-300 font-black shadow-2xs">
+                            {formatCurrency(financials.totalRemainingBishi, language)}
+                          </span>
+                        ) : (
+                          <span className="font-black text-emerald-700">₹0</span>
+                        )}
                       </div>
                     </div>
+
+                    {/* Loan Remaining pill if customer has active loan */}
+                    {cust.hasLoan && financials.loanRemaining > 0 && (
+                      <div className="flex items-center justify-between bg-amber-50/80 px-2.5 py-1.5 rounded-xl border border-amber-200 text-xs">
+                        <span className="text-[10px] text-amber-900 font-bold">
+                          {language === 'EN' ? 'Remaining Loan Due:' : 'कर्ज येणे बाकी:'}
+                        </span>
+                        <span className="inline-block px-2 py-0.5 rounded-lg bg-amber-100 text-amber-950 border border-amber-300 font-black text-xs shadow-2xs">
+                          {formatCurrency(financials.loanRemaining, language)}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Actions Bar */}
                     <div className="flex items-center justify-between pt-1 border-t border-slate-100">
@@ -418,14 +436,22 @@ export const CustomerList: React.FC = () => {
                         <td className="p-3.5 text-right font-bold text-emerald-700">
                           {formatCurrency(financials.totalCollectedBishi, language)}
                         </td>
-                        <td className="p-3.5 text-right font-extrabold text-rose-600">
-                          {formatCurrency(financials.totalRemainingBishi, language)}
+                        <td className="p-3.5 text-right font-extrabold">
+                          {financials.totalRemainingBishi > 0 ? (
+                            <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 font-black shadow-2xs">
+                              {formatCurrency(financials.totalRemainingBishi, language)}
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700 font-extrabold">₹0</span>
+                          )}
                         </td>
                         <td className="p-3.5 text-center">
-                          {cust.hasLoan ? (
-                            <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-100 text-amber-900">
+                          {cust.hasLoan && financials.loanRemaining > 0 ? (
+                            <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 text-amber-950 border border-amber-300 shadow-2xs">
                               {formatCurrency(financials.loanRemaining, language)}
                             </span>
+                          ) : cust.hasLoan ? (
+                            <span className="text-emerald-700 font-extrabold text-xs">₹0</span>
                           ) : (
                             <span className="text-slate-400 font-medium">-</span>
                           )}
