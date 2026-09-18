@@ -80,7 +80,9 @@ export const calculateCustomerFinancials = (
   loan?: Loan | null,
   bishiConfigs?: BishiConfig[]
 ): CalculatedFinancials => {
-  const customerCollections = collections.filter((c) => c.customerId === customer.id);
+  const customerCollections = collections.filter(
+    (c) => c.customerId === customer.id || (customer.accountNumber && String(c.accountNumber) === String(customer.accountNumber))
+  );
 
   let totalExpectedBishi = 0;
   let totalCollectedBishi = 0;

@@ -9,6 +9,7 @@ import {
   where,
   getDoc,
   onSnapshot,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import {
@@ -200,8 +201,57 @@ const enrichFirestoreData = (collectionName: string, rawData: any): any => {
   return data;
 };
 
-// Firestore sync helpers (silent sync when Firestore is online)
+// Sync Status Tracking for instant UI feedback
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
+type SyncStatusListener = (status: SyncStatus) => void;
+const syncStatusListeners: Set<SyncStatusListener> = new Set();
+let resetTimer: any = null;
+let activeSyncOperations = 0;
+
+export const notifySyncStatus = (status: SyncStatus) => {
+  if (resetTimer) {
+    clearTimeout(resetTimer);
+    resetTimer = null;
+  }
+  syncStatusListeners.forEach((listener) => {
+    try {
+      listener(status);
+    } catch (e) {}
+  });
+
+  if (status === 'synced' || status === 'error') {
+    resetTimer = setTimeout(() => {
+      syncStatusListeners.forEach((listener) => {
+        try {
+          listener('idle');
+        } catch (e) {}
+      });
+    }, 2500);
+  }
+};
+
+export const onSyncStatusChange = (listener: SyncStatusListener) => {
+  syncStatusListeners.add(listener);
+  return () => {
+    syncStatusListeners.delete(listener);
+  };
+};
+
+const startSyncOp = () => {
+  activeSyncOperations++;
+  notifySyncStatus('syncing');
+};
+
+const endSyncOp = (success: boolean = true) => {
+  activeSyncOperations = Math.max(0, activeSyncOperations - 1);
+  if (activeSyncOperations === 0) {
+    notifySyncStatus(success ? 'synced' : 'error');
+  }
+};
+
+// Firestore sync helpers with auto sync status tracking
 const syncToFirestore = async (collectionName: string, docId: string, data: any) => {
+  startSyncOp();
   try {
     const enrichedData = enrichFirestoreData(collectionName, data);
     const readableDocId = getFirestoreDocId(collectionName, docId, enrichedData);
@@ -209,12 +259,44 @@ const syncToFirestore = async (collectionName: string, docId: string, data: any)
     const ref = doc(db, collectionName, readableDocId);
     await setDoc(ref, cleanData, { merge: true });
     console.log(`[Firestore Sync] Saved to ${collectionName}/${readableDocId}`);
+    endSyncOp(true);
   } catch (e: any) {
     console.warn(`Firestore sync note for ${collectionName}/${docId}:`, e?.message || e);
+    endSyncOp(false);
+  }
+};
+
+// Fast atomic batch sync for multiple entries (up to 400 per commit)
+const syncBatchToFirestore = async (
+  collectionName: string,
+  items: { docId: string; data: any }[]
+) => {
+  if (!items || items.length === 0) return;
+  startSyncOp();
+  try {
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+      const chunk = items.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      for (const item of chunk) {
+        const enrichedData = enrichFirestoreData(collectionName, item.data);
+        const readableDocId = getFirestoreDocId(collectionName, item.docId, enrichedData);
+        const cleanData = sanitizeForFirestore(enrichedData);
+        const ref = doc(db, collectionName, readableDocId);
+        batch.set(ref, cleanData, { merge: true });
+      }
+      await batch.commit();
+    }
+    console.log(`[Firestore Batch Sync] Committed ${items.length} items to ${collectionName}`);
+    endSyncOp(true);
+  } catch (e: any) {
+    console.warn(`Firestore batch sync error for ${collectionName}:`, e?.message || e);
+    endSyncOp(false);
   }
 };
 
 const deleteFromFirestore = async (collectionName: string, docId: string, data?: any) => {
+  startSyncOp();
   try {
     const readableDocId = data ? getFirestoreDocId(collectionName, docId, data) : docId;
     const ref = doc(db, collectionName, readableDocId);
@@ -224,8 +306,10 @@ const deleteFromFirestore = async (collectionName: string, docId: string, data?:
       await deleteDoc(fallbackRef).catch(() => {});
     }
     console.log(`[Firestore Delete] Removed ${collectionName}/${readableDocId}`);
+    endSyncOp(true);
   } catch (e: any) {
     console.warn(`Firestore delete note for ${collectionName}/${docId}:`, e?.message || e);
+    endSyncOp(false);
   }
 };
 
@@ -331,19 +415,44 @@ const initializeDefaultConfigs = () => {
     });
     deleteFromFirestore('admins', 'admin_default');
 
-    setStoredData(STORAGE_KEYS.ADMINS, [PRIMARY_ADMIN]);
-    localStorage.setItem('sb_admin_pass', '123456');
+    const currentPass = localStorage.getItem('sb_admin_pass') || '123456';
+    const adminWithPass = { ...PRIMARY_ADMIN, password: currentPass };
+    setStoredData(STORAGE_KEYS.ADMINS, [adminWithPass]);
+    localStorage.setItem('sb_admin_pass', currentPass);
     localStorage.removeItem('sb_active_session'); // Clear old session so user logs in with new credentials
-    syncToFirestore('admins', PRIMARY_ADMIN.id, PRIMARY_ADMIN);
+    syncToFirestore('admins', PRIMARY_ADMIN.id, adminWithPass);
   } else if (!localStorage.getItem('sb_admin_pass')) {
     localStorage.setItem('sb_admin_pass', '123456');
+    syncToFirestore('admins', PRIMARY_ADMIN.id, { ...PRIMARY_ADMIN, password: '123456' });
   }
 };
 
 initializeDefaultConfigs();
 
 export const StorageService = {
+  // Sync Status listener subscriptions
+  onSyncStatusChange,
+  notifySyncStatus,
+
   // Admin Operations
+  updateAdminPassword: async (newPassword: string): Promise<void> => {
+    localStorage.setItem('sb_admin_pass', newPassword);
+    const admins = StorageService.getAdmins();
+    const primary = admins[0] || {
+      id: 'admin_primary',
+      name: 'सुषांत भिशी व्यवस्थापक',
+      mobile: '9876543210',
+      email: 'sushant@gmail.com',
+      createdAt: new Date().toISOString(),
+    };
+    const updatedAdmin: Admin = {
+      ...primary,
+      password: newPassword,
+      updatedAt: new Date().toISOString(),
+    };
+    setStoredData(STORAGE_KEYS.ADMINS, [updatedAdmin]);
+    await syncToFirestore('admins', 'admin_primary', updatedAdmin);
+  },
   getAdmins: (): Admin[] => {
     const admins = getStoredData<Admin[]>(STORAGE_KEYS.ADMINS, []);
     const hasOnlyPrimaryAdmin =
@@ -569,7 +678,10 @@ export const StorageService = {
     const newIds = new Set(newEntries.map((e) => e.id));
     const filtered = collections.filter((c) => !newIds.has(c.id));
     setStoredData(STORAGE_KEYS.COLLECTIONS, [...newEntries, ...filtered]);
-    newEntries.forEach((entry) => syncToFirestore('collections', entry.id, entry));
+    syncBatchToFirestore(
+      'collections',
+      newEntries.map((entry) => ({ docId: entry.id, data: entry }))
+    );
   },
 
   updateCollectionEntry: (id: string, updates: Partial<CollectionEntry>): CollectionEntry => {
@@ -849,7 +961,156 @@ export const StorageService = {
     }
   },
 
-  // Real-time synchronization listeners with Firebase Firestore
+  // Proactive startup cloud pull: fetches all 8 collections from Firestore to immediately populate or sync local storage
+  fetchAndSyncFromFirestore: async (): Promise<void> => {
+    try {
+      startSyncOp();
+      const [
+        custSnap,
+        collSnap,
+        loanSnap,
+        loanPaySnap,
+        bishiSnap,
+        rateSnap,
+        penaltySnap,
+        adminSnap,
+      ] = await Promise.all([
+        getDocs(collection(db, 'customers')),
+        getDocs(collection(db, 'collections')),
+        getDocs(collection(db, 'loans')),
+        getDocs(collection(db, 'loanPayments')),
+        getDocs(collection(db, 'bishi')),
+        getDocs(collection(db, 'interestRates')),
+        getDocs(collection(db, 'penaltySettings')),
+        getDocs(collection(db, 'admins')),
+      ]);
+
+      let hadRemoteData = false;
+
+      if (!custSnap.empty) {
+        hadRemoteData = true;
+        const remoteCusts: Customer[] = [];
+        custSnap.forEach((d: any) => {
+          const raw = d.data();
+          remoteCusts.push({
+            ...raw,
+            id: raw.id || d.id,
+            name: raw.name || raw.customerName || '',
+            customerName: raw.customerName || raw.name || '',
+          });
+        });
+        setStoredData(STORAGE_KEYS.CUSTOMERS, remoteCusts);
+      }
+
+      if (!collSnap.empty) {
+        hadRemoteData = true;
+        const remoteColls: CollectionEntry[] = [];
+        collSnap.forEach((d: any) => {
+          const raw = d.data();
+          remoteColls.push({
+            ...raw,
+            id: raw.id || d.id,
+            customerName: raw.customerName || '',
+          });
+        });
+        setStoredData(STORAGE_KEYS.COLLECTIONS, remoteColls);
+      }
+
+      if (!loanSnap.empty) {
+        hadRemoteData = true;
+        const remoteLoans: Loan[] = [];
+        loanSnap.forEach((d: any) => {
+          const raw = d.data();
+          remoteLoans.push({
+            ...raw,
+            id: raw.id || d.id,
+            customerName: raw.customerName || '',
+          });
+        });
+        setStoredData(STORAGE_KEYS.LOANS, remoteLoans);
+      }
+
+      if (!loanPaySnap.empty) {
+        hadRemoteData = true;
+        const remotePayments: LoanPayment[] = [];
+        loanPaySnap.forEach((d: any) => {
+          const raw = d.data();
+          remotePayments.push({
+            ...raw,
+            id: raw.id || d.id,
+          });
+        });
+        setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, remotePayments);
+      }
+
+      if (!bishiSnap.empty) {
+        hadRemoteData = true;
+        const remoteBishi: BishiConfig[] = [];
+        bishiSnap.forEach((d: any) => {
+          const raw = d.data();
+          remoteBishi.push({
+            ...raw,
+            id: raw.id || d.id,
+          });
+        });
+        setStoredData(STORAGE_KEYS.BISHI_CONFIGS, remoteBishi);
+      }
+
+      if (!rateSnap.empty) {
+        hadRemoteData = true;
+        const remoteRates: InterestRateConfig[] = [];
+        rateSnap.forEach((d: any) => {
+          const raw = d.data();
+          remoteRates.push({
+            ...raw,
+            id: raw.id || d.id,
+          });
+        });
+        setStoredData(STORAGE_KEYS.INTEREST_RATES, remoteRates);
+      }
+
+      if (!penaltySnap.empty) {
+        hadRemoteData = true;
+        let remotePenalty: PenaltySetting | null = null;
+        penaltySnap.forEach((d: any) => {
+          remotePenalty = d.data() as PenaltySetting;
+        });
+        if (remotePenalty) {
+          setStoredData(STORAGE_KEYS.PENALTY_SETTINGS, remotePenalty);
+        }
+      }
+
+      if (!adminSnap.empty) {
+        hadRemoteData = true;
+        const remoteAdmins: Admin[] = [];
+        adminSnap.forEach((d: any) => {
+          const raw = d.data();
+          remoteAdmins.push({
+            ...raw,
+            id: raw.id || d.id,
+          });
+          if (raw.password) {
+            localStorage.setItem('sb_admin_pass', String(raw.password));
+          }
+        });
+        if (remoteAdmins.length > 0) {
+          setStoredData(STORAGE_KEYS.ADMINS, remoteAdmins);
+        }
+      }
+
+      // If Firestore is completely fresh and empty, upload local data to seed cloud database
+      if (!hadRemoteData) {
+        await StorageService.syncAllToFirestore();
+      }
+
+      endSyncOp(true);
+    } catch (err) {
+      console.warn('[Firestore] Proactive pull note:', err);
+      endSyncOp(false);
+    }
+  },
+
+  // Real-time synchronization listeners with Firebase Firestore across all 8 collections
   setupFirestoreListeners: (onUpdate: () => void): (() => void) => {
     const unsubscribes: (() => void)[] = [];
 
@@ -869,20 +1130,13 @@ export const StorageService = {
             };
             remoteList.push(fullCustomer);
           });
-          // Cloud Firestore is the authoritative source of truth.
-          // Setting remoteList directly ensures that when a record is deleted from Firestore,
-          // it immediately disappears locally and never gets resurrected.
           setStoredData(STORAGE_KEYS.CUSTOMERS, remoteList);
           onUpdate();
         },
-        (err: any) => {
-          console.warn('Firestore customers listener error:', err?.message || err);
-        }
+        (err: any) => console.warn('Firestore customers listener error:', err?.message || err)
       );
       unsubscribes.push(unsubCust);
-    } catch (e) {
-      console.warn('Could not setup customers listener:', e);
-    }
+    } catch (e) {}
 
     // 2. Listen for loans in Firestore
     try {
@@ -907,38 +1161,141 @@ export const StorageService = {
       unsubscribes.push(unsubLoans);
     } catch (e) {}
 
-    // 3. Listen for collections in Firestore
+    // 3. Listen for collections in Firestore (all entries saved without filtering)
     try {
       const unsubColls = onSnapshot(
         collection(db, 'collections'),
         (snapshot: any) => {
-          if (!snapshot.empty) {
-            const currentCustomers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
-            const validCustIds = new Set(currentCustomers.map((c) => c.id));
-            const validAccNums = new Set(currentCustomers.map((c) => String(c.accountNumber)));
-
-            const remoteList: CollectionEntry[] = [];
-            snapshot.forEach((d: any) => {
-              const raw = d.data();
-              const matchesCust =
-                (raw.customerId && validCustIds.has(raw.customerId)) ||
-                (raw.accountNumber && validAccNums.has(String(raw.accountNumber)));
-              if (matchesCust || currentCustomers.length === 0) {
-                const fullColl: CollectionEntry = {
-                  ...raw,
-                  id: raw.id || d.id,
-                  customerName: raw.customerName || '',
-                };
-                remoteList.push(fullColl);
-              }
-            });
-            setStoredData(STORAGE_KEYS.COLLECTIONS, remoteList);
-            onUpdate();
-          }
+          const remoteList: CollectionEntry[] = [];
+          snapshot.forEach((d: any) => {
+            const raw = d.data();
+            const fullColl: CollectionEntry = {
+              ...raw,
+              id: raw.id || d.id,
+              customerName: raw.customerName || '',
+            };
+            remoteList.push(fullColl);
+          });
+          setStoredData(STORAGE_KEYS.COLLECTIONS, remoteList);
+          onUpdate();
         },
         (err: any) => console.warn('Firestore collections listener error:', err?.message || err)
       );
       unsubscribes.push(unsubColls);
+    } catch (e) {}
+
+    // 4. Listen for loanPayments in Firestore
+    try {
+      const unsubLoanPay = onSnapshot(
+        collection(db, 'loanPayments'),
+        (snapshot: any) => {
+          const remoteList: LoanPayment[] = [];
+          snapshot.forEach((d: any) => {
+            const raw = d.data();
+            remoteList.push({
+              ...raw,
+              id: raw.id || d.id,
+            });
+          });
+          setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, remoteList);
+          onUpdate();
+        },
+        (err: any) => console.warn('Firestore loanPayments listener error:', err?.message || err)
+      );
+      unsubscribes.push(unsubLoanPay);
+    } catch (e) {}
+
+    // 5. Listen for bishi configs in Firestore
+    try {
+      const unsubBishi = onSnapshot(
+        collection(db, 'bishi'),
+        (snapshot: any) => {
+          if (!snapshot.empty) {
+            const remoteList: BishiConfig[] = [];
+            snapshot.forEach((d: any) => {
+              const raw = d.data();
+              remoteList.push({
+                ...raw,
+                id: raw.id || d.id,
+              });
+            });
+            setStoredData(STORAGE_KEYS.BISHI_CONFIGS, remoteList);
+            onUpdate();
+          }
+        },
+        (err: any) => console.warn('Firestore bishi listener error:', err?.message || err)
+      );
+      unsubscribes.push(unsubBishi);
+    } catch (e) {}
+
+    // 6. Listen for interestRates in Firestore
+    try {
+      const unsubRates = onSnapshot(
+        collection(db, 'interestRates'),
+        (snapshot: any) => {
+          if (!snapshot.empty) {
+            const remoteList: InterestRateConfig[] = [];
+            snapshot.forEach((d: any) => {
+              const raw = d.data();
+              remoteList.push({
+                ...raw,
+                id: raw.id || d.id,
+              });
+            });
+            setStoredData(STORAGE_KEYS.INTEREST_RATES, remoteList);
+            onUpdate();
+          }
+        },
+        (err: any) => console.warn('Firestore interestRates listener error:', err?.message || err)
+      );
+      unsubscribes.push(unsubRates);
+    } catch (e) {}
+
+    // 7. Listen for penaltySettings in Firestore
+    try {
+      const unsubPenalty = onSnapshot(
+        collection(db, 'penaltySettings'),
+        (snapshot: any) => {
+          if (!snapshot.empty) {
+            let remotePenalty: PenaltySetting | null = null;
+            snapshot.forEach((d: any) => {
+              remotePenalty = d.data() as PenaltySetting;
+            });
+            if (remotePenalty) {
+              setStoredData(STORAGE_KEYS.PENALTY_SETTINGS, remotePenalty);
+              onUpdate();
+            }
+          }
+        },
+        (err: any) => console.warn('Firestore penaltySettings listener error:', err?.message || err)
+      );
+      unsubscribes.push(unsubPenalty);
+    } catch (e) {}
+
+    // 8. Listen for admins & password in Firestore
+    try {
+      const unsubAdmins = onSnapshot(
+        collection(db, 'admins'),
+        (snapshot: any) => {
+          if (!snapshot.empty) {
+            const remoteList: Admin[] = [];
+            snapshot.forEach((d: any) => {
+              const raw = d.data();
+              remoteList.push({
+                ...raw,
+                id: raw.id || d.id,
+              });
+              if (raw.password) {
+                localStorage.setItem('sb_admin_pass', String(raw.password));
+              }
+            });
+            setStoredData(STORAGE_KEYS.ADMINS, remoteList);
+            onUpdate();
+          }
+        },
+        (err: any) => console.warn('Firestore admins listener error:', err?.message || err)
+      );
+      unsubscribes.push(unsubAdmins);
     } catch (e) {}
 
     return () => {

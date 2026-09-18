@@ -107,13 +107,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     refreshData();
 
-    // Attach real-time listeners for updates from Firebase Firestore
+    // 1. Subscribe to auto-sync status updates from StorageService for instant UI feedback
+    const unsubStatus = StorageService.onSyncStatusChange((status) => {
+      setSyncStatus(status);
+    });
+
+    // 2. Attach real-time listeners for updates from Firebase Firestore across all 8 collections
     const unsubscribe = StorageService.setupFirestoreListeners(() => {
+      refreshData();
+    });
+
+    // 3. Proactive initial cloud pull to ensure multi-device sync immediately upon app open
+    StorageService.fetchAndSyncFromFirestore().then(() => {
       refreshData();
     });
 
     return () => {
       if (unsubscribe) unsubscribe();
+      if (unsubStatus) unsubStatus();
     };
   }, []);
 

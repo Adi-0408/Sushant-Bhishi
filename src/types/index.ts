@@ -10,7 +10,9 @@ export interface Admin {
   mobile: string;
   email?: string;
   photoURL?: string;
+  password?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface BishiConfig {

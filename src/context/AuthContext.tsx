@@ -41,7 +41,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (identifier: string, pass: string): Promise<boolean> => {
     const admins = StorageService.getAdmins();
-    const storedPass = localStorage.getItem('sb_admin_pass') || '123456';
+    const storedPass = localStorage.getItem('sb_admin_pass') || (admins[0] as any)?.password || '123456';
 
     const cleanInput = identifier.trim().toLowerCase();
     const matched = admins.find(
@@ -76,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!newPassword || newPassword.trim().length < 4) {
       throw new Error('नवीन पासवर्ड किमान ४ अक्षरांचा असावा.');
     }
-    localStorage.setItem('sb_admin_pass', newPassword.trim());
+    await StorageService.updateAdminPassword(newPassword.trim());
     return true;
   };
 
