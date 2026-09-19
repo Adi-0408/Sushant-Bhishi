@@ -12,43 +12,106 @@ export const exportMemberLedgerToExcel = (
   showAllWeeks: boolean = false
 ) => {
   const todayStr = new Date().toISOString().split('T')[0];
+  const custLoanPayments = loanPayments.filter((lp) => lp.customerId === customer.id);
+
   const allCustomerCollections = collections
     .filter((c) => c.customerId === customer.id)
     .sort((a, b) => a.periodIndex - b.periodIndex);
 
+  // If customer has loan payments on dates without bishi collections, synthesize rows so they are never missed
+  const collectionDueDates = new Set(allCustomerCollections.map((c) => c.dueDate));
+  const missingLoanPaymentDates = Array.from(
+    new Set(
+      custLoanPayments
+        .filter((lp) => !collectionDueDates.has(lp.paymentDate))
+        .map((lp) => lp.paymentDate)
+    )
+  ).sort();
+
+  const synthesizedLoanRows: CollectionEntry[] = missingLoanPaymentDates.map((pDate, idx) => ({
+    id: `synth-loan-${idx}-${pDate}`,
+    customerId: customer.id,
+    customerName: customer.name,
+    accountNumber: customer.accountNumber,
+    officeId: customer.officeId,
+    bishiType: customer.bishiType || 'DIWALI',
+    periodIndex: 900 + idx,
+    periodLabel: 'कर्ज परतफेड',
+    dueDate: pDate,
+    expectedAmount: 0,
+    collectedAmount: 0,
+    remainingAmount: 0,
+    interestAmount: 0,
+    historicalInterestRate: 0,
+    penaltyAmount: 0,
+    historicalPenaltyRate: 0,
+    totalPaid: 0,
+    status: 'PAID',
+    paymentDate: pDate,
+    updatedAt: pDate,
+  }));
+
+  const mergedCustomerCollections = [...allCustomerCollections, ...synthesizedLoanRows].sort((a, b) =>
+    a.dueDate.localeCompare(b.dueDate)
+  );
+
   const customerCollections = showAllWeeks
-    ? allCustomerCollections
-    : allCustomerCollections.filter((c) => {
+    ? mergedCustomerCollections
+    : mergedCustomerCollections.filter((c) => {
         const hasDeposit = (c.collectedAmount || 0) > 0;
         const isPaid = c.status === 'PAID';
-        const hasLoanPayment = loanPayments.some(
-          (lp) => lp.customerId === customer.id && lp.paymentDate === c.dueDate
-        );
+        const hasLoanPayment = custLoanPayments.some((lp) => lp.paymentDate === c.dueDate);
         return hasDeposit || isPaid || hasLoanPayment;
       });
 
   let totalCumulative = 0;
+  let totalDeposit = 0;
+  let totalBishiPenalty = 0;
+  let totalExpected = 0;
+  let totalLoanIssued = customer.hasLoan && loan ? (loan.principalAmount || 0) : 0;
+  let totalLoanPrincipalPaid = 0;
+  let totalLoanInterestPaid = 0;
+  let totalLoanPenalty = 0;
+  let runningLoanPrincipalBalance = customer.hasLoan && loan ? (loan.principalAmount || 0) : 0;
+  const finalRemainingBalance =
+    (customer.hasLoan && loan ? loan.remainingAmount : 0) +
+    (customerCollections.length > 0 ? (customerCollections[customerCollections.length - 1].remainingAmount || 0) : 0);
 
   const tableRowsHtml = customerCollections.length === 0
     ? `<tr><td colspan="11" style="text-align: center; padding: 12px; color: #64748b; font-weight: bold; border: 1px solid #b8c2cc;">या खातेदाराची अद्याप कोणतीही पूर्ण जमा नोंद झालेली नाही.</td></tr>`
     : customerCollections
         .map((item, idx) => {
           const deposit = item.collectedAmount || 0;
+          totalDeposit += deposit;
           totalCumulative += deposit;
           const penalty = item.penaltyAmount || 0;
+          totalBishiPenalty += penalty;
           const expected = item.expectedAmount || 0;
+          totalExpected += expected;
 
-          // Find loan payment for this period/date if any
-          const periodPayment = loanPayments.find(
-            (lp) => lp.customerId === customer.id && lp.paymentDate === item.dueDate
+          // Filter ALL loan payments matching this customer and date
+          const periodPayments = custLoanPayments.filter(
+            (lp) => lp.paymentDate === item.dueDate
           );
 
-          const loanPrincipalPaid = periodPayment ? periodPayment.paidAmount : 0;
-          const loanInterestPaid = periodPayment ? periodPayment.interestPaid : 0;
-          const loanPenalty = periodPayment ? periodPayment.penaltyPaid : 0;
+          const loanPrincipalPaid = periodPayments.reduce((sum, lp) => sum + (lp.paidAmount || 0), 0);
+          totalLoanPrincipalPaid += loanPrincipalPaid;
+
+          const loanInterestPaid = periodPayments.reduce((sum, lp) => sum + (lp.interestPaid || 0), 0);
+          totalLoanInterestPaid += loanInterestPaid;
+
+          const loanPenalty = periodPayments.reduce((sum, lp) => sum + (lp.penaltyPaid || 0), 0);
+          totalLoanPenalty += loanPenalty;
+
+          const loanDiscount = periodPayments.reduce((sum, lp) => sum + (lp.discountAmount || 0), 0);
+
+          if (customer.hasLoan) {
+            runningLoanPrincipalBalance = Math.max(0, runningLoanPrincipalBalance - loanPrincipalPaid - loanDiscount);
+          }
+
           const loanIssued = idx === 0 && customer.hasLoan && loan ? loan.principalAmount : 0;
 
-          const balanceRemaining = item.remainingAmount || 0;
+          const balanceRemaining = (customer.hasLoan ? runningLoanPrincipalBalance : 0) + (item.remainingAmount || 0);
 
           return `
             <tr>
@@ -57,7 +120,7 @@ export const exportMemberLedgerToExcel = (
               <td style="text-align: right; border: 1px solid #b8c2cc; padding: 6px; font-weight: bold; color: #15803d;">${deposit > 0 ? deposit : ''}</td>
               <td style="text-align: right; border: 1px solid #b8c2cc; padding: 6px; font-weight: bold; color: #0b5c45;">${totalCumulative > 0 ? totalCumulative : ''}</td>
               <td style="text-align: right; border: 1px solid #b8c2cc; padding: 6px; color: #be123c;">${penalty > 0 ? penalty : ''}</td>
-              <td style="text-align: right; border: 1px solid #b8c2cc; padding: 6px;">${expected}</td>
+              <td style="text-align: right; border: 1px solid #b8c2cc; padding: 6px;">${expected > 0 ? expected : ''}</td>
               <td style="text-align: right; border: 1px solid #b8c2cc; padding: 6px; color: #c2410c;">${loanIssued > 0 ? loanIssued : ''}</td>
               <td style="text-align: right; border: 1px solid #b8c2cc; padding: 6px; color: #15803d;">${loanPrincipalPaid > 0 ? loanPrincipalPaid : ''}</td>
               <td style="text-align: right; border: 1px solid #b8c2cc; padding: 6px; color: #15803d;">${loanInterestPaid > 0 ? loanInterestPaid : ''}</td>
@@ -142,6 +205,21 @@ export const exportMemberLedgerToExcel = (
         <tbody>
           ${tableRowsHtml}
         </tbody>
+        <tfoot>
+          <tr style="background-color:#8B4513; color:#ffffff; font-weight:bold;">
+            <td style="text-align:center; border: 1px solid #5c3a21; padding: 6px;">-</td>
+            <td style="text-align:center; border: 1px solid #5c3a21; padding: 6px;">एकूण</td>
+            <td style="text-align:right; border: 1px solid #5c3a21; padding: 6px;">${totalDeposit > 0 ? totalDeposit : ''}</td>
+            <td style="text-align:right; border: 1px solid #5c3a21; padding: 6px;">${totalCumulative > 0 ? totalCumulative : ''}</td>
+            <td style="text-align:right; border: 1px solid #5c3a21; padding: 6px;">${totalBishiPenalty > 0 ? totalBishiPenalty : ''}</td>
+            <td style="text-align:right; border: 1px solid #5c3a21; padding: 6px;">${totalExpected > 0 ? totalExpected : ''}</td>
+            <td style="text-align:right; border: 1px solid #5c3a21; padding: 6px;">${totalLoanIssued > 0 ? totalLoanIssued : ''}</td>
+            <td style="text-align:right; border: 1px solid #5c3a21; padding: 6px;">${totalLoanPrincipalPaid > 0 ? totalLoanPrincipalPaid : ''}</td>
+            <td style="text-align:right; border: 1px solid #5c3a21; padding: 6px;">${totalLoanInterestPaid > 0 ? totalLoanInterestPaid : ''}</td>
+            <td style="text-align:right; border: 1px solid #5c3a21; padding: 6px;">${totalLoanPenalty > 0 ? totalLoanPenalty : ''}</td>
+            <td style="text-align:right; border: 1px solid #5c3a21; padding: 6px;">${finalRemainingBalance}</td>
+          </tr>
+        </tfoot>
       </table>
     </body>
     </html>

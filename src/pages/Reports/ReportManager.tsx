@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { BishiType, Modality } from '../../types';
+import { BishiType, CollectionEntry, Modality } from '../../types';
 import { StorageService } from '../../services/db';
 import {
   formatCurrency,
@@ -259,6 +259,11 @@ export const ReportManager: React.FC = () => {
     }
   };
 
+  // Loan payments for active ledger customer
+  const ledgerLoanPaymentsForCust = loanPayments.filter(
+    (lp) => activeLedgerCustomer && lp.customerId === activeLedgerCustomer.id
+  );
+
   // Prepare active customer collections for Member Ledger Card (Filter out future empty weeks by default)
   const allActiveCustomerCollections = activeLedgerCustomer
     ? collections
@@ -266,14 +271,49 @@ export const ReportManager: React.FC = () => {
         .sort((a, b) => a.periodIndex - b.periodIndex)
     : [];
 
+  // If customer has loan payments on dates without bishi collections, synthesize rows so they are never missed
+  const collectionDueDates = new Set(allActiveCustomerCollections.map((c) => c.dueDate));
+  const missingLoanPaymentDates = Array.from(
+    new Set(
+      ledgerLoanPaymentsForCust
+        .filter((lp) => !collectionDueDates.has(lp.paymentDate))
+        .map((lp) => lp.paymentDate)
+    )
+  ).sort();
+
+  const synthesizedLoanRows: CollectionEntry[] = missingLoanPaymentDates.map((pDate, idx) => ({
+    id: `synth-loan-${idx}-${pDate}`,
+    customerId: activeLedgerCustomer?.id || '',
+    customerName: activeLedgerCustomer?.name,
+    accountNumber: activeLedgerCustomer?.accountNumber || '',
+    officeId: activeLedgerCustomer?.officeId || 'HEAD_OFFICE',
+    bishiType: activeLedgerCustomer?.bishiType || 'DIWALI',
+    periodIndex: 900 + idx,
+    periodLabel: `कर्ज परतफेड`,
+    dueDate: pDate,
+    expectedAmount: 0,
+    collectedAmount: 0,
+    remainingAmount: 0,
+    interestAmount: 0,
+    historicalInterestRate: 0,
+    penaltyAmount: 0,
+    historicalPenaltyRate: 0,
+    totalPaid: 0,
+    status: 'PAID',
+    paymentDate: pDate,
+    updatedAt: pDate,
+  }));
+
+  const mergedCustomerCollections = [...allActiveCustomerCollections, ...synthesizedLoanRows].sort((a, b) =>
+    a.dueDate.localeCompare(b.dueDate)
+  );
+
   const activeCustomerCollections = showAllLedgerPeriods
-    ? allActiveCustomerCollections
-    : allActiveCustomerCollections.filter((c) => {
+    ? mergedCustomerCollections
+    : mergedCustomerCollections.filter((c) => {
         const hasDeposit = (c.collectedAmount || 0) > 0;
         const isPaid = c.status === 'PAID';
-        const hasLoanPayment = loanPayments.some(
-          (lp) => activeLedgerCustomer && lp.customerId === activeLedgerCustomer.id && lp.paymentDate === c.dueDate
-        );
+        const hasLoanPayment = ledgerLoanPaymentsForCust.some((lp) => lp.paymentDate === c.dueDate);
         return hasDeposit || isPaid || hasLoanPayment;
       });
 
@@ -281,17 +321,14 @@ export const ReportManager: React.FC = () => {
     ? loans.find((l) => l.customerId === activeLedgerCustomer.id)
     : null;
 
-  let cumulativeDeposit = 0;
-
   const ledgerTotalDeposit = activeCustomerCollections.reduce((sum, c) => sum + (c.collectedAmount || 0), 0);
   const ledgerTotalExpected = activeCustomerCollections.reduce((sum, c) => sum + (c.expectedAmount || 0), 0);
   const ledgerTotalPenalty = activeCustomerCollections.reduce((sum, c) => sum + (c.penaltyAmount || 0), 0);
   const ledgerLoanIssued = activeLedgerCustomer?.hasLoan && activeCustomerLoan ? (activeCustomerLoan.principalAmount || 0) : 0;
-  const ledgerLoanPaymentsForCust = loanPayments.filter((lp) => activeLedgerCustomer && lp.customerId === activeLedgerCustomer.id);
   const ledgerTotalLoanPrincipal = ledgerLoanPaymentsForCust.reduce((sum, lp) => sum + (lp.paidAmount || 0), 0);
   const ledgerTotalLoanInterest = ledgerLoanPaymentsForCust.reduce((sum, lp) => sum + (lp.interestPaid || 0), 0);
   const ledgerTotalLoanPenalty = ledgerLoanPaymentsForCust.reduce((sum, lp) => sum + (lp.penaltyPaid || 0), 0);
-  const ledgerFinalRemaining = activeCustomerCollections.length > 0 ? (activeCustomerCollections[activeCustomerCollections.length - 1].remainingAmount || 0) : 0;
+  const ledgerFinalRemaining = (activeLedgerCustomer?.hasLoan && activeCustomerLoan ? activeCustomerLoan.remainingAmount : 0) + (activeCustomerCollections.length > 0 ? (activeCustomerCollections[activeCustomerCollections.length - 1].remainingAmount || 0) : 0);
 
   return (
     <div className="space-y-6 pb-16 print-container">
@@ -600,80 +637,90 @@ export const ReportManager: React.FC = () => {
                             : 'या खातेदाराची अद्याप कोणतीही पूर्ण जमा नोंद झालेली नाही.'}
                         </td>
                       </tr>
-                    ) : (
-                      activeCustomerCollections.map((item, idx) => {
+                    ) : (() => {
+                      let cumulativeDeposit = 0;
+                      let runningLoanPrincipalBalance = activeCustomerLoan ? (activeCustomerLoan.principalAmount || 0) : 0;
+                      return activeCustomerCollections.map((item, idx) => {
                         const deposit = item.collectedAmount || 0;
                         cumulativeDeposit += deposit;
                         const penalty = item.penaltyAmount || 0;
                         const expected = item.expectedAmount || 0;
 
-                      const periodPayment = loanPayments.find(
-                        (lp) => lp.customerId === activeLedgerCustomer.id && lp.paymentDate === item.dueDate
-                      );
+                        // Filter ALL loan payments matching this customer and date
+                        const periodPayments = ledgerLoanPaymentsForCust.filter(
+                          (lp) => lp.paymentDate === item.dueDate
+                        );
 
-                      const loanPrincipalPaid = periodPayment ? periodPayment.paidAmount : 0;
-                      const loanInterestPaid = periodPayment ? periodPayment.interestPaid : 0;
-                      const loanPenalty = periodPayment ? periodPayment.penaltyPaid : 0;
-                      const loanIssued =
-                        idx === 0 && activeLedgerCustomer.hasLoan && activeCustomerLoan
-                          ? activeCustomerLoan.principalAmount
-                          : 0;
+                        const loanPrincipalPaid = periodPayments.reduce((sum, lp) => sum + (lp.paidAmount || 0), 0);
+                        const loanInterestPaid = periodPayments.reduce((sum, lp) => sum + (lp.interestPaid || 0), 0);
+                        const loanPenalty = periodPayments.reduce((sum, lp) => sum + (lp.penaltyPaid || 0), 0);
+                        const loanDiscount = periodPayments.reduce((sum, lp) => sum + (lp.discountAmount || 0), 0);
 
-                      const balanceRemaining = item.remainingAmount || 0;
+                        if (activeLedgerCustomer?.hasLoan) {
+                          runningLoanPrincipalBalance = Math.max(0, runningLoanPrincipalBalance - loanPrincipalPaid - loanDiscount);
+                        }
 
-                      return (
-                        <tr
-                          key={item.id}
-                          className="hover:bg-amber-100/40 transition-colors odd:bg-white even:bg-[#fcf8f2] border-b border-amber-900/20"
-                        >
-                          <td className="p-2 border border-amber-900/30 font-extrabold text-slate-700">{idx + 1}</td>
-                          <td className="p-2 border border-amber-900/30 font-bold text-slate-800">
-                            {formatDateMarathi(item.dueDate, language)}
-                          </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-black text-emerald-700">
-                            {deposit > 0 ? formatCurrency(deposit, language) : '-'}
-                          </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-black text-emerald-900">
-                            {cumulativeDeposit > 0 ? formatCurrency(cumulativeDeposit, language) : '-'}
-                          </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-extrabold text-rose-700">
-                            {penalty > 0 ? formatCurrency(penalty, language) : '-'}
-                          </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-bold text-slate-800">
-                            {formatCurrency(expected, language)}
-                          </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-extrabold text-amber-800">
-                            {loanIssued > 0 ? formatCurrency(loanIssued, language) : '-'}
-                          </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-extrabold text-emerald-800">
-                            {loanPrincipalPaid > 0 ? formatCurrency(loanPrincipalPaid, language) : '-'}
-                          </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-extrabold text-emerald-800">
-                            {loanInterestPaid > 0 ? formatCurrency(loanInterestPaid, language) : '-'}
-                          </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-extrabold text-rose-700">
-                            {loanPenalty > 0 ? formatCurrency(loanPenalty, language) : '-'}
-                          </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-black text-rose-600">
-                            {formatCurrency(balanceRemaining, language)}
-                          </td>
-                        </tr>
-                      );
-                    }))}
+                        const loanIssued =
+                          idx === 0 && activeLedgerCustomer?.hasLoan && activeCustomerLoan
+                            ? activeCustomerLoan.principalAmount
+                            : 0;
+
+                        const balanceRemaining = (activeLedgerCustomer?.hasLoan ? runningLoanPrincipalBalance : 0) + (item.remainingAmount || 0);
+
+                        return (
+                          <tr
+                            key={item.id}
+                            className="hover:bg-amber-100/40 transition-colors odd:bg-white even:bg-[#fcf8f2] border-b border-amber-900/20"
+                          >
+                            <td className="p-2 border border-amber-900/30 font-extrabold text-slate-700">{idx + 1}</td>
+                            <td className="p-2 border border-amber-900/30 font-bold text-slate-800">
+                              {formatDateMarathi(item.dueDate, language)}
+                            </td>
+                            <td className="p-2 border border-amber-900/30 text-right font-black text-emerald-700">
+                              {deposit > 0 ? formatCurrency(deposit, language) : '-'}
+                            </td>
+                            <td className="p-2 border border-amber-900/30 text-right font-black text-emerald-900">
+                              {cumulativeDeposit > 0 ? formatCurrency(cumulativeDeposit, language) : '-'}
+                            </td>
+                            <td className="p-2 border border-amber-900/30 text-right font-extrabold text-rose-700">
+                              {penalty > 0 ? formatCurrency(penalty, language) : '-'}
+                            </td>
+                            <td className="p-2 border border-amber-900/30 text-right font-bold text-slate-800">
+                              {expected > 0 ? formatCurrency(expected, language) : '-'}
+                            </td>
+                            <td className="p-2 border border-amber-900/30 text-right font-extrabold text-amber-800">
+                              {loanIssued > 0 ? formatCurrency(loanIssued, language) : '-'}
+                            </td>
+                            <td className="p-2 border border-amber-900/30 text-right font-extrabold text-emerald-800">
+                              {loanPrincipalPaid > 0 ? formatCurrency(loanPrincipalPaid, language) : '-'}
+                            </td>
+                            <td className="p-2 border border-amber-900/30 text-right font-extrabold text-emerald-800">
+                              {loanInterestPaid > 0 ? formatCurrency(loanInterestPaid, language) : '-'}
+                            </td>
+                            <td className="p-2 border border-amber-900/30 text-right font-extrabold text-rose-700">
+                              {loanPenalty > 0 ? formatCurrency(loanPenalty, language) : '-'}
+                            </td>
+                            <td className="p-2 border border-amber-900/30 text-right font-black text-rose-600">
+                              {balanceRemaining > 0 ? formatCurrency(balanceRemaining, language) : '₹0'}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
                   </tbody>
                   <tfoot>
                     <tr className="bg-[#8B4513] text-white font-extrabold text-xs">
                       <td className="p-2 border border-amber-900/40 text-center">-</td>
                       <td className="p-2 border border-amber-900/40 text-center">{language === 'EN' ? 'TOTAL' : 'एकूण'}</td>
                       <td className="p-2 border border-amber-900/40 text-right text-emerald-200 font-black">{ledgerTotalDeposit > 0 ? formatCurrency(ledgerTotalDeposit, language) : '-'}</td>
-                      <td className="p-2 border border-amber-900/40 text-right text-emerald-100 font-black">{cumulativeDeposit > 0 ? formatCurrency(cumulativeDeposit, language) : '-'}</td>
+                      <td className="p-2 border border-amber-900/40 text-right text-emerald-100 font-black">{ledgerTotalDeposit > 0 ? formatCurrency(ledgerTotalDeposit, language) : '-'}</td>
                       <td className="p-2 border border-amber-900/40 text-right text-rose-200">{ledgerTotalPenalty > 0 ? formatCurrency(ledgerTotalPenalty, language) : '-'}</td>
                       <td className="p-2 border border-amber-900/40 text-right">{ledgerTotalExpected > 0 ? formatCurrency(ledgerTotalExpected, language) : '-'}</td>
                       <td className="p-2 border border-amber-900/40 text-right text-amber-200">{ledgerLoanIssued > 0 ? formatCurrency(ledgerLoanIssued, language) : '-'}</td>
                       <td className="p-2 border border-amber-900/40 text-right text-emerald-200 font-black">{ledgerTotalLoanPrincipal > 0 ? formatCurrency(ledgerTotalLoanPrincipal, language) : '-'}</td>
                       <td className="p-2 border border-amber-900/40 text-right text-emerald-200 font-black">{ledgerTotalLoanInterest > 0 ? formatCurrency(ledgerTotalLoanInterest, language) : '-'}</td>
                       <td className="p-2 border border-amber-900/40 text-right text-rose-200">{ledgerTotalLoanPenalty > 0 ? formatCurrency(ledgerTotalLoanPenalty, language) : '-'}</td>
-                      <td className="p-2 border border-amber-900/40 text-right text-rose-200 font-black">{ledgerFinalRemaining > 0 ? formatCurrency(ledgerFinalRemaining, language) : '-'}</td>
+                      <td className="p-2 border border-amber-900/40 text-right text-rose-200 font-black">{ledgerFinalRemaining > 0 ? formatCurrency(ledgerFinalRemaining, language) : '₹0'}</td>
                     </tr>
                   </tfoot>
                 </table>
