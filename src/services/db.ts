@@ -1006,7 +1006,7 @@ export const StorageService = {
   getLoans: (): Loan[] => {
     const rawLoans = deduplicateLoans(getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []));
     const rawCustomers = StorageService.getCustomers();
-    const rawPayments = StorageService.getLoanPayments();
+    const rawPayments = deduplicateLoanPayments(getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []));
     let hasChanges = false;
 
     const sanitized = rawLoans.map((loan) => {
@@ -1148,7 +1148,7 @@ export const StorageService = {
   getLoanPayments: (): LoanPayment[] => {
     const rawPayments = deduplicateLoanPayments(getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []));
     const rawCustomers = StorageService.getCustomers();
-    const rawLoans = StorageService.getLoans();
+    const rawLoans = deduplicateLoans(getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []));
     let hasChanges = false;
 
     const sanitized = rawPayments.map((p) => {
