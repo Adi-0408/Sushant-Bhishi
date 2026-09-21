@@ -79,7 +79,7 @@ export const CollectionManager: React.FC = () => {
     const seen = new Set<string>();
     return filteredCollections.filter((item) => {
       const cust = customers.find((c) => c.id === item.customerId);
-      const acc = (cust?.accountNumber || item.accountNumber || '').trim().toLowerCase();
+      const acc = String(cust?.accountNumber || item.accountNumber || '').trim().toLowerCase();
       const period = String(item.periodIndex ?? '');
       const key = acc ? `${acc}_${period}` : `${item.customerId}_${period}`;
       if (seen.has(key)) return false;

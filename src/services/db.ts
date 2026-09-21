@@ -425,12 +425,12 @@ export const deduplicateCollections = (entries: CollectionEntry[]): CollectionEn
 
 // Deduplicates customers by accountNumber (or ID)
 export const deduplicateCustomers = (custs: Customer[]): Customer[] => {
-  if (!custs || custs.length === 0) return [];
+  if (!custs || !Array.isArray(custs) || custs.length === 0) return [];
 
   const map = new Map<string, Customer>();
   custs.forEach((c) => {
     if (!c) return;
-    const acc = (c.accountNumber || '').trim().toLowerCase();
+    const acc = String(c.accountNumber || '').trim().toLowerCase();
     const key = acc || c.id;
 
     const existing = map.get(key);
@@ -448,15 +448,15 @@ export const deduplicateCustomers = (custs: Customer[]): Customer[] => {
   return Array.from(map.values());
 };
 
-// Deduplicates loans by accountNumber or customerId
+// Deduplicates loans by ID or account + issueDate + principal
 export const deduplicateLoans = (loans: Loan[]): Loan[] => {
-  if (!loans || loans.length === 0) return [];
+  if (!loans || !Array.isArray(loans) || loans.length === 0) return [];
 
   const map = new Map<string, Loan>();
   loans.forEach((l) => {
     if (!l) return;
-    const acc = (l.accountNumber || '').trim().toLowerCase();
-    const key = acc || l.customerId || l.id;
+    const acc = String(l.accountNumber || '').trim().toLowerCase();
+    const key = l.id || (acc ? `${acc}_${l.issueDate || ''}_${l.principalAmount || 0}` : (l.customerId || Math.random().toString()));
 
     const existing = map.get(key);
     if (!existing) {
@@ -577,30 +577,38 @@ const initializeDefaultConfigs = () => {
     createdAt: new Date().toISOString(),
   };
 
-  const admins = getStoredData<Admin[]>(STORAGE_KEYS.ADMINS, []);
-  const hasOnlyPrimaryAdmin =
-    admins.length === 1 &&
-    admins[0].mobile.trim() === '9876543210' &&
-    admins[0].id === 'admin_primary';
+  try {
+    const admins = getStoredData<Admin[]>(STORAGE_KEYS.ADMINS, []);
+    const hasOnlyPrimaryAdmin =
+      Array.isArray(admins) &&
+      admins.length === 1 &&
+      admins[0]?.mobile &&
+      String(admins[0].mobile).trim() === '9876543210' &&
+      admins[0].id === 'admin_primary';
 
-  if (!hasOnlyPrimaryAdmin) {
-    // Delete any previous admin records locally and in Firestore
-    admins.forEach((oldAdmin) => {
-      if (oldAdmin.id !== 'admin_primary') {
-        deleteFromFirestore('admins', oldAdmin.id);
+    if (!hasOnlyPrimaryAdmin) {
+      // Delete any previous admin records locally and in Firestore
+      if (Array.isArray(admins)) {
+        admins.forEach((oldAdmin) => {
+          if (oldAdmin?.id && oldAdmin.id !== 'admin_primary') {
+            deleteFromFirestore('admins', oldAdmin.id);
+          }
+        });
       }
-    });
-    deleteFromFirestore('admins', 'admin_default');
+      deleteFromFirestore('admins', 'admin_default');
 
-    const currentPass = localStorage.getItem('sb_admin_pass') || '123456';
-    const adminWithPass = { ...PRIMARY_ADMIN, password: currentPass };
-    setStoredData(STORAGE_KEYS.ADMINS, [adminWithPass]);
-    localStorage.setItem('sb_admin_pass', currentPass);
-    localStorage.removeItem('sb_active_session'); // Clear old session so user logs in with new credentials
-    syncToFirestore('admins', PRIMARY_ADMIN.id, adminWithPass);
-  } else if (!localStorage.getItem('sb_admin_pass')) {
-    localStorage.setItem('sb_admin_pass', '123456');
-    syncToFirestore('admins', PRIMARY_ADMIN.id, { ...PRIMARY_ADMIN, password: '123456' });
+      const currentPass = localStorage.getItem('sb_admin_pass') || '123456';
+      const adminWithPass = { ...PRIMARY_ADMIN, password: currentPass };
+      setStoredData(STORAGE_KEYS.ADMINS, [adminWithPass]);
+      localStorage.setItem('sb_admin_pass', currentPass);
+      localStorage.removeItem('sb_active_session'); // Clear old session so user logs in with new credentials
+      syncToFirestore('admins', PRIMARY_ADMIN.id, adminWithPass);
+    } else if (!localStorage.getItem('sb_admin_pass')) {
+      localStorage.setItem('sb_admin_pass', '123456');
+      syncToFirestore('admins', PRIMARY_ADMIN.id, { ...PRIMARY_ADMIN, password: '123456' });
+    }
+  } catch (err) {
+    console.warn('initializeDefaultConfigs admin setup note:', err);
   }
 };
 
@@ -633,8 +641,10 @@ export const StorageService = {
   getAdmins: (): Admin[] => {
     const admins = getStoredData<Admin[]>(STORAGE_KEYS.ADMINS, []);
     const hasOnlyPrimaryAdmin =
+      Array.isArray(admins) &&
       admins.length === 1 &&
-      admins[0].mobile.trim() === '9876543210' &&
+      admins[0]?.mobile &&
+      String(admins[0].mobile).trim() === '9876543210' &&
       admins[0].id === 'admin_primary';
 
     if (!hasOnlyPrimaryAdmin) {
@@ -931,18 +941,18 @@ export const StorageService = {
     const collections = StorageService.getCollections();
     const newEntryKeys = new Set(
       newEntries.map((e) => {
-        const acc = (e.accountNumber || '').trim().toLowerCase();
-        const custId = (e.customerId || '').trim();
-        const bishi = (e.bishiType || '').trim();
+        const acc = String(e.accountNumber || '').trim().toLowerCase();
+        const custId = String(e.customerId || '').trim();
+        const bishi = String(e.bishiType || '').trim();
         const period = String(e.periodIndex ?? '');
         const primaryKey = acc ? `${acc}_${period}` : `${custId}_${period}`;
         return bishi ? `${primaryKey}_${bishi}` : primaryKey;
       })
     );
     const filtered = collections.filter((c) => {
-      const acc = (c.accountNumber || '').trim().toLowerCase();
-      const custId = (c.customerId || '').trim();
-      const bishi = (c.bishiType || '').trim();
+      const acc = String(c.accountNumber || '').trim().toLowerCase();
+      const custId = String(c.customerId || '').trim();
+      const bishi = String(c.bishiType || '').trim();
       const period = String(c.periodIndex ?? '');
       const primaryKey = acc ? `${acc}_${period}` : `${custId}_${period}`;
       const key = bishi ? `${primaryKey}_${bishi}` : primaryKey;
@@ -1463,7 +1473,7 @@ export const StorageService = {
         const seenCustDocs = new Map<string, any>();
         custSnap.forEach((d: any) => {
           const raw = d.data();
-          const acc = (raw.accountNumber || '').trim().toLowerCase();
+          const acc = String(raw.accountNumber || '').trim().toLowerCase();
           const key = acc || raw.id || d.id;
           if (seenCustDocs.has(key)) {
             const oldDoc = seenCustDocs.get(key);
@@ -1490,9 +1500,9 @@ export const StorageService = {
         const seenCollDocs = new Map<string, any>();
         collSnap.forEach((d: any) => {
           const raw = d.data();
-          const acc = (raw.accountNumber || '').trim().toLowerCase();
-          const custId = (raw.customerId || '').trim();
-          const bishi = (raw.bishiType || '').trim();
+          const acc = String(raw.accountNumber || '').trim().toLowerCase();
+          const custId = String(raw.customerId || '').trim();
+          const bishi = String(raw.bishiType || '').trim();
           const period = String(raw.periodIndex ?? '');
           const primaryKey = acc ? `${acc}_${period}` : `${custId}_${period}`;
           const key = bishi ? `${primaryKey}_${bishi}` : primaryKey;
@@ -1522,8 +1532,8 @@ export const StorageService = {
         const seenLoanDocs = new Map<string, any>();
         loanSnap.forEach((d: any) => {
           const raw = d.data();
-          const acc = (raw.accountNumber || '').trim().toLowerCase();
-          const key = acc || raw.customerId || raw.id || d.id;
+          const acc = String(raw.accountNumber || '').trim().toLowerCase();
+          const key = raw.id || d.id || (acc ? `${acc}_${raw.issueDate || ''}_${raw.principalAmount || 0}` : (raw.customerId || Math.random().toString()));
           if (seenLoanDocs.has(key)) {
             const oldDoc = seenLoanDocs.get(key);
             const readableId = getFirestoreDocId('loans', d.id, raw);

@@ -11,7 +11,35 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Mukta:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Tiro+Devanagari+Marathi:ital@0;1&display=swap" rel="stylesheet">
   </head>
   <body class="bg-[#F4F6F5] text-[#10241E] font-marathi antialiased min-h-screen">
-    <div id="root"></div>
+    <div id="root">
+      <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(150deg, #0B5C45 0%, #0F7A5C 55%, #12946E 100%); color: white; font-family: system-ui, -apple-system, sans-serif;">
+        <div style="width: 80px; height: 80px; background: #0F4A3C; border: 2px solid #2F9E6E; border-radius: 22px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.25);">
+          <svg viewBox="0 0 160 160" style="width: 48px; height: 48px;">
+            <circle cx="80" cy="80" r="80" fill="#0f4a3c"/>
+            <circle cx="80" cy="80" r="66" fill="none" stroke="#2f9e6e" stroke-width="4"/>
+            <rect x="45" y="55" width="9" height="45" fill="#ffffff"/>
+            <rect x="61" y="55" width="9" height="45" fill="#ffffff"/>
+            <rect x="77" y="55" width="9" height="45" fill="#ffffff"/>
+            <rect x="93" y="55" width="9" height="45" fill="#ffffff"/>
+            <rect x="109" y="55" width="9" height="45" fill="#ffffff"/>
+            <polygon points="80,30 115,50 45,50" fill="#ffffff"/>
+            <rect x="42" y="103" width="76" height="8" fill="#ffffff"/>
+          </svg>
+        </div>
+        <h1 style="font-size: 26px; font-weight: 800; margin: 0 0 6px 0; letter-spacing: -0.5px;">सुषांत भिशी</h1>
+        <p style="font-size: 13px; opacity: 0.85; margin: 0 0 24px 0; font-weight: 500;">विश्वासाची साथ, समृद्धीची वाट</p>
+        <div style="width: 140px; height: 4px; background: rgba(255,255,255,0.25); border-radius: 9999px; overflow: hidden; position: relative;">
+          <div style="position: absolute; top: 0; left: 0; bottom: 0; width: 45%; background: #C89A2E; border-radius: 9999px; animation: initPulse 1.2s infinite ease-in-out;"></div>
+        </div>
+        <style>
+          @keyframes initPulse {
+            0% { left: -45%; width: 45%; }
+            50% { left: 25%; width: 55%; }
+            100% { left: 100%; width: 45%; }
+          }
+        </style>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -44,12 +44,20 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
 
   // Helper to split Devanagari text into grapheme clusters so matras stay attached to base consonants
   const getGraphemes = (text: string): string[] => {
-    const IntlObj = Intl as Record<string, any>;
-    if (typeof IntlObj !== 'undefined' && IntlObj.Segmenter) {
-      const segmenter = new IntlObj.Segmenter('mr', { granularity: 'grapheme' });
-      return Array.from(segmenter.segment(text)).map((s: any) => s.segment);
+    if (!text) return [];
+    try {
+      const IntlObj = Intl as Record<string, any>;
+      if (typeof IntlObj !== 'undefined' && IntlObj.Segmenter) {
+        const segmenter = new IntlObj.Segmenter('mr', { granularity: 'grapheme' });
+        return Array.from(segmenter.segment(text)).map((s: any) => s.segment);
+      }
+    } catch {
+      // ignore
     }
-    return text.match(/[\u0900-\u097F][\u0900-\u0903\u093A-\u094F\u0951-\u0957\u0962-\u0963]*|\s|./g) || text.split('');
+    return (
+      text.match(/[\u0900-\u097F][\u0900-\u0903\u093A-\u094F\u0951-\u0957\u0962-\u0963]*|\s|./g) ||
+      text.split('')
+    );
   };
 
   const appNameClusters = getGraphemes(appName);

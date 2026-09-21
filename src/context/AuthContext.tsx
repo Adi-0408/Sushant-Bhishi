@@ -46,7 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanInput = identifier.trim().toLowerCase();
     const matched = admins.find(
       (a) =>
-        a.mobile.trim() === identifier.trim() ||
+        String(a.mobile || '').trim() === identifier.trim() ||
         (a.email && a.email.trim().toLowerCase() === cleanInput)
     );
 

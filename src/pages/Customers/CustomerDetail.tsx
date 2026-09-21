@@ -91,6 +91,29 @@ export const CustomerDetail: React.FC = () => {
   const [deleteConfirmEntry, setDeleteConfirmEntry] = useState<CollectionEntry | null>(null);
   const [isEditCustomerOpen, setIsEditCustomerOpen] = useState(false);
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const customerCollections = useMemo(() => {
+    if (!customer) return [];
+    const raw = collections
+      .filter((c) => c.customerId === customer.id)
+      .sort((a, b) => a.periodIndex - b.periodIndex);
+    const map = new Map<number, typeof raw[0]>();
+    for (const c of raw) {
+      if (!map.has(c.periodIndex)) {
+        map.set(c.periodIndex, c);
+      } else {
+        const existing = map.get(c.periodIndex)!;
+        const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+        const currentTime = c.updatedAt ? new Date(c.updatedAt).getTime() : 0;
+        if ((c.collectedAmount || 0) > (existing.collectedAmount || 0) || currentTime > existingTime) {
+          map.set(c.periodIndex, c);
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.periodIndex - b.periodIndex);
+  }, [collections, customer?.id]);
+
   if (!customer) {
     return (
       <div className="p-12 text-center">
@@ -104,26 +127,6 @@ export const CustomerDetail: React.FC = () => {
       </div>
     );
   }
-
-  const todayStr = new Date().toISOString().split('T')[0];
-
-  const customerCollections = useMemo(() => {
-    const raw = collections
-      .filter((c) => c.customerId === customer.id)
-      .sort((a, b) => a.periodIndex - b.periodIndex);
-    const map = new Map<number, typeof raw[0]>();
-    for (const c of raw) {
-      if (!map.has(c.periodIndex)) {
-        map.set(c.periodIndex, c);
-      } else {
-        const existing = map.get(c.periodIndex)!;
-        if ((c.collectedAmount || 0) > (existing.collectedAmount || 0) || (c.updatedAt || 0) > (existing.updatedAt || 0)) {
-          map.set(c.periodIndex, c);
-        }
-      }
-    }
-    return Array.from(map.values()).sort((a, b) => a.periodIndex - b.periodIndex);
-  }, [collections, customer.id]);
 
   // Unpaid entries due on or before today
   const pendingDueEntries = customerCollections.filter(
