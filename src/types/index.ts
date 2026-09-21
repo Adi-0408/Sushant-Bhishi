@@ -101,7 +101,7 @@ export interface Loan {
   discountAmount?: number;
   remainingAmount: number;
   penaltyAmount: number;
-  status: 'ACTIVE' | 'CLOSED';
+  status: 'ACTIVE' | 'CLOSED' | 'COMPLETED';
   purposeNote?: string;
   updatedAt: string;
 }

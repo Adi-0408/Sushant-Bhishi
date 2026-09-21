@@ -732,6 +732,24 @@ export const StorageService = {
       const remainingPrincipal = Math.max(0, principal - paid - discount);
       const expectedRemaining = remainingPrincipal + penalty;
 
+      // Auto-mark loans as COMPLETED if fully paid or previously marked CLOSED
+      if ((loan.status as string) === 'CLOSED') {
+        hasChanges = true;
+        return {
+          ...loan,
+          status: 'COMPLETED' as const,
+        };
+      }
+      if (loan.status === 'ACTIVE' && expectedRemaining <= 0) {
+        hasChanges = true;
+        return {
+          ...loan,
+          remainingAmount: 0,
+          totalInterest: 0,
+          status: 'COMPLETED' as const,
+        };
+      }
+
       // Auto-correct active loans where remainingAmount had initial interest incorrectly baked into the balance
       if (loan.status === 'ACTIVE' && loan.remainingAmount !== expectedRemaining) {
         hasChanges = true;
@@ -753,16 +771,19 @@ export const StorageService = {
   },
 
   getLoanByCustomerId: (customerId: string): Loan | undefined => {
-    return StorageService.getLoans().find((l) => l.customerId === customerId && l.status === 'ACTIVE');
+    const custLoans = StorageService.getLoans().filter((l) => l.customerId === customerId);
+    return custLoans.find((l) => l.status === 'ACTIVE') || [...custLoans].sort((a, b) => (b.updatedAt || b.issueDate || '').localeCompare(a.updatedAt || a.issueDate || ''))[0];
   },
 
-  saveLoan: (loanData: Omit<Loan, 'id' | 'updatedAt'>): Loan => {
+  saveLoan: (loanData: Omit<Loan, 'id' | 'updatedAt'> & { id?: string }): Loan => {
     const loans = StorageService.getLoans();
-    const existingIndex = loans.findIndex((l) => l.customerId === loanData.customerId && l.status === 'ACTIVE');
+    const existingIndex = loans.findIndex(
+      (l) => (loanData.id && l.id === loanData.id) || (l.customerId === loanData.customerId && l.status === 'ACTIVE')
+    );
 
     const newLoan: Loan = {
       ...loanData,
-      id: existingIndex >= 0 ? loans[existingIndex].id : 'loan_' + Date.now(),
+      id: loanData.id || (existingIndex >= 0 ? loans[existingIndex].id : 'loan_' + Date.now()),
       updatedAt: new Date().toISOString(),
     };
 
@@ -809,7 +830,7 @@ export const StorageService = {
         discountAmount: newDiscount,
         remainingAmount: newRemaining,
         penaltyAmount: newPenalty,
-        status: isClosed ? 'CLOSED' : 'ACTIVE',
+        status: isClosed ? 'COMPLETED' : 'ACTIVE',
       });
     }
 

@@ -39,7 +39,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
   const [amount, setAmount] = useState<number | ''>(1000);
   const [interestRate, setInterestRate] = useState<number | ''>(defaultInterestRate);
   const [penaltyRate, setPenaltyRate] = useState<number | ''>(defaultPenaltyRate);
-  const [officeId, setOfficeId] = useState<OfficeId>(activeOffice);
+  const [officeId, setOfficeId] = useState<OfficeId>(activeOffice === 'ALL' ? 'MAIN' : activeOffice);
   const [address, setAddress] = useState('');
   const [photoURL, setPhotoURL] = useState('');
 
@@ -110,7 +110,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
       setAmount(initialLoanOnly ? 0 : 1000);
       setInterestRate(defaultInterestRate);
       setPenaltyRate(defaultPenaltyRate);
-      setOfficeId(activeOffice);
+      setOfficeId(activeOffice === 'ALL' ? 'MAIN' : activeOffice);
       setAddress('');
       setPhotoURL('');
       setHasLoan(initialLoanOnly ? true : false);

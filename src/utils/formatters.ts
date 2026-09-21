@@ -136,6 +136,9 @@ export const getStatusBadgeClass = (status: string): string => {
     case 'PAID':
     case 'पूर्ण जमा':
     case 'जमा':
+    case 'COMPLETED':
+    case 'पूर्ण':
+      return 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-semibold';
     case 'ACTIVE':
     case 'सुरू':
       return 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-semibold';
@@ -148,7 +151,7 @@ export const getStatusBadgeClass = (status: string): string => {
       return 'bg-rose-100 text-rose-800 border border-rose-300 font-semibold';
     case 'CLOSED':
     case 'बंद':
-      return 'bg-slate-100 text-slate-700 border border-slate-300 font-medium';
+      return 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-semibold';
     default:
       return 'bg-slate-100 text-slate-800';
   }
@@ -166,7 +169,8 @@ export const getStatusTextMarathi = (status: string, lang: Language = 'MR'): str
       case 'ACTIVE':
         return 'Active';
       case 'CLOSED':
-        return 'Closed';
+      case 'COMPLETED':
+        return 'Completed';
       default:
         return status;
     }
@@ -181,7 +185,8 @@ export const getStatusTextMarathi = (status: string, lang: Language = 'MR'): str
     case 'ACTIVE':
       return 'सुरू';
     case 'CLOSED':
-      return 'पूर्ण बंद';
+    case 'COMPLETED':
+      return 'पूर्ण (Completed)';
     default:
       return status;
   }

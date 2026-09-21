@@ -47,7 +47,12 @@ export const CustomerDetail: React.FC = () => {
   const { customers, collections, loans, loanPayments, bishiConfigs, refreshData, showToast, language, t } = useApp();
 
   const customer = customers.find((c) => c.id === id);
-  const loan = customer ? loans.find((l) => l.customerId === customer.id && l.status === 'ACTIVE') : null;
+  const customerLoans = customer ? loans.filter((l) => l.customerId === customer.id) : [];
+  const loan = customerLoans.find((l) => l.status === 'ACTIVE')
+    || [...customerLoans].sort((a, b) => (b.updatedAt || b.issueDate || '').localeCompare(a.updatedAt || a.issueDate || ''))[0]
+    || null;
+  const isLoanCompleted = Boolean(loan && (loan.status === 'COMPLETED' || loan.status === 'CLOSED' || (loan.remainingAmount || 0) <= 0));
+  const hasAnyLoan = Boolean(customer?.hasLoan || customer?.bishiType === 'LOAN_ONLY' || customerLoans.length > 0);
   const loanPrincipalRemaining = loan ? getLoanRemainingPrincipal(loan) : 0;
   const loanDueInterest = loan ? calculateLoanDueInterest(loan) : 0;
 
@@ -804,8 +809,8 @@ export const CustomerDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* LOAN SECTION - STRICTLY HIDDEN IF NO LOAN (Requirements 17 & 48) */}
-      {(customer.hasLoan || customer.bishiType === 'LOAN_ONLY') && loan ? (
+      {/* LOAN SECTION - SHOW FOR ANY CUSTOMER WITH CURRENT OR COMPLETED LOAN */}
+      {hasAnyLoan && loan ? (
         <div className="bg-white rounded-2xl print:rounded-xl border border-amber-200 print:border-slate-300 shadow-xs print:shadow-none overflow-hidden print:mt-2.5 print:break-inside-avoid">
           <div className="p-5 print:p-2 bg-amber-50/50 border-b border-amber-200 print:border-slate-200 flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -814,12 +819,19 @@ export const CustomerDetail: React.FC = () => {
                 {language === 'EN' ? 'Loan Details' : 'कर्जाची माहिती'}
               </h3>
             </div>
-            <button
-              onClick={handleOpenLoanModal}
-              className="px-4 py-2 rounded-xl bg-amber-700 text-white font-extrabold text-xs hover:bg-amber-800 transition-colors no-print cursor-pointer"
-            >
-              {language === 'EN' ? '+ Repay Loan' : '+ कर्ज जमा करा'}
-            </button>
+            {isLoanCompleted ? (
+              <span className="px-3 py-1.5 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 font-extrabold text-xs inline-flex items-center space-x-1.5 shadow-2xs no-print">
+                <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                <span>{language === 'EN' ? 'Loan Completed' : 'कर्ज पूर्ण फेडले (Completed)'}</span>
+              </span>
+            ) : (
+              <button
+                onClick={handleOpenLoanModal}
+                className="px-4 py-2 rounded-xl bg-amber-700 text-white font-extrabold text-xs hover:bg-amber-800 transition-colors no-print cursor-pointer"
+              >
+                {language === 'EN' ? '+ Repay Loan' : '+ कर्ज जमा करा'}
+              </button>
+            )}
           </div>
 
           <div className="p-6 print:p-2.5">
@@ -877,28 +889,45 @@ export const CustomerDetail: React.FC = () => {
               )}
 
               <div className={`p-3.5 print:p-1.5 rounded-xl print:rounded-lg border-2 text-center transition-all ${
-                loan.remainingAmount > 0
+                isLoanCompleted
+                  ? 'bg-emerald-50 border-emerald-300'
+                  : loan.remainingAmount > 0
                   ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-200/60 shadow-xs print:border-rose-300 print:ring-0'
                   : 'bg-slate-50 border-slate-200'
               }`}>
                 <div className="flex items-center justify-center space-x-1">
-                  <span className="text-[11px] print:text-[9px] font-extrabold text-rose-900 block leading-tight">{language === 'EN' ? 'Loan Balance' : 'कर्जाची बाकी'}</span>
-                  {loan.remainingAmount > 0 && (
+                  <span className={`text-[11px] print:text-[9px] font-extrabold block leading-tight ${isLoanCompleted ? 'text-emerald-900' : 'text-rose-900'}`}>
+                    {language === 'EN' ? 'Loan Balance' : 'कर्जाची बाकी'}
+                  </span>
+                  {!isLoanCompleted && loan.remainingAmount > 0 && (
                     <span className="px-1.5 py-0.5 rounded text-[10px] print:hidden font-black bg-rose-600 text-white animate-pulse">
                       {language === 'EN' ? 'DUE' : 'बाकी'}
                     </span>
                   )}
+                  {isLoanCompleted && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] print:hidden font-black bg-emerald-600 text-white">
+                      ✓
+                    </span>
+                  )}
                 </div>
-                <span className="text-base print:text-xs font-black text-rose-700 block mt-0.5">
-                  {formatCurrency(loan.remainingAmount, language)}
+                <span className={`text-base print:text-xs font-black block mt-0.5 ${isLoanCompleted ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  {formatCurrency(isLoanCompleted ? 0 : loan.remainingAmount, language)}
                 </span>
               </div>
 
-              <div className="bg-slate-100 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-slate-200 flex items-center justify-center text-center">
-                <span className={`px-3 py-1 print:px-1.5 print:py-0.5 rounded-full text-xs print:text-[9px] font-bold ${getStatusBadgeClass(loan.status)}`}>
-                  {loan.status === 'ACTIVE'
+              <div className={`p-3.5 print:p-1.5 rounded-xl print:rounded-lg border flex items-center justify-center text-center ${
+                isLoanCompleted ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-100 border-slate-200'
+              }`}>
+                <span className={`px-3 py-1 print:px-1.5 print:py-0.5 rounded-full text-xs print:text-[9px] font-bold ${
+                  isLoanCompleted
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : getStatusBadgeClass(loan.status)
+                }`}>
+                  {isLoanCompleted
+                    ? (language === 'EN' ? 'Completed' : 'पूर्ण (Completed)')
+                    : loan.status === 'ACTIVE'
                     ? (language === 'EN' ? 'Active Loan' : 'कर्ज सुरू')
-                    : (language === 'EN' ? 'Closed' : 'कर्ज पूर्ण बंद')}
+                    : (language === 'EN' ? 'Completed' : 'पूर्ण (Completed)')}
                 </span>
               </div>
             </div>

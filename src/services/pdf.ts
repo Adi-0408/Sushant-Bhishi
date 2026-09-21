@@ -299,7 +299,7 @@ export const generateCustomerPDF = async (
 
       <!-- Loan Section (If Applicable) -->
       ${
-        customer.hasLoan && loan
+        (customer.hasLoan || customer.bishiType === 'LOAN_ONLY' || loan) && loan
           ? `
         <div style="margin-bottom: 12px; border: 1px solid #8B4513; border-radius: 8px; background: #fffdfa; padding: 10px;">
           <h3 style="font-size: 12px; font-weight: 800; color: #5c3a21; margin: 0 0 6px 0;">कर्जाचा तपशील (Loan Summary)</h3>
@@ -310,8 +310,8 @@ export const generateCustomerPDF = async (
             <div style="background: #fffde7; padding: 4px 6px; border: 1px solid #b8a99a; border-radius: 4px;"><span style="color: #5c3a21;">तारीख:</span> <strong>${formatDateMarathi(loan.issueDate)}</strong></div>
             <div style="background: #f0fdf4; padding: 4px 6px; border: 1px solid #bbf7d0; border-radius: 4px;"><span style="color: #166534;">भरलेली मुद्दल:</span> <strong style="color: #15803d; font-size: 11px;">${formatCurrency(totalLoanPrincipalPaid)}</strong></div>
             <div style="background: #fffbeb; padding: 4px 6px; border: 1px solid #fde68a; border-radius: 4px;"><span style="color: #92400e;">भरलेले व्याज:</span> <strong style="color: #b45309; font-size: 11px;">${formatCurrency(totalLoanInterestPaid)}</strong></div>
-            <div style="background: #fff1f2; padding: 4px 6px; border: 1px solid #fecdd3; border-radius: 4px;"><span style="color: #9f1239;">कर्ज बाकी मुद्दल:</span> <strong style="color: #be123c; font-size: 11px;">${formatCurrency(loan.remainingAmount)}</strong></div>
-            <div style="background: #fffde7; padding: 4px 6px; border: 1px solid #b8a99a; border-radius: 4px;"><span style="color: #5c3a21;">कर्ज स्थिती:</span> <strong style="color: ${loan.status === 'ACTIVE' ? '#c2410c' : '#15803d'};">${loan.status === 'ACTIVE' ? 'सुरू' : 'पूर्ण बंद'}</strong></div>
+            <div style="background: #fff1f2; padding: 4px 6px; border: 1px solid #fecdd3; border-radius: 4px;"><span style="color: #9f1239;">कर्ज बाकी मुद्दल:</span> <strong style="color: ${(loan.remainingAmount || 0) > 0 ? '#be123c' : '#15803d'}; font-size: 11px;">${formatCurrency((loan.remainingAmount || 0) <= 0 ? 0 : loan.remainingAmount)}</strong></div>
+            <div style="background: #fffde7; padding: 4px 6px; border: 1px solid #b8a99a; border-radius: 4px;"><span style="color: #5c3a21;">कर्ज स्थिती:</span> <strong style="color: ${loan.status === 'ACTIVE' && loan.remainingAmount > 0 ? '#c2410c' : '#15803d'};">${loan.status === 'ACTIVE' && loan.remainingAmount > 0 ? 'सुरू' : 'पूर्ण (Completed)'}</strong></div>
           </div>
 
           ${

@@ -253,7 +253,7 @@ export const generateMonthlyEntries = (
  */
 export const getLoanRemainingPrincipal = (loan?: Loan | null): number => {
   if (!loan) return 0;
-  if (loan.status === 'CLOSED') return 0;
+  if (loan.status === 'CLOSED' || loan.status === 'COMPLETED') return 0;
   const principal = Number(loan.principalAmount) || 0;
   if (principal > 0) {
     const paid = Number(loan.paidAmount) || 0;
@@ -268,7 +268,7 @@ export const getLoanRemainingPrincipal = (loan?: Loan | null): number => {
  */
 export const calculateLoanDueInterest = (loan?: Loan | null): number => {
   if (!loan) return 0;
-  if (loan.status === 'CLOSED') return 0;
+  if (loan.status === 'CLOSED' || loan.status === 'COMPLETED') return 0;
   const remPrincipal = getLoanRemainingPrincipal(loan);
   const rate = Number(loan.interestRate) || 0;
   return Math.round((remPrincipal * rate) / 100);

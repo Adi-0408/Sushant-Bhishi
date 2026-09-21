@@ -24,7 +24,9 @@ export const LoanManager: React.FC = () => {
   const [purposeInput, setPurposeInput] = useState('');
 
   const officeCustomerIds = new Set(
-    customers.filter((c) => (activeOffice === 'ALL' || c.officeId === activeOffice) && c.hasLoan).map((c) => c.id)
+    customers
+      .filter((c) => (activeOffice === 'ALL' || c.officeId === activeOffice) && (c.hasLoan || c.bishiType === 'LOAN_ONLY' || loans.some((l) => l.customerId === c.id)))
+      .map((c) => c.id)
   );
 
   const activeLoans = loans.filter((l) => officeCustomerIds.has(l.customerId));
@@ -162,9 +164,20 @@ export const LoanManager: React.FC = () => {
                           {cust.name}
                         </Link>
                       </div>
-                      <span className="text-xs font-extrabold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                        {loan.interestRate}% {language === 'EN' ? 'Interest' : 'व्याज'}
-                      </span>
+                      <div className="flex items-center space-x-1.5">
+                        <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md border ${
+                          loan.status === 'COMPLETED' || loan.status === 'CLOSED' || loan.remainingAmount <= 0
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}>
+                          {loan.status === 'COMPLETED' || loan.status === 'CLOSED' || loan.remainingAmount <= 0
+                            ? (language === 'EN' ? 'Completed' : 'पूर्ण')
+                            : (language === 'EN' ? 'Active' : 'सुरू')}
+                        </span>
+                        <span className="text-xs font-extrabold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                          {loan.interestRate}% {language === 'EN' ? 'Interest' : 'व्याज'}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Purpose note badge if available */}
@@ -251,6 +264,7 @@ export const LoanManager: React.FC = () => {
                     <th className="p-3.5 text-right">{language === 'EN' ? 'Principal Paid' : 'भरलेली मुद्दल'}</th>
                     <th className="p-3.5 text-right text-amber-950 font-black">{language === 'EN' ? 'Interest Paid' : 'भरलेले व्याज'}</th>
                     <th className="p-3.5 text-right">{t.statLoanRemaining}</th>
+                    <th className="p-3.5 text-center">{language === 'EN' ? 'Status' : 'स्थिती'}</th>
                     <th className="p-3.5 text-center">{t.colActions}</th>
                   </tr>
                 </thead>
@@ -291,6 +305,17 @@ export const LoanManager: React.FC = () => {
                           ) : (
                             <span className="text-emerald-700 font-extrabold">₹0</span>
                           )}
+                        </td>
+                        <td className="p-3.5 text-center">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                            loan.status === 'COMPLETED' || loan.status === 'CLOSED' || loan.remainingAmount <= 0
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : 'bg-amber-100 text-amber-800 border border-amber-300'
+                          }`}>
+                            {loan.status === 'COMPLETED' || loan.status === 'CLOSED' || loan.remainingAmount <= 0
+                              ? (language === 'EN' ? 'Completed' : 'पूर्ण (Completed)')
+                              : (language === 'EN' ? 'Active' : 'सुरू')}
+                          </span>
                         </td>
                         <td className="p-3.5 text-center">
                           <Link
