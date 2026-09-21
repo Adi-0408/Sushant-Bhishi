@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   formatCurrency,
@@ -73,6 +73,20 @@ export const CollectionManager: React.FC = () => {
       return cust.modality === 'M';
     }
   });
+
+  // Guarantee strictly unique entries per customer and period
+  const uniqueCollections = useMemo(() => {
+    const seen = new Set<string>();
+    return filteredCollections.filter((item) => {
+      const cust = customers.find((c) => c.id === item.customerId);
+      const acc = (cust?.accountNumber || item.accountNumber || '').trim().toLowerCase();
+      const period = String(item.periodIndex ?? '');
+      const key = acc ? `${acc}_${period}` : `${item.customerId}_${period}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [filteredCollections, customers]);
 
   const handleOpenQuickCollect = (customerId?: string, collectionId?: string) => {
     setSelectedCustomerId(customerId);
@@ -198,7 +212,7 @@ export const CollectionManager: React.FC = () => {
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        {filteredCollections.length === 0 ? (
+        {uniqueCollections.length === 0 ? (
           <div className="p-12 text-center text-slate-500 text-sm font-medium space-y-3">
             <div>
               {statusFilter === 'PENDING'
@@ -216,7 +230,7 @@ export const CollectionManager: React.FC = () => {
           <>
             {/* Mobile Cards View (< md screens) */}
             <div className="block md:hidden space-y-3 p-3 bg-slate-50/50">
-              {filteredCollections.map((item) => {
+              {uniqueCollections.map((item) => {
                 const cust = customers.find((c) => c.id === item.customerId);
                 if (!cust) return null;
 
@@ -346,7 +360,7 @@ export const CollectionManager: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
-                  {filteredCollections.map((item) => {
+                  {uniqueCollections.map((item) => {
                     const cust = customers.find((c) => c.id === item.customerId);
                     if (!cust) return null;
 

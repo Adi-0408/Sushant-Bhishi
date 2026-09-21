@@ -47,6 +47,7 @@ export interface Customer {
   hasLoan: boolean;
   status: 'ACTIVE' | 'COMPLETED';
   createdAt: string;
+  updatedAt?: string;
   summary?: {
     totalExpected: number;
     totalCollected: number;

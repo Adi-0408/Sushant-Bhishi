@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { BishiType, OfficeId } from '../types';
 import { QuickCollectionModal } from '../components/collections/QuickCollectionModal';
@@ -73,7 +73,22 @@ export const Dashboard: React.FC = () => {
 
   const filteredCustomerIds = new Set(filteredCustomers.map((c) => c.id));
 
-  const filteredCollections = collections.filter((c) => filteredCustomerIds.has(c.customerId));
+  const filteredCollections = useMemo(() => {
+    const raw = collections.filter((c) => filteredCustomerIds.has(c.customerId));
+    const seen = new Map<string, typeof raw[0]>();
+    for (const c of raw) {
+      const key = `${c.customerId || c.accountNumber}_${c.bishiType || ''}_${c.periodIndex}`;
+      if (!seen.has(key)) {
+        seen.set(key, c);
+      } else {
+        const existing = seen.get(key)!;
+        if ((c.collectedAmount || 0) > (existing.collectedAmount || 0) || (c.updatedAt || 0) > (existing.updatedAt || 0)) {
+          seen.set(key, c);
+        }
+      }
+    }
+    return Array.from(seen.values());
+  }, [collections, filteredCustomerIds]);
   const filteredLoans = loans.filter((l) => filteredCustomerIds.has(l.customerId) && l.status === 'ACTIVE');
 
   const totalCustomersCount = filteredCustomers.length;

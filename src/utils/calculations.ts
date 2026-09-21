@@ -83,9 +83,22 @@ export const calculateCustomerFinancials = (
   loan?: Loan | null,
   bishiConfigs?: BishiConfig[]
 ): CalculatedFinancials => {
-  const customerCollections = collections.filter(
+  const rawCustomerCollections = collections.filter(
     (c) => c.customerId === customer.id || (customer.accountNumber && String(c.accountNumber) === String(customer.accountNumber))
   );
+
+  const seenPeriods = new Map<number, typeof rawCustomerCollections[0]>();
+  for (const c of rawCustomerCollections) {
+    if (!seenPeriods.has(c.periodIndex)) {
+      seenPeriods.set(c.periodIndex, c);
+    } else {
+      const existing = seenPeriods.get(c.periodIndex)!;
+      if ((c.collectedAmount || 0) > (existing.collectedAmount || 0) || (c.updatedAt || 0) > (existing.updatedAt || 0)) {
+        seenPeriods.set(c.periodIndex, c);
+      }
+    }
+  }
+  const customerCollections = Array.from(seenPeriods.values());
 
   let totalExpectedBishi = 0;
   let totalCollectedBishi = 0;

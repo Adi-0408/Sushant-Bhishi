@@ -381,6 +381,115 @@ const sortInterestRatesHelper = (rates: InterestRateConfig[]): InterestRateConfi
   });
 };
 
+// Deduplicates collection entries so each customer has strictly ONE installment entry per periodIndex
+export const deduplicateCollections = (entries: CollectionEntry[]): CollectionEntry[] => {
+  if (!entries || entries.length === 0) return [];
+
+  const map = new Map<string, CollectionEntry>();
+
+  entries.forEach((entry) => {
+    if (!entry) return;
+    const custId = String(entry.customerId || '').trim();
+    const acc = String(entry.accountNumber || '').trim().toLowerCase();
+    const bishi = String(entry.bishiType || '').trim();
+    const period = String(entry.periodIndex ?? '');
+
+    // Canonical key: customer (acc or custId) + periodIndex
+    const primaryKey = acc ? `${acc}_${period}` : `${custId}_${period}`;
+    const key = bishi ? `${primaryKey}_${bishi}` : primaryKey;
+
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, entry);
+    } else {
+      // Pick the newest or best updated record
+      const existingTime = existing.updatedAt || '';
+      const entryTime = entry.updatedAt || '';
+
+      if (entryTime && (!existingTime || entryTime > existingTime)) {
+        map.set(key, entry);
+      } else if (existingTime && (!entryTime || existingTime > entryTime)) {
+        // Keep existing
+      } else if (entry.status === 'PAID' && existing.status !== 'PAID') {
+        map.set(key, entry);
+      } else if ((entry.collectedAmount || 0) > (existing.collectedAmount || 0)) {
+        map.set(key, entry);
+      } else if (entry.paymentDate && !existing.paymentDate) {
+        map.set(key, entry);
+      }
+    }
+  });
+
+  return Array.from(map.values()).sort((a, b) => (a.periodIndex || 0) - (b.periodIndex || 0));
+};
+
+// Deduplicates customers by accountNumber (or ID)
+export const deduplicateCustomers = (custs: Customer[]): Customer[] => {
+  if (!custs || custs.length === 0) return [];
+
+  const map = new Map<string, Customer>();
+  custs.forEach((c) => {
+    if (!c) return;
+    const acc = (c.accountNumber || '').trim().toLowerCase();
+    const key = acc || c.id;
+
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, c);
+    } else {
+      const existingTime = existing.updatedAt || existing.createdAt || '';
+      const entryTime = c.updatedAt || c.createdAt || '';
+      if (entryTime && (!existingTime || entryTime > existingTime)) {
+        map.set(key, c);
+      }
+    }
+  });
+
+  return Array.from(map.values());
+};
+
+// Deduplicates loans by accountNumber or customerId
+export const deduplicateLoans = (loans: Loan[]): Loan[] => {
+  if (!loans || loans.length === 0) return [];
+
+  const map = new Map<string, Loan>();
+  loans.forEach((l) => {
+    if (!l) return;
+    const acc = (l.accountNumber || '').trim().toLowerCase();
+    const key = acc || l.customerId || l.id;
+
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, l);
+    } else {
+      const existingTime = existing.updatedAt || existing.issueDate || '';
+      const entryTime = l.updatedAt || l.issueDate || '';
+      if (entryTime && (!existingTime || entryTime > existingTime)) {
+        map.set(key, l);
+      }
+    }
+  });
+
+  return Array.from(map.values());
+};
+
+// Deduplicates loan payments
+export const deduplicateLoanPayments = (payments: LoanPayment[]): LoanPayment[] => {
+  if (!payments || payments.length === 0) return [];
+
+  const map = new Map<string, LoanPayment>();
+  payments.forEach((p) => {
+    if (!p) return;
+    const key = p.id || `${p.loanId || p.customerId}_${p.paymentDate}_${p.paidAmount}_${p.interestPaid}`;
+    if (!map.has(key)) {
+      map.set(key, p);
+    }
+  });
+
+  return Array.from(map.values()).sort((a, b) => (b.paymentDate || '').localeCompare(a.paymentDate || ''));
+};
+
+
 // Initialize default configs if empty
 const initializeDefaultConfigs = () => {
   const isInitialized = localStorage.getItem(STORAGE_KEYS.BISHI_CONFIGS) !== null;
@@ -561,7 +670,14 @@ export const StorageService = {
   },
 
   // Customer Operations
-  getCustomers: (): Customer[] => getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []),
+  getCustomers: (): Customer[] => {
+    const raw = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
+    const deduped = deduplicateCustomers(raw);
+    if (deduped.length !== raw.length) {
+      setStoredData(STORAGE_KEYS.CUSTOMERS, deduped);
+    }
+    return deduped;
+  },
 
   getCustomerById: (id: string): Customer | undefined => {
     return StorageService.getCustomers().find((c) => c.id === id);
@@ -802,13 +918,38 @@ export const StorageService = {
   },
 
   // Collection Entries Operations
-  getCollections: (): CollectionEntry[] => getStoredData<CollectionEntry[]>(STORAGE_KEYS.COLLECTIONS, []),
+  getCollections: (): CollectionEntry[] => {
+    const raw = getStoredData<CollectionEntry[]>(STORAGE_KEYS.COLLECTIONS, []);
+    const deduped = deduplicateCollections(raw);
+    if (deduped.length !== raw.length) {
+      setStoredData(STORAGE_KEYS.COLLECTIONS, deduped);
+    }
+    return deduped;
+  },
 
   saveCollectionsBatch: (newEntries: CollectionEntry[]): void => {
     const collections = StorageService.getCollections();
-    const newIds = new Set(newEntries.map((e) => e.id));
-    const filtered = collections.filter((c) => !newIds.has(c.id));
-    setStoredData(STORAGE_KEYS.COLLECTIONS, [...newEntries, ...filtered]);
+    const newEntryKeys = new Set(
+      newEntries.map((e) => {
+        const acc = (e.accountNumber || '').trim().toLowerCase();
+        const custId = (e.customerId || '').trim();
+        const bishi = (e.bishiType || '').trim();
+        const period = String(e.periodIndex ?? '');
+        const primaryKey = acc ? `${acc}_${period}` : `${custId}_${period}`;
+        return bishi ? `${primaryKey}_${bishi}` : primaryKey;
+      })
+    );
+    const filtered = collections.filter((c) => {
+      const acc = (c.accountNumber || '').trim().toLowerCase();
+      const custId = (c.customerId || '').trim();
+      const bishi = (c.bishiType || '').trim();
+      const period = String(c.periodIndex ?? '');
+      const primaryKey = acc ? `${acc}_${period}` : `${custId}_${period}`;
+      const key = bishi ? `${primaryKey}_${bishi}` : primaryKey;
+      return !newEntryKeys.has(key);
+    });
+    const combined = deduplicateCollections([...newEntries, ...filtered]);
+    setStoredData(STORAGE_KEYS.COLLECTIONS, combined);
     syncBatchToFirestore(
       'collections',
       newEntries.map((entry) => ({ docId: entry.id, data: entry }))
@@ -853,9 +994,9 @@ export const StorageService = {
 
   // Loan Operations
   getLoans: (): Loan[] => {
-    const rawLoans = getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []);
-    const rawCustomers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
-    const rawPayments = getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []);
+    const rawLoans = deduplicateLoans(getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []));
+    const rawCustomers = StorageService.getCustomers();
+    const rawPayments = StorageService.getLoanPayments();
     let hasChanges = false;
 
     const sanitized = rawLoans.map((loan) => {
@@ -995,9 +1136,9 @@ export const StorageService = {
 
   // Loan Payment History Operations
   getLoanPayments: (): LoanPayment[] => {
-    const rawPayments = getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []);
-    const rawCustomers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
-    const rawLoans = getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []);
+    const rawPayments = deduplicateLoanPayments(getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []));
+    const rawCustomers = StorageService.getCustomers();
+    const rawLoans = StorageService.getLoans();
     let hasChanges = false;
 
     const sanitized = rawPayments.map((p) => {
@@ -1319,8 +1460,20 @@ export const StorageService = {
       if (!custSnap.empty) {
         hadRemoteData = true;
         const remoteCusts: Customer[] = [];
+        const seenCustDocs = new Map<string, any>();
         custSnap.forEach((d: any) => {
           const raw = d.data();
+          const acc = (raw.accountNumber || '').trim().toLowerCase();
+          const key = acc || raw.id || d.id;
+          if (seenCustDocs.has(key)) {
+            const oldDoc = seenCustDocs.get(key);
+            const readableId = getFirestoreDocId('customers', d.id, raw);
+            const toDeleteId = d.id === readableId ? oldDoc.id : d.id;
+            deleteDoc(doc(db, 'customers', toDeleteId)).catch(() => {});
+            if (d.id === readableId) seenCustDocs.set(key, d);
+          } else {
+            seenCustDocs.set(key, d);
+          }
           remoteCusts.push({
             ...raw,
             id: raw.id || d.id,
@@ -1328,35 +1481,65 @@ export const StorageService = {
             customerName: raw.customerName || raw.name || '',
           });
         });
-        setStoredData(STORAGE_KEYS.CUSTOMERS, remoteCusts);
+        setStoredData(STORAGE_KEYS.CUSTOMERS, deduplicateCustomers(remoteCusts));
       }
 
       if (!collSnap.empty) {
         hadRemoteData = true;
         const remoteColls: CollectionEntry[] = [];
+        const seenCollDocs = new Map<string, any>();
         collSnap.forEach((d: any) => {
           const raw = d.data();
+          const acc = (raw.accountNumber || '').trim().toLowerCase();
+          const custId = (raw.customerId || '').trim();
+          const bishi = (raw.bishiType || '').trim();
+          const period = String(raw.periodIndex ?? '');
+          const primaryKey = acc ? `${acc}_${period}` : `${custId}_${period}`;
+          const key = bishi ? `${primaryKey}_${bishi}` : primaryKey;
+
+          if (seenCollDocs.has(key)) {
+            const oldDoc = seenCollDocs.get(key);
+            const readableId = getFirestoreDocId('collections', d.id, raw);
+            const toDeleteId = d.id === readableId ? oldDoc.id : d.id;
+            deleteDoc(doc(db, 'collections', toDeleteId)).catch(() => {});
+            if (d.id === readableId) seenCollDocs.set(key, d);
+          } else {
+            seenCollDocs.set(key, d);
+          }
+
           remoteColls.push({
             ...raw,
             id: raw.id || d.id,
             customerName: raw.customerName || '',
           });
         });
-        setStoredData(STORAGE_KEYS.COLLECTIONS, remoteColls);
+        setStoredData(STORAGE_KEYS.COLLECTIONS, deduplicateCollections(remoteColls));
       }
 
       if (!loanSnap.empty) {
         hadRemoteData = true;
         const remoteLoans: Loan[] = [];
+        const seenLoanDocs = new Map<string, any>();
         loanSnap.forEach((d: any) => {
           const raw = d.data();
+          const acc = (raw.accountNumber || '').trim().toLowerCase();
+          const key = acc || raw.customerId || raw.id || d.id;
+          if (seenLoanDocs.has(key)) {
+            const oldDoc = seenLoanDocs.get(key);
+            const readableId = getFirestoreDocId('loans', d.id, raw);
+            const toDeleteId = d.id === readableId ? oldDoc.id : d.id;
+            deleteDoc(doc(db, 'loans', toDeleteId)).catch(() => {});
+            if (d.id === readableId) seenLoanDocs.set(key, d);
+          } else {
+            seenLoanDocs.set(key, d);
+          }
           remoteLoans.push({
             ...raw,
             id: raw.id || d.id,
             customerName: raw.customerName || '',
           });
         });
-        setStoredData(STORAGE_KEYS.LOANS, remoteLoans);
+        setStoredData(STORAGE_KEYS.LOANS, deduplicateLoans(remoteLoans));
       }
 
       if (!loanPaySnap.empty) {
@@ -1369,7 +1552,7 @@ export const StorageService = {
             id: raw.id || d.id,
           });
         });
-        setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, remotePayments);
+        setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, deduplicateLoanPayments(remotePayments));
       }
 
       if (!bishiSnap.empty) {
@@ -1466,7 +1649,7 @@ export const StorageService = {
             };
             remoteList.push(fullCustomer);
           });
-          setStoredData(STORAGE_KEYS.CUSTOMERS, remoteList);
+          setStoredData(STORAGE_KEYS.CUSTOMERS, deduplicateCustomers(remoteList));
           debouncedUpdate();
         },
         (err: any) => console.warn('Firestore customers listener error:', err?.message || err)
@@ -1489,7 +1672,7 @@ export const StorageService = {
             };
             remoteList.push(fullLoan);
           });
-          setStoredData(STORAGE_KEYS.LOANS, remoteList);
+          setStoredData(STORAGE_KEYS.LOANS, deduplicateLoans(remoteList));
           debouncedUpdate();
         },
         (err: any) => console.warn('Firestore loans listener error:', err?.message || err)
@@ -1512,7 +1695,7 @@ export const StorageService = {
             };
             remoteList.push(fullColl);
           });
-          setStoredData(STORAGE_KEYS.COLLECTIONS, remoteList);
+          setStoredData(STORAGE_KEYS.COLLECTIONS, deduplicateCollections(remoteList));
           debouncedUpdate();
         },
         (err: any) => console.warn('Firestore collections listener error:', err?.message || err)
@@ -1533,7 +1716,7 @@ export const StorageService = {
               id: raw.id || d.id,
             });
           });
-          setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, remoteList);
+          setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, deduplicateLoanPayments(remoteList));
           debouncedUpdate();
         },
         (err: any) => console.warn('Firestore loanPayments listener error:', err?.message || err)
