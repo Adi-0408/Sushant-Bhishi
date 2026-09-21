@@ -43,8 +43,8 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
   const [address, setAddress] = useState('');
   const [photoURL, setPhotoURL] = useState('');
 
-  // Old Bishi data migration
-  const [alreadyPaidInstallments, setAlreadyPaidInstallments] = useState<number | ''>('');
+  // Old Bishi data migration (Amount paid by customer)
+  const [alreadyPaidAmount, setAlreadyPaidAmount] = useState<number | ''>('');
 
   // Loan fields with historical date & repayment support
   const [hasLoan, setHasLoan] = useState<boolean>(false);
@@ -118,7 +118,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           setLoanPaidInterest(existingLoan.totalInterestPaid || '');
         }
       }
-      setAlreadyPaidInstallments('');
+      setAlreadyPaidAmount('');
     } else {
       const initType = initialLoanOnly ? 'LOAN_ONLY' : (bishiConfigs.length > 0 ? bishiConfigs[0].id : '15_AUGUST');
       const autoAcc = generateNextAccountNumber(initType, customers, bishiConfigs);
@@ -146,7 +146,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
       setLoanIssueDate(initStartDate);
       setLoanPaidPrincipal('');
       setLoanPaidInterest('');
-      setAlreadyPaidInstallments('');
+      setAlreadyPaidAmount('');
     }
     setError('');
   }, [editingCustomer, isOpen, activeOffice, defaultInterestRate, defaultPenaltyRate, initialLoanOnly, customers, bishiConfigs]);
@@ -402,25 +402,37 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
               ? generateWeeklyEntries(newCustomer, bishiDate, targetInstallments)
               : generateMonthlyEntries(newCustomer, bishiDate, targetInstallments);
 
-          const paidCount = Math.min(targetInstallments, Math.max(0, Number(alreadyPaidInstallments) || 0));
+          let remainingPaidBudget = Math.max(0, Number(alreadyPaidAmount) || 0);
           const effectiveRate = Number(interestRate) || (modality === 'W' ? 2.5 : 10);
 
           const preparedCollections = collectionEntries.map((c) => {
-            const isPrePaid = c.periodIndex <= paidCount;
-            const singleInterest = Math.round((c.expectedAmount * effectiveRate) / 100);
+            const exp = c.expectedAmount || 0;
+            let allocated = 0;
+            if (remainingPaidBudget >= exp) {
+              allocated = exp;
+              remainingPaidBudget -= exp;
+            } else if (remainingPaidBudget > 0) {
+              allocated = remainingPaidBudget;
+              remainingPaidBudget = 0;
+            }
+
+            const isPaid = allocated >= exp && exp > 0;
+            const isPartial = allocated > 0 && allocated < exp;
+            const singleInterest = Math.round((allocated * effectiveRate) / 100);
+
             return {
               ...c,
               customerName: newCustomer.name,
               id: `coll_${newCustomer.id}_${c.periodIndex}`,
-              collectedAmount: isPrePaid ? c.expectedAmount : 0,
-              remainingAmount: isPrePaid ? 0 : c.expectedAmount,
-              interestAmount: isPrePaid ? singleInterest : 0,
-              totalPaid: isPrePaid ? c.expectedAmount : 0,
-              totalWithPenalty: isPrePaid ? c.expectedAmount : 0,
-              status: isPrePaid ? ('PAID' as const) : ('PENDING' as const),
-              paymentDate: isPrePaid ? c.dueDate : undefined,
-              paymentTime: isPrePaid ? '10:00' : undefined,
-              paymentMode: isPrePaid ? ('CASH' as const) : undefined,
+              collectedAmount: allocated,
+              remainingAmount: Math.max(0, exp - allocated),
+              interestAmount: singleInterest,
+              totalPaid: allocated,
+              totalWithPenalty: allocated,
+              status: isPaid ? ('PAID' as const) : isPartial ? ('PARTIAL' as const) : ('PENDING' as const),
+              paymentDate: allocated > 0 ? c.dueDate : undefined,
+              paymentTime: allocated > 0 ? '10:00' : undefined,
+              paymentMode: allocated > 0 ? ('CASH' as const) : undefined,
             };
           });
 
@@ -518,6 +530,14 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
   const loanRemainingTotal = loanRemPrincipal + loanRemInterest;
 
   const bishiElapsedMonths = calculateElapsedMonths(bishiDate);
+  const bishiInstallmentAmount = Number(amount) || 0;
+  const targetInstallmentsCount = Number(totalInstallments) || (modality === 'W' ? 40 : 10);
+  const totalBishiExpectedAmount = bishiInstallmentAmount * targetInstallmentsCount;
+  const paidAmountNum = totalBishiExpectedAmount > 0
+    ? Math.min(totalBishiExpectedAmount, Math.max(0, Number(alreadyPaidAmount) || 0))
+    : Math.max(0, Number(alreadyPaidAmount) || 0);
+  const fullInstallmentsCovered = bishiInstallmentAmount > 0 ? Math.floor(paidAmountNum / bishiInstallmentAmount) : 0;
+  const remainderInstallmentAmount = bishiInstallmentAmount > 0 ? (paidAmountNum % bishiInstallmentAmount) : 0;
 
   return (
     <ModalPortal>
@@ -751,53 +771,60 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
               </div>
             )}
 
-            {/* Already Paid Installments for Old Bishi Customers */}
+            {/* Already Paid Amount for Old Bishi Customers */}
             {bishiType !== 'LOAN_ONLY' && !editingCustomer && (
-              <div className="sm:col-span-2 bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200/80 space-y-2">
+              <div className="sm:col-span-2 bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200/80 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-extrabold text-emerald-950">
-                    {language === 'EN' ? 'Already Paid Installments (Old Records - Optional)' : 'आधीच जमा झालेले हप्ते (जुना रेकॉर्ड - ऐच्छिक)'}
+                    {language === 'EN'
+                      ? 'Already Paid Bishi Amount (₹) (Old Records - Optional)'
+                      : 'आधीच जमा झालेली एकूण रक्कम (₹) (जुना रेकॉर्ड - ऐच्छिक)'}
                   </label>
-                  <span className="text-[11px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
-                    {alreadyPaidInstallments ? `${alreadyPaidInstallments} / ${totalInstallments} जमा` : (language === 'EN' ? '0 Paid' : 'शून्य जमा')}
+                  <span className="text-[11px] font-black text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md border border-emerald-300">
+                    {paidAmountNum > 0
+                      ? `₹${paidAmountNum.toLocaleString('en-IN')} जमा (${fullInstallmentsCovered + (remainderInstallmentAmount > 0 ? 1 : 0)} / ${targetInstallmentsCount} हप्ते)`
+                      : (language === 'EN' ? '₹0 Paid' : '₹० जमा')}
                   </span>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="number"
-                    min={0}
-                    max={Number(totalInstallments) || 200}
-                    value={alreadyPaidInstallments}
-                    onChange={(e) => setAlreadyPaidInstallments(e.target.value ? Number(e.target.value) : '')}
-                    placeholder={language === 'EN' ? 'e.g. 20 or 40' : 'उदा. 20 किंवा 40'}
-                    className="w-1/2 px-3.5 py-2 rounded-xl border border-emerald-300 text-sm font-bold text-emerald-950 bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                  <div className="relative flex-1 min-w-[150px]">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-emerald-700">₹</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={totalBishiExpectedAmount > 0 ? totalBishiExpectedAmount : undefined}
+                      value={alreadyPaidAmount}
+                      onChange={(e) => setAlreadyPaidAmount(e.target.value ? Number(e.target.value) : '')}
+                      placeholder={language === 'EN' ? `e.g. ${totalBishiExpectedAmount || 12000}` : `उदा. ${totalBishiExpectedAmount || 12000}`}
+                      className="w-full pl-7 pr-3 py-2 rounded-xl border border-emerald-300 text-sm font-black text-emerald-950 bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setAlreadyPaidInstallments(Number(totalInstallments) || (modality === 'W' ? 40 : 10))}
-                    className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition-colors cursor-pointer"
+                    onClick={() => setAlreadyPaidAmount(totalBishiExpectedAmount)}
+                    className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition-colors cursor-pointer shrink-0 shadow-2xs"
                   >
-                    {language === 'EN' ? 'All Paid' : 'सर्व जमा'}
+                    {language === 'EN' ? `All (₹${totalBishiExpectedAmount})` : `सर्व जमा (₹${totalBishiExpectedAmount})`}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAlreadyPaidInstallments(Math.floor((Number(totalInstallments) || 40) / 2))}
-                    className="px-3 py-2 rounded-xl bg-emerald-200 hover:bg-emerald-300 text-emerald-900 text-xs font-bold transition-colors cursor-pointer"
+                    onClick={() => setAlreadyPaidAmount(Math.round(totalBishiExpectedAmount / 2))}
+                    className="px-3 py-2 rounded-xl bg-emerald-200 hover:bg-emerald-300 text-emerald-900 text-xs font-bold transition-colors cursor-pointer shrink-0"
                   >
-                    {language === 'EN' ? 'Half Paid' : 'अर्धे जमा'}
+                    {language === 'EN' ? `Half (₹${Math.round(totalBishiExpectedAmount / 2)})` : `अर्धे (₹${Math.round(totalBishiExpectedAmount / 2)})`}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAlreadyPaidInstallments('')}
-                    className="px-2.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-600 hover:text-slate-900 text-xs font-bold transition-colors cursor-pointer"
+                    onClick={() => setAlreadyPaidAmount('')}
+                    className="px-2.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-600 hover:text-slate-900 text-xs font-bold transition-colors cursor-pointer shrink-0"
                   >
                     {language === 'EN' ? 'Clear' : 'रीसेट'}
                   </button>
                 </div>
                 <p className="text-[11px] text-emerald-800 font-semibold">
                   {language === 'EN'
-                    ? 'The first installments will automatically be saved as PAID on their respective past due dates.'
-                    : 'दिलेले पहिले हप्ते त्यांच्या संबंधित जुन्या तारखांनुसार जमा (PAID) म्हणून आपोआप सेव्ह केले जातील.'}
+                    ? 'The entered paid amount will automatically mark past installments as PAID on their respective historical due dates.'
+                    : 'भरलेल्या रकमेनुसार संबंधित जुन्या तारखांचे हप्ते आपोआप जमा (PAID) म्हणून नोंदवले जातील.'}
                 </p>
               </div>
             )}
