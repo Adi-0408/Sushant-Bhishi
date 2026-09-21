@@ -84,7 +84,7 @@ export const Dashboard: React.FC = () => {
         const existing = seen.get(key)!;
         const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
         const currentTime = c.updatedAt ? new Date(c.updatedAt).getTime() : 0;
-        if ((c.collectedAmount || 0) > (existing.collectedAmount || 0) || currentTime > existingTime) {
+        if (currentTime > existingTime) {
           seen.set(key, c);
         }
       }

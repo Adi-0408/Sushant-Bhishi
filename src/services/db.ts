@@ -314,7 +314,10 @@ const syncToFirestore = async (collectionName: string, docId: string, data: any)
     const readableDocId = getFirestoreDocId(collectionName, docId, enrichedData);
     const cleanData = sanitizeForFirestore(enrichedData);
     const ref = doc(db, collectionName, readableDocId);
-    await setDoc(ref, cleanData, { merge: true });
+    await setDoc(ref, cleanData);
+    if (readableDocId !== docId) {
+      deleteDoc(doc(db, collectionName, docId)).catch(() => {});
+    }
     console.log(`[Firestore Sync] Saved to ${collectionName}/${readableDocId}`);
     endSyncOp(true);
   } catch (e: any) {
@@ -383,7 +386,7 @@ const sortInterestRatesHelper = (rates: InterestRateConfig[]): InterestRateConfi
 
 // Deduplicates collection entries so each customer has strictly ONE installment entry per periodIndex
 export const deduplicateCollections = (entries: CollectionEntry[]): CollectionEntry[] => {
-  if (!entries || entries.length === 0) return [];
+  if (!entries || !Array.isArray(entries) || entries.length === 0) return [];
 
   const map = new Map<string, CollectionEntry>();
 
@@ -402,20 +405,20 @@ export const deduplicateCollections = (entries: CollectionEntry[]): CollectionEn
     if (!existing) {
       map.set(key, entry);
     } else {
-      // Pick the newest or best updated record
-      const existingTime = existing.updatedAt || '';
-      const entryTime = entry.updatedAt || '';
+      // Strictly pick the newest record based on updatedAt timestamp
+      const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+      const entryTime = entry.updatedAt ? new Date(entry.updatedAt).getTime() : 0;
 
-      if (entryTime && (!existingTime || entryTime > existingTime)) {
+      if (entryTime > existingTime) {
         map.set(key, entry);
-      } else if (existingTime && (!entryTime || existingTime > entryTime)) {
+      } else if (existingTime > entryTime) {
         // Keep existing
-      } else if (entry.status === 'PAID' && existing.status !== 'PAID') {
-        map.set(key, entry);
-      } else if ((entry.collectedAmount || 0) > (existing.collectedAmount || 0)) {
-        map.set(key, entry);
-      } else if (entry.paymentDate && !existing.paymentDate) {
-        map.set(key, entry);
+      } else {
+        // When timestamps are identical, pick the canonical readable doc ID if one matches
+        const readableId = getFirestoreDocId('collections', entry.id, entry);
+        if (entry.id === readableId && existing.id !== readableId) {
+          map.set(key, entry);
+        }
       }
     }
   });
@@ -971,12 +974,37 @@ export const StorageService = {
     const index = collections.findIndex((c) => c.id === id);
     if (index === -1) throw new Error('जमा नोंद सापडली नाही.');
 
-    collections[index] = { ...collections[index], ...updates, updatedAt: new Date().toISOString() };
-    setStoredData(STORAGE_KEYS.COLLECTIONS, collections);
-    syncToFirestore('collections', id, collections[index]);
+    const target = collections[index];
+    const targetPeriod = target.periodIndex;
+    const targetCustId = target.customerId;
+    const targetAcc = String(target.accountNumber || '').trim().toLowerCase();
+    const nowIso = new Date().toISOString();
+
+    const updatedEntry: CollectionEntry = {
+      ...target,
+      ...updates,
+      updatedAt: nowIso,
+    };
+
+    // Update the target and also clean up any duplicate records for this customer and period
+    const updatedList = collections.map((c) => {
+      const cCustId = c.customerId;
+      const cAcc = String(c.accountNumber || '').trim().toLowerCase();
+      const isSamePeriod = c.periodIndex === targetPeriod;
+      const isSameCustomer = (cCustId && cCustId === targetCustId) || (targetAcc && cAcc === targetAcc);
+      if (c.id === id || (isSameCustomer && isSamePeriod)) {
+        return { ...c, ...updates, updatedAt: nowIso };
+      }
+      return c;
+    });
+
+    const dedupedList = deduplicateCollections(updatedList);
+    setStoredData(STORAGE_KEYS.COLLECTIONS, dedupedList);
+
+    syncToFirestore('collections', id, updatedEntry);
 
     // Re-sync customer document so summary and installments in Firestore update immediately
-    const custId = collections[index].customerId;
+    const custId = updatedEntry.customerId;
     if (custId) {
       const cust = StorageService.getCustomerById(custId);
       if (cust) {
@@ -984,7 +1012,7 @@ export const StorageService = {
       }
     }
 
-    return collections[index];
+    return updatedEntry;
   },
 
   deleteCollectionEntry: async (id: string): Promise<void> => {

@@ -106,7 +106,7 @@ export const CustomerDetail: React.FC = () => {
         const existing = map.get(c.periodIndex)!;
         const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
         const currentTime = c.updatedAt ? new Date(c.updatedAt).getTime() : 0;
-        if ((c.collectedAmount || 0) > (existing.collectedAmount || 0) || currentTime > existingTime) {
+        if (currentTime > existingTime) {
           map.set(c.periodIndex, c);
         }
       }
@@ -177,9 +177,9 @@ export const CustomerDetail: React.FC = () => {
     setPaymentTime(entry.paymentTime || getCurrentTimeStr());
     setPaymentMode(entry.paymentMode || 'CASH');
     setCollectedInput(
-      entry.status === 'PAID' || entry.status === 'PARTIAL'
+      entry.status === 'PAID' || entry.status === 'PARTIAL' || (entry.collectedAmount !== undefined && entry.collectedAmount !== null && (entry.collectedAmount === 0 && entry.paymentDate === ''))
         ? (entry.collectedAmount ?? 0)
-        : (entry.remainingAmount > 0 ? entry.remainingAmount : entry.expectedAmount)
+        : (entry.collectedAmount !== undefined && entry.collectedAmount > 0 ? entry.collectedAmount : (entry.remainingAmount > 0 ? entry.remainingAmount : entry.expectedAmount))
     );
     setInterestInput(entry.interestAmount || 0);
     setPenaltyInput(entry.penaltyAmount || 0);

@@ -241,24 +241,25 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
     let bishiStatus = '';
 
     // 1. Record Bishi Collection Deposit
-    if (!isLoanOnly && selectedEntry && (bishiVal > 0 || bishiPenaltyVal > 0)) {
+    if (!isLoanOnly && selectedEntry && (collectedInput !== '' || bishiPenaltyVal > 0)) {
       const calc = calculateCollectionEntry(
         selectedEntry.expectedAmount,
         bishiVal,
         selectedCustomer.interestRate,
         bishiPenaltyVal,
-        selectedEntry.collectedAmount || 0
+        0,
+        true
       );
 
       const totalWithPen = calc.collectedAmount + bishiPenaltyVal;
 
       StorageService.updateCollectionEntry(selectedEntry.id, {
-        paymentDate: effectiveDate,
-        paymentTime: effectiveTime,
+        paymentDate: calc.collectedAmount > 0 ? effectiveDate : '',
+        paymentTime: calc.collectedAmount > 0 ? effectiveTime : '',
         paymentMode: paymentMode,
         collectedAmount: calc.collectedAmount,
         remainingAmount: calc.remainingAmount,
-        interestAmount: calc.interestAmount,
+        interestAmount: calc.collectedAmount > 0 ? calc.interestAmount : 0,
         penaltyAmount: bishiPenaltyVal,
         totalPaid: totalWithPen,
         totalWithPenalty: totalWithPen,
@@ -268,12 +269,14 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
 
       bishiSuccess = true;
       bishiRemaining = calc.remainingAmount;
-      bishiStatus = calc.status === 'PAID' ? `✅ ${t.statusPaid}` : `⚠️ ${t.statusPartial}`;
+      bishiStatus = calc.status === 'PAID' ? `✅ ${t.statusPaid}` : (calc.status === 'PARTIAL' ? `⚠️ ${t.statusPartial}` : '⏳ बाकी');
 
-      SmsService.sendSms(selectedCustomer, 'COLLECTION', {
-        amount: totalWithPen,
-        remaining: calc.remainingAmount,
-      });
+      if (calc.collectedAmount > 0) {
+        SmsService.sendSms(selectedCustomer, 'COLLECTION', {
+          amount: totalWithPen,
+          remaining: calc.remainingAmount,
+        });
+      }
     }
 
     // 2. Record Loan & Interest Payment (if customer has active loan and amounts entered)

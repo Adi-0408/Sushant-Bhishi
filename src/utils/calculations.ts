@@ -95,7 +95,7 @@ export const calculateCustomerFinancials = (
       const existing = seenPeriods.get(c.periodIndex)!;
       const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
       const currentTime = c.updatedAt ? new Date(c.updatedAt).getTime() : 0;
-      if ((c.collectedAmount || 0) > (existing.collectedAmount || 0) || currentTime > existingTime) {
+      if (currentTime > existingTime) {
         seenPeriods.set(c.periodIndex, c);
       }
     }
