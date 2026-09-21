@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Customer, BishiConfig, BishiType, Modality, OfficeId } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { StorageService } from '../../services/db';
-import { generateWeeklyEntries, generateMonthlyEntries } from '../../utils/calculations';
+import { generateWeeklyEntries, generateMonthlyEntries, calculateElapsedMonths } from '../../utils/calculations';
 import { generateNextAccountNumber } from '../../utils/formatters';
 import { MarathiTextInput, convertTextToMarathi } from '../../components/common/MarathiTextInput';
 import { CustomDropdown } from '../../components/common/CustomDropdown';
 import { ModalPortal } from '../../components/common/ModalPortal';
-import { X, UserPlus, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { X, UserPlus, Save, AlertCircle, CheckCircle2, Landmark, Calendar, Clock, DollarSign } from 'lucide-react';
 
 interface CustomerFormModalProps {
   isOpen: boolean;
@@ -43,10 +43,16 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
   const [address, setAddress] = useState('');
   const [photoURL, setPhotoURL] = useState('');
 
-  // Loan fields
+  // Old Bishi data migration
+  const [alreadyPaidInstallments, setAlreadyPaidInstallments] = useState<number | ''>('');
+
+  // Loan fields with historical date & repayment support
   const [hasLoan, setHasLoan] = useState<boolean>(false);
   const [loanPrincipal, setLoanPrincipal] = useState<number | ''>('');
-  const [loanInterestRate, setLoanInterestRate] = useState<number | ''>(12);
+  const [loanInterestRate, setLoanInterestRate] = useState<number | ''>(2);
+  const [loanIssueDate, setLoanIssueDate] = useState<string>('');
+  const [loanPaidPrincipal, setLoanPaidPrincipal] = useState<number | ''>('');
+  const [loanPaidInterest, setLoanPaidInterest] = useState<number | ''>('');
 
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -107,20 +113,25 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
         if (existingLoan) {
           setLoanPrincipal(existingLoan.principalAmount);
           setLoanInterestRate(existingLoan.interestRate);
+          setLoanIssueDate(existingLoan.issueDate || editingCustomer.bishiDate || new Date().toISOString().split('T')[0]);
+          setLoanPaidPrincipal(existingLoan.paidAmount || '');
+          setLoanPaidInterest(existingLoan.totalInterestPaid || '');
         }
       }
+      setAlreadyPaidInstallments('');
     } else {
       const initType = initialLoanOnly ? 'LOAN_ONLY' : (bishiConfigs.length > 0 ? bishiConfigs[0].id : '15_AUGUST');
       const autoAcc = generateNextAccountNumber(initType, customers, bishiConfigs);
       const firstConfig = bishiConfigs.find((cfg) => cfg.id === initType);
       const initModality = firstConfig?.modality || (firstConfig?.id === '26_JANUARY' ? 'M' : 'W');
       const initInstallments = firstConfig?.totalInstallments || (initModality === 'M' ? 10 : 40);
+      const initStartDate = firstConfig?.startDate || new Date().toISOString().split('T')[0];
 
       setAccountNumber(autoAcc);
       setName('');
       setMobile('');
       setBishiType(initType);
-      setBishiDate(firstConfig?.startDate || new Date().toISOString().split('T')[0]);
+      setBishiDate(initStartDate);
       setModality(initModality);
       setTotalInstallments(initInstallments);
       setAmount(initialLoanOnly ? 0 : 1000);
@@ -131,7 +142,11 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
       setPhotoURL('');
       setHasLoan(initialLoanOnly ? true : false);
       setLoanPrincipal('');
-      setLoanInterestRate(12);
+      setLoanInterestRate(2);
+      setLoanIssueDate(initStartDate);
+      setLoanPaidPrincipal('');
+      setLoanPaidInterest('');
+      setAlreadyPaidInstallments('');
     }
     setError('');
   }, [editingCustomer, isOpen, activeOffice, defaultInterestRate, defaultPenaltyRate, initialLoanOnly, customers, bishiConfigs]);
@@ -261,26 +276,39 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
         // Update Loan if applicable
         if (hasLoan && loanPrincipal) {
           const principal = Number(loanPrincipal);
-          const rate = Number(loanInterestRate) || 12;
-          const totalInterest = Math.round((principal * rate) / 100);
-          const totalPayable = principal + totalInterest;
+          const rate = Number(loanInterestRate) || 2;
+          const effectiveDate = loanIssueDate || bishiDate;
+          const months = calculateElapsedMonths(effectiveDate);
+          const monthlyInterest = Math.round((principal * rate) / 100);
+          const totalInterest = Math.max(monthlyInterest, months * monthlyInterest);
 
           const existingLoan = StorageService.getLoanByCustomerId(editingCustomer.id);
+          const paidPrin = existingLoan ? (Number(existingLoan.paidAmount) || 0) : (Number(loanPaidPrincipal) || 0);
+          const paidInt = existingLoan ? (Number(existingLoan.totalInterestPaid) || 0) : (Number(loanPaidInterest) || 0);
+          const discount = existingLoan ? (Number(existingLoan.discountAmount) || 0) : 0;
+          const penalty = existingLoan ? (Number(existingLoan.penaltyAmount) || 0) : 0;
+          const remPrincipal = Math.max(0, principal - paidPrin - discount);
+          const remInterest = Math.max(0, totalInterest - paidInt);
+          const remainingAmount = remPrincipal + penalty + remInterest;
+          const isCompleted = remainingAmount <= 0;
+
           StorageService.saveLoan({
             customerId: updated.id,
             accountNumber: updated.accountNumber,
             officeId: updated.officeId,
+            customerName: updated.name,
+            customerMobile: updated.mobile,
             principalAmount: principal,
-            issueDate: bishiDate,
+            issueDate: effectiveDate,
             interestRate: rate,
             totalInterest,
-            totalPayable,
-            paidAmount: existingLoan ? existingLoan.paidAmount : 0,
-            remainingAmount: existingLoan
-              ? Math.max(0, principal - (existingLoan.paidAmount || 0) - (existingLoan.discountAmount || 0) + (existingLoan.penaltyAmount || 0))
-              : principal,
-            penaltyAmount: existingLoan ? existingLoan.penaltyAmount || 0 : 0,
-            status: 'ACTIVE',
+            totalInterestPaid: paidInt,
+            totalPayable: principal + totalInterest,
+            paidAmount: paidPrin,
+            discountAmount: discount,
+            remainingAmount,
+            penaltyAmount: penalty,
+            status: isCompleted ? 'COMPLETED' : 'ACTIVE',
           });
         }
 
@@ -374,11 +402,24 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
               ? generateWeeklyEntries(newCustomer, bishiDate, targetInstallments)
               : generateMonthlyEntries(newCustomer, bishiDate, targetInstallments);
 
-          const preparedCollections = collectionEntries.map((c) => ({
-            ...c,
-            customerName: newCustomer.name,
-            id: `coll_${newCustomer.id}_${c.periodIndex}`,
-          }));
+          const paidCount = Math.min(targetInstallments, Math.max(0, Number(alreadyPaidInstallments) || 0));
+
+          const preparedCollections = collectionEntries.map((c) => {
+            const isPrePaid = c.periodIndex <= paidCount;
+            return {
+              ...c,
+              customerName: newCustomer.name,
+              id: `coll_${newCustomer.id}_${c.periodIndex}`,
+              collectedAmount: isPrePaid ? c.expectedAmount : 0,
+              remainingAmount: isPrePaid ? 0 : c.expectedAmount,
+              totalPaid: isPrePaid ? c.expectedAmount : 0,
+              totalWithPenalty: isPrePaid ? c.expectedAmount : 0,
+              status: isPrePaid ? ('PAID' as const) : ('PENDING' as const),
+              paymentDate: isPrePaid ? c.dueDate : undefined,
+              paymentTime: isPrePaid ? '10:00' : undefined,
+              paymentMode: isPrePaid ? ('CASH' as const) : undefined,
+            };
+          });
 
           StorageService.saveCollectionsBatch(preparedCollections);
         }
@@ -386,25 +427,54 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
         // Save Loan if applicable
         if (hasLoan && loanPrincipal) {
           const principal = Number(loanPrincipal);
-          const rate = Number(loanInterestRate) || 12;
-          const totalInterest = Math.round((principal * rate) / 100);
-          const totalPayable = principal + totalInterest;
+          const rate = Number(loanInterestRate) || 2;
+          const effectiveDate = loanIssueDate || bishiDate;
+          const months = calculateElapsedMonths(effectiveDate);
+          const monthlyInterest = Math.round((principal * rate) / 100);
+          const totalInterest = Math.max(monthlyInterest, months * monthlyInterest);
+          const paidPrin = Number(loanPaidPrincipal) || 0;
+          const paidInt = Number(loanPaidInterest) || 0;
+          const remPrin = Math.max(0, principal - paidPrin);
+          const remInt = Math.max(0, totalInterest - paidInt);
+          const remainingAmount = remPrin + remInt;
+          const isCompleted = remainingAmount <= 0;
 
-          StorageService.saveLoan({
+          const savedLoan = StorageService.saveLoan({
             customerId: newCustomer.id,
             customerName: newCustomer.name,
             accountNumber: newCustomer.accountNumber,
             officeId: newCustomer.officeId,
+            customerMobile: newCustomer.mobile,
             principalAmount: principal,
-            issueDate: bishiDate,
+            issueDate: effectiveDate,
             interestRate: rate,
             totalInterest,
-            totalPayable,
-            paidAmount: 0,
-            remainingAmount: principal,
+            totalInterestPaid: paidInt,
+            totalPayable: principal + totalInterest,
+            paidAmount: paidPrin,
+            remainingAmount,
             penaltyAmount: 0,
-            status: 'ACTIVE',
+            status: isCompleted ? 'COMPLETED' : 'ACTIVE',
           });
+
+          if (paidPrin > 0 || paidInt > 0) {
+            StorageService.addLoanPayment({
+              loanId: savedLoan.id,
+              customerId: newCustomer.id,
+              customerName: newCustomer.name,
+              accountNumber: newCustomer.accountNumber,
+              officeId: newCustomer.officeId,
+              customerMobile: newCustomer.mobile,
+              paymentDate: effectiveDate,
+              paidAmount: paidPrin,
+              interestPaid: paidInt,
+              penaltyPaid: 0,
+              discountAmount: 0,
+              remainingLoan: remainingAmount,
+              paymentMode: 'CASH',
+              note: language === 'EN' ? 'Initial historical loan payment recorded' : 'सुरुवातीची जुनी कर्ज भरणा नोंद',
+            });
+          }
         }
 
         showToast(language === 'EN' ? 'New customer added successfully.' : 'नवीन खातेदार यशस्वीपणे जोडला गेला.', 'success');
@@ -430,6 +500,21 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
       setSubmitting(false);
     }
   };
+
+  const effectiveLoanDate = loanIssueDate || bishiDate || new Date().toISOString().split('T')[0];
+  const loanMonths = calculateElapsedMonths(effectiveLoanDate);
+  const loanPrinNum = Number(loanPrincipal) || 0;
+  const loanRateNum = Number(loanInterestRate) || 0;
+  const loanMonthlyInterest = Math.round((loanPrinNum * loanRateNum) / 100);
+  const loanTotalAccruedInterest = Math.max(loanMonthlyInterest, loanMonths * loanMonthlyInterest);
+  const loanTotalPayable = loanPrinNum + loanTotalAccruedInterest;
+  const loanPaidPrinNum = Number(loanPaidPrincipal) || 0;
+  const loanPaidIntNum = Number(loanPaidInterest) || 0;
+  const loanRemPrincipal = Math.max(0, loanPrinNum - loanPaidPrinNum);
+  const loanRemInterest = Math.max(0, loanTotalAccruedInterest - loanPaidIntNum);
+  const loanRemainingTotal = loanRemPrincipal + loanRemInterest;
+
+  const bishiElapsedMonths = calculateElapsedMonths(bishiDate);
 
   return (
     <ModalPortal>
@@ -571,9 +656,20 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                 type="date"
                 required
                 value={bishiDate}
-                onChange={(e) => setBishiDate(e.target.value)}
+                onChange={(e) => {
+                  setBishiDate(e.target.value);
+                  if (!loanIssueDate) {
+                    setLoanIssueDate(e.target.value);
+                  }
+                }}
                 className="w-full h-11 px-4 rounded-xl border border-[#E4EAE7] hover:border-[#0F7A5C]/60 text-sm font-bold text-[#10241E] focus:ring-2 focus:ring-[#0F7A5C] bg-white transition-all shadow-2xs"
               />
+              {bishiElapsedMonths > 1 && (
+                <div className="mt-1 flex items-center space-x-1.5 text-[11px] font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 rounded-lg w-fit">
+                  <Clock className="w-3 h-3 text-emerald-700" />
+                  <span>{language === 'EN' ? `${bishiElapsedMonths} months elapsed since start date` : `सुरुवातीपासून ${bishiElapsedMonths} महिने झाले आहेत`}</span>
+                </div>
+              )}
             </div>
 
             {/* Modality */}
@@ -652,6 +748,57 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
               </div>
             )}
 
+            {/* Already Paid Installments for Old Bishi Customers */}
+            {bishiType !== 'LOAN_ONLY' && !editingCustomer && (
+              <div className="sm:col-span-2 bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-extrabold text-emerald-950">
+                    {language === 'EN' ? 'Already Paid Installments (Old Records - Optional)' : 'आधीच जमा झालेले हप्ते (जुना रेकॉर्ड - ऐच्छिक)'}
+                  </label>
+                  <span className="text-[11px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
+                    {alreadyPaidInstallments ? `${alreadyPaidInstallments} / ${totalInstallments} जमा` : (language === 'EN' ? '0 Paid' : 'शून्य जमा')}
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="number"
+                    min={0}
+                    max={Number(totalInstallments) || 200}
+                    value={alreadyPaidInstallments}
+                    onChange={(e) => setAlreadyPaidInstallments(e.target.value ? Number(e.target.value) : '')}
+                    placeholder={language === 'EN' ? 'e.g. 20 or 40' : 'उदा. 20 किंवा 40'}
+                    className="w-1/2 px-3.5 py-2 rounded-xl border border-emerald-300 text-sm font-bold text-emerald-950 bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAlreadyPaidInstallments(Number(totalInstallments) || (modality === 'W' ? 40 : 10))}
+                    className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition-colors cursor-pointer"
+                  >
+                    {language === 'EN' ? 'All Paid' : 'सर्व जमा'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAlreadyPaidInstallments(Math.floor((Number(totalInstallments) || 40) / 2))}
+                    className="px-3 py-2 rounded-xl bg-emerald-200 hover:bg-emerald-300 text-emerald-900 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    {language === 'EN' ? 'Half Paid' : 'अर्धे जमा'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAlreadyPaidInstallments('')}
+                    className="px-2.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-600 hover:text-slate-900 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    {language === 'EN' ? 'Clear' : 'रीसेट'}
+                  </button>
+                </div>
+                <p className="text-[11px] text-emerald-800 font-semibold">
+                  {language === 'EN'
+                    ? 'The first installments will automatically be saved as PAID on their respective past due dates.'
+                    : 'दिलेले पहिले हप्ते त्यांच्या संबंधित जुन्या तारखांनुसार जमा (PAID) म्हणून आपोआप सेव्ह केले जातील.'}
+                </p>
+              </div>
+            )}
+
             {/* Interest */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -680,6 +827,158 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
               />
             </div>
           </div>
+
+          {/* Include Loan Toggle for Regular Bishi */}
+          {bishiType !== 'LOAN_ONLY' && (
+            <div className="pt-1">
+              <label className="flex items-center space-x-3 p-3.5 bg-amber-50/50 border border-amber-200 rounded-2xl cursor-pointer hover:bg-amber-100/60 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={hasLoan}
+                  onChange={(e) => {
+                    setHasLoan(e.target.checked);
+                    if (e.target.checked && !loanIssueDate) {
+                      setLoanIssueDate(bishiDate);
+                    }
+                  }}
+                  className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                />
+                <div className="flex items-center space-x-2">
+                  <Landmark className="w-4 h-4 text-amber-700" />
+                  <span className="text-xs font-extrabold text-amber-950">
+                    {language === 'EN' ? 'Add Loan with Bishi (कर्ज समाविष्ट करा)' : 'भिशीसोबत कर्ज जोडा (कर्ज तपशील)'}
+                  </span>
+                </div>
+              </label>
+            </div>
+          )}
+
+          {/* Loan Details Section with Live Date-Based Accrued Interest Calculation */}
+          {(hasLoan || bishiType === 'LOAN_ONLY') && (
+            <div className="p-4 rounded-2xl bg-amber-50/80 border-2 border-amber-300 space-y-3.5 shadow-2xs">
+              <div className="flex items-center justify-between border-b border-amber-200/80 pb-2">
+                <div className="flex items-center space-x-2 text-amber-900">
+                  <Landmark className="w-5 h-5 text-amber-700" />
+                  <h4 className="text-sm font-extrabold">
+                    {language === 'EN' ? 'Loan Details & Date-Based Interest' : 'कर्ज तपशील व दिनांकानुसार व्याज गणना'}
+                  </h4>
+                </div>
+                <span className="text-[11px] font-black bg-amber-200 text-amber-950 px-2.5 py-0.5 rounded-full">
+                  {language === 'EN' ? `Elapsed: ${loanMonths} Months` : `कालावधी: ${loanMonths} महिने झाले`}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {language === 'EN' ? 'Loan Principal Amount (₹)' : 'कर्ज मुद्दल रक्कम (₹)'} <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required={hasLoan || bishiType === 'LOAN_ONLY'}
+                    min={100}
+                    value={loanPrincipal}
+                    onChange={(e) => setLoanPrincipal(e.target.value ? Number(e.target.value) : '')}
+                    placeholder={language === 'EN' ? 'e.g. 50000' : 'उदा. 50000'}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-black text-slate-900 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {language === 'EN' ? 'Monthly Interest Rate (%)' : 'मासिक व्याजदर (%)'}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.1"
+                    value={loanInterestRate}
+                    onChange={(e) => setLoanInterestRate(e.target.value ? Number(e.target.value) : '')}
+                    placeholder={language === 'EN' ? 'e.g. 2' : 'उदा. 2'}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {language === 'EN' ? 'Loan Issue Date' : 'कर्ज दिल्याची तारीख'} <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required={hasLoan || bishiType === 'LOAN_ONLY'}
+                    value={loanIssueDate || bishiDate}
+                    onChange={(e) => setLoanIssueDate(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-900 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none h-[42px]"
+                  />
+                </div>
+              </div>
+
+              {/* Live Date-Based Calculation Card */}
+              {loanPrinNum > 0 && (
+                <div className="p-3 bg-white rounded-xl border border-amber-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center shadow-2xs">
+                  <div className="p-2 bg-amber-50 rounded-lg">
+                    <span className="text-[10px] font-bold text-amber-800 block">कालावधी (Duration)</span>
+                    <span className="text-xs font-extrabold text-amber-950">{loanMonths} महिने ({loanMonths} Mo)</span>
+                  </div>
+                  <div className="p-2 bg-amber-50 rounded-lg">
+                    <span className="text-[10px] font-bold text-amber-800 block">दरमहा व्याज (Monthly)</span>
+                    <span className="text-xs font-extrabold text-amber-950">₹{loanMonthlyInterest}</span>
+                  </div>
+                  <div className="p-2 bg-amber-100/70 rounded-lg">
+                    <span className="text-[10px] font-black text-amber-900 block">दिनांकानुसार एकूण व्याज</span>
+                    <span className="text-xs font-black text-amber-900">₹{loanTotalAccruedInterest}</span>
+                  </div>
+                  <div className="p-2 bg-emerald-50 rounded-lg">
+                    <span className="text-[10px] font-black text-emerald-800 block">एकूण परतफेड (Payable)</span>
+                    <span className="text-xs font-black text-emerald-900">₹{loanTotalPayable}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Optional Historical Payments for Old Loans */}
+              <div className="pt-2 border-t border-amber-200/60">
+                <span className="text-[11px] font-extrabold text-amber-900 block mb-1.5">
+                  {language === 'EN' ? 'Old Repayment Records (If migrating already paid amounts):' : 'जुनी परतफेड माहिती (आधीच काही भरले असल्यास - ऐच्छिक):'}
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      {language === 'EN' ? 'Previously Paid Principal (₹)' : 'आधी जमा केलेली मुद्दल (₹)'}
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={loanPrinNum || undefined}
+                      value={loanPaidPrincipal}
+                      onChange={(e) => setLoanPaidPrincipal(e.target.value ? Number(e.target.value) : '')}
+                      placeholder="0"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      {language === 'EN' ? 'Previously Paid Interest (₹)' : 'आधी जमा केलेले व्याज (₹)'}
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={loanPaidInterest}
+                      onChange={(e) => setLoanPaidInterest(e.target.value ? Number(e.target.value) : '')}
+                      placeholder="0"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white"
+                    />
+                  </div>
+                </div>
+
+                {(loanPaidPrinNum > 0 || loanPaidIntNum > 0) && (
+                  <div className="mt-2 p-2 rounded-lg bg-white border border-amber-200 flex items-center justify-between text-xs font-bold text-slate-800">
+                    <span>शिल्लक मुद्दल: <strong className="text-emerald-700">₹{loanRemPrincipal}</strong> | शिल्लक व्याज: <strong className="text-amber-800">₹{loanRemInterest}</strong></span>
+                    <span>एकूण बाकी: <strong className="text-rose-600">₹{loanRemainingTotal}</strong></span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Address */}
           <div>

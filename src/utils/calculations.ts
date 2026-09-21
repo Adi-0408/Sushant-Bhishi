@@ -143,9 +143,10 @@ export const calculateCustomerFinancials = (
 
   if (customer.hasLoan && loan) {
     loanPrincipal = loan.principalAmount || 0;
-    loanInterest = loan.totalInterest || 0;
-    loanPaid = loan.paidAmount || 0;
-    loanRemaining = Math.max(0, loan.remainingAmount || 0);
+    const dueInterest = calculateLoanDueInterest(loan, todayStr);
+    loanInterest = dueInterest;
+    loanPaid = (Number(loan.paidAmount) || 0) + (Number(loan.totalInterestPaid) || 0);
+    loanRemaining = Math.max(0, (Number(loan.remainingAmount) || 0));
   }
 
   const grandTotalPayable = totalPayableBishi + loanRemaining;
@@ -172,13 +173,74 @@ export const calculateCustomerFinancials = (
   };
 };
 
+/**
+ * Parse a 'YYYY-MM-DD' string safely in local time without UTC offset day shifts.
+ */
+export const parseLocalDate = (dateStr?: string): Date => {
+  if (!dateStr) return new Date();
+  const parts = dateStr.split('T')[0].split('-');
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      return new Date(y, m, d, 12, 0, 0);
+    }
+  }
+  return new Date(dateStr);
+};
+
+/**
+ * Format a Date object into 'YYYY-MM-DD' in local timezone.
+ */
+export const formatLocalDate = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+/**
+ * Calculates number of months elapsed from startDateStr to asOfDateStr (default today).
+ * For loans and finance, minimum 1 month is charged. If a month has started/elapsed, it counts.
+ */
+export const calculateElapsedMonths = (startDateStr: string, asOfDateStr?: string): number => {
+  if (!startDateStr) return 1;
+  const start = parseLocalDate(startDateStr);
+  const asOf = asOfDateStr ? parseLocalDate(asOfDateStr) : new Date();
+
+  if (asOf <= start) return 1;
+
+  let months = (asOf.getFullYear() - start.getFullYear()) * 12 + (asOf.getMonth() - start.getMonth());
+  // If the asOf date of month has passed start day of month, entered the next month
+  if (asOf.getDate() > start.getDate()) {
+    months += 1;
+  }
+  return Math.max(1, months);
+};
+
+/**
+ * Calculates total accrued interest for a loan based on principal amount, interest rate %,
+ * and elapsed months between loan issueDate and asOfDateStr (today).
+ */
+export const calculateLoanTotalAccruedInterest = (loan?: Loan | null, asOfDateStr?: string): number => {
+  if (!loan) return 0;
+  const principal = Number(loan.principalAmount) || 0;
+  const rate = Number(loan.interestRate) || 0;
+  if (principal <= 0 || rate <= 0) return 0;
+
+  const monthlyRateAmount = Math.round((principal * rate) / 100);
+  const months = calculateElapsedMonths(loan.issueDate, asOfDateStr);
+  return Math.max(monthlyRateAmount, months * monthlyRateAmount);
+};
+
 export const generateWeeklyEntries = (
   customer: Customer,
   startDateStr: string,
   totalWeeks: number = 40
 ): Omit<CollectionEntry, 'id'>[] => {
   const entries: Omit<CollectionEntry, 'id'>[] = [];
-  const startDate = new Date(startDateStr || Date.now());
+  const startDate = parseLocalDate(startDateStr);
 
   for (let i = 1; i <= totalWeeks; i++) {
     const dueDate = new Date(startDate);
@@ -192,7 +254,7 @@ export const generateWeeklyEntries = (
       bishiType: customer.bishiType,
       periodIndex: i,
       periodLabel: `आठवडा ${i}`,
-      dueDate: dueDate.toISOString().split('T')[0],
+      dueDate: formatLocalDate(dueDate),
       expectedAmount: customer.amount,
       collectedAmount: 0,
       remainingAmount: customer.amount,
@@ -215,7 +277,7 @@ export const generateMonthlyEntries = (
   totalMonths: number = 10
 ): Omit<CollectionEntry, 'id'>[] => {
   const entries: Omit<CollectionEntry, 'id'>[] = [];
-  const startDate = new Date(startDateStr || Date.now());
+  const startDate = parseLocalDate(startDateStr);
 
   for (let i = 1; i <= totalMonths; i++) {
     const dueDate = new Date(startDate);
@@ -229,7 +291,7 @@ export const generateMonthlyEntries = (
       bishiType: customer.bishiType,
       periodIndex: i,
       periodLabel: `महिना ${i}`,
-      dueDate: dueDate.toISOString().split('T')[0],
+      dueDate: formatLocalDate(dueDate),
       expectedAmount: customer.amount,
       collectedAmount: 0,
       remainingAmount: customer.amount,
@@ -264,12 +326,22 @@ export const getLoanRemainingPrincipal = (loan?: Loan | null): number => {
 };
 
 /**
- * Calculates monthly interest due for a loan based on the loan principal amount (not total payable amount).
+ * Calculates due interest for a loan based on elapsed months from issueDate to asOfDateStr,
+ * minus any interest already paid.
  */
-export const calculateLoanDueInterest = (loan?: Loan | null): number => {
+export const calculateLoanDueInterest = (loan?: Loan | null, asOfDateStr?: string): number => {
   if (!loan) return 0;
   if (loan.status === 'CLOSED' || loan.status === 'COMPLETED') return 0;
   const remPrincipal = getLoanRemainingPrincipal(loan);
+  if (remPrincipal <= 0) return 0;
+
   const rate = Number(loan.interestRate) || 0;
-  return Math.round((remPrincipal * rate) / 100);
+  if (rate <= 0) return 0;
+
+  const monthlyRateAmount = Math.round((remPrincipal * rate) / 100);
+  const months = calculateElapsedMonths(loan.issueDate, asOfDateStr);
+  const totalAccrued = months * monthlyRateAmount;
+  const paidInterest = Number(loan.totalInterestPaid) || 0;
+
+  return Math.max(0, totalAccrued - paidInterest);
 };

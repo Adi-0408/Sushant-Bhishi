@@ -208,9 +208,13 @@ export const CustomerDetail: React.FC = () => {
     });
   };
 
+  const effectiveModalLoanDueInterest = loan ? calculateLoanDueInterest(loan, loanPaymentDate || todayStr) : 0;
+
   const handleOpenLoanModal = () => {
+    const defaultDate = todayStr;
+    setLoanPaymentDate(defaultDate);
     if (loan) {
-      const calcInterest = calculateLoanDueInterest(loan);
+      const calcInterest = calculateLoanDueInterest(loan, defaultDate);
       setLoanInterestPaymentInput(calcInterest);
       setLoanPaymentInput('');
       setLoanDiscountPaymentInput('');
@@ -232,7 +236,8 @@ export const CustomerDetail: React.FC = () => {
       return;
     }
 
-    const calcDueInterest = calculateLoanDueInterest(loan);
+    const effectiveDate = loanPaymentDate || todayStr;
+    const calcDueInterest = calculateLoanDueInterest(loan, effectiveDate);
     const unpaidInt = Math.max(0, calcDueInterest - paidInt);
     const remainingPrincipal = Math.max(0, (loan.principalAmount || 0) - (loan.paidAmount || 0) - paidPrin - discountVal);
     const remLoan = Math.max(0, remainingPrincipal + (loan.penaltyAmount || 0) + unpaidInt);
@@ -1399,7 +1404,14 @@ export const CustomerDetail: React.FC = () => {
                 <input
                   type="date"
                   value={loanPaymentDate}
-                  onChange={(e) => setLoanPaymentDate(e.target.value)}
+                  onChange={(e) => {
+                    const newDate = e.target.value;
+                    setLoanPaymentDate(newDate);
+                    if (loan) {
+                      const newInt = calculateLoanDueInterest(loan, newDate);
+                      setLoanInterestPaymentInput(newInt);
+                    }
+                  }}
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-amber-500 shadow-2xs"
                 />
               </div>
@@ -1409,7 +1421,7 @@ export const CustomerDetail: React.FC = () => {
                 <label className="block text-xs font-extrabold text-slate-900 mb-1">
                   {language === 'EN' ? '1. Loan Interest Deposit (₹)' : '१. कर्ज व्याज जमा (₹)'}
                   <span className="text-amber-700 ml-2 font-bold text-[11px]">
-                    ({language === 'EN' ? 'Current Auto Interest:' : 'चालू ऑटो व्याज:'} ₹{loanDueInterest})
+                    ({language === 'EN' ? 'Current Auto Interest:' : 'चालू ऑटो व्याज:'} ₹{effectiveModalLoanDueInterest})
                   </span>
                 </label>
                 <input
@@ -1417,7 +1429,7 @@ export const CustomerDetail: React.FC = () => {
                   min={0}
                   value={loanInterestPaymentInput}
                   onChange={(e) => setLoanInterestPaymentInput(e.target.value ? Number(e.target.value) : '')}
-                  placeholder={language === 'EN' ? `e.g. ${loanDueInterest}` : `उदा. ${loanDueInterest}`}
+                  placeholder={language === 'EN' ? `e.g. ${effectiveModalLoanDueInterest}` : `उदा. ${effectiveModalLoanDueInterest}`}
                   className="w-full px-4 py-2.5 rounded-xl border border-amber-300 text-sm font-bold focus:ring-2 focus:ring-amber-500 bg-amber-50/20"
                 />
               </div>
@@ -1479,7 +1491,7 @@ export const CustomerDetail: React.FC = () => {
                 <div className="flex justify-between pt-1 border-t border-slate-200">
                   <span>{language === 'EN' ? 'New Remaining Loan Balance:' : 'नवीन कर्जाची उर्वरित बाकी:'}</span>
                   <span className="text-rose-600 font-extrabold">
-                    {formatCurrency(Math.max(0, loanPrincipalRemaining - (Number(loanPaymentInput) || 0) - (Number(loanDiscountPaymentInput) || 0) + (loan.penaltyAmount || 0) + Math.max(0, loanDueInterest - (Number(loanInterestPaymentInput) || 0))), language)}
+                    {formatCurrency(Math.max(0, loanPrincipalRemaining - (Number(loanPaymentInput) || 0) - (Number(loanDiscountPaymentInput) || 0) + (loan.penaltyAmount || 0) + Math.max(0, effectiveModalLoanDueInterest - (Number(loanInterestPaymentInput) || 0))), language)}
                   </span>
                 </div>
                 {Math.max(0, loanPrincipalRemaining - (Number(loanPaymentInput) || 0) - (Number(loanDiscountPaymentInput) || 0)) > 0 && (Number(loanPaymentInput) || 0) > 0 && (
@@ -1498,11 +1510,11 @@ export const CustomerDetail: React.FC = () => {
               </div>
 
               {/* Unpaid Interest Carry Forward Note */}
-              {loanDueInterest > (Number(loanInterestPaymentInput) || 0) && (
+              {effectiveModalLoanDueInterest > (Number(loanInterestPaymentInput) || 0) && (
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-900">
                   {language === 'EN'
-                    ? `⚠️ Unpaid interest ₹${loanDueInterest - (Number(loanInterestPaymentInput) || 0)} will be carried forward with late fees to next cycle.`
-                    : `⚠️ न भरलेले व्याज ₹${loanDueInterest - (Number(loanInterestPaymentInput) || 0)} थकबाकी दंडासह पुढील हप्त्यात जोडले जाईल.`}
+                    ? `⚠️ Unpaid interest ₹${effectiveModalLoanDueInterest - (Number(loanInterestPaymentInput) || 0)} will be carried forward with late fees to next cycle.`
+                    : `⚠️ न भरलेले व्याज ₹${effectiveModalLoanDueInterest - (Number(loanInterestPaymentInput) || 0)} थकबाकी दंडासह पुढील हप्त्यात जोडले जाईल.`}
                 </div>
               )}
             </div>

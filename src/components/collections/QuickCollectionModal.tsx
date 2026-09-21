@@ -117,7 +117,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
   const hasActiveLoan = Boolean(selectedCustomer?.hasLoan || activeLoan || isLoanOnly);
 
   const loanPrinRemaining = activeLoan ? getLoanRemainingPrincipal(activeLoan) : 0;
-  const dueInterest = activeLoan ? calculateLoanDueInterest(activeLoan) : 0;
+  const dueInterest = activeLoan ? calculateLoanDueInterest(activeLoan, paymentDate || todayStr) : 0;
   const loanInterestPaidVal = Number(loanInterestInput) || 0;
   const unpaidInterest = activeLoan && dueInterest > loanInterestPaidVal ? dueInterest - loanInterestPaidVal : 0;
 
@@ -181,7 +181,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
     const loanObj = StorageService.getLoanByCustomerId(customerId) || loans.find((l) => l.customerId === customerId && l.status === 'ACTIVE');
 
     if (loanObj) {
-      const calcInterest = calculateLoanDueInterest(loanObj);
+      const calcInterest = calculateLoanDueInterest(loanObj, paymentDate || todayStr);
       setLoanInterestInput(calcInterest);
     }
 
@@ -279,7 +279,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
     // 2. Record Loan & Interest Payment (if customer has active loan and amounts entered)
     const loanDiscVal = Number(loanDiscountInput) || 0;
     if (activeLoan && (loanPrinVal > 0 || loanInterestPaidVal > 0 || loanDiscVal > 0)) {
-      const calcDueInterest = calculateLoanDueInterest(activeLoan);
+      const calcDueInterest = calculateLoanDueInterest(activeLoan, effectiveDate);
       const unpaidInt = Math.max(0, calcDueInterest - loanInterestPaidVal);
       const remainingPrincipal = Math.max(0, (activeLoan.principalAmount || 0) - (activeLoan.paidAmount || 0) - loanPrinVal - loanDiscVal);
       const remLoan = Math.max(0, remainingPrincipal + (activeLoan.penaltyAmount || 0) + unpaidInt);
@@ -529,7 +529,14 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                 <input
                   type="date"
                   value={paymentDate || todayStr}
-                  onChange={(e) => setPaymentDate(e.target.value)}
+                  onChange={(e) => {
+                    const newDate = e.target.value;
+                    setPaymentDate(newDate);
+                    if (activeLoan) {
+                      const newInt = calculateLoanDueInterest(activeLoan, newDate);
+                      setLoanInterestInput(newInt);
+                    }
+                  }}
                   className="w-full h-10 px-3 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-[#0F7A5C]"
                 />
               </div>

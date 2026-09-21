@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Customer, BishiType, Modality, OfficeId } from '../../types';
+import { Customer, BishiType, Modality, OfficeId, CollectionEntry, Loan } from '../../types';
 import {
   formatCurrency,
   getBishiNameMarathi,
@@ -48,6 +48,37 @@ export const CustomerList: React.FC = () => {
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
   const [collectCustomer, setCollectCustomer] = useState<Customer | null>(null);
 
+  // High-performance memoized financials map: indexed in O(C + N) single pass!
+  const customerFinancialsMap = useMemo(() => {
+    const collsByCust = new Map<string, CollectionEntry[]>();
+    for (let i = 0; i < collections.length; i++) {
+      const c = collections[i];
+      const list = collsByCust.get(c.customerId);
+      if (list) {
+        list.push(c);
+      } else {
+        collsByCust.set(c.customerId, [c]);
+      }
+    }
+
+    const loansByCust = new Map<string, Loan>();
+    for (let i = 0; i < loans.length; i++) {
+      const l = loans[i];
+      if (!loansByCust.has(l.customerId) || l.status === 'ACTIVE') {
+        loansByCust.set(l.customerId, l);
+      }
+    }
+
+    const map = new Map<string, ReturnType<typeof calculateCustomerFinancials>>();
+    for (let i = 0; i < customers.length; i++) {
+      const cust = customers[i];
+      const custColls = collsByCust.get(cust.id) || [];
+      const custLoan = loansByCust.get(cust.id) || null;
+      map.set(cust.id, calculateCustomerFinancials(cust, custColls, custLoan, bishiConfigs));
+    }
+    return map;
+  }, [customers, collections, loans, bishiConfigs]);
+
   // Filtered List Computation
   const filteredCustomers = customers.filter((cust) => {
     const isSearching = Boolean(searchTerm.trim());
@@ -74,12 +105,10 @@ export const CustomerList: React.FC = () => {
 
     // Status filter
     if (statusFilter !== 'ALL') {
-      const loan = loans.find((l) => l.customerId === cust.id);
-      const financials = calculateCustomerFinancials(cust, collections, loan);
-
+      const financials = customerFinancialsMap.get(cust.id);
       if (statusFilter === 'BORROWER' && !cust.hasLoan) return false;
-      if (statusFilter === 'PAID' && !financials.isCurrentDuePaid) return false;
-      if (statusFilter === 'PENDING' && financials.isCurrentDuePaid) return false;
+      if (statusFilter === 'PAID' && !financials?.isCurrentDuePaid) return false;
+      if (statusFilter === 'PENDING' && financials?.isCurrentDuePaid) return false;
     }
 
     return true;
@@ -227,8 +256,7 @@ export const CustomerList: React.FC = () => {
             {/* Mobile Card View (< md screens) */}
             <div className="block md:hidden space-y-3 p-3 bg-slate-50/50">
               {filteredCustomers.map((cust) => {
-                const loan = loans.find((l) => l.customerId === cust.id);
-                const financials = calculateCustomerFinancials(cust, collections, loan);
+                const financials = customerFinancialsMap.get(cust.id) || calculateCustomerFinancials(cust, [], null, bishiConfigs);
                 const isPaid = financials.isCurrentDuePaid;
 
                 return (
@@ -390,9 +418,7 @@ export const CustomerList: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {filteredCustomers.map((cust) => {
-                    const loan = loans.find((l) => l.customerId === cust.id);
-                    const financials = calculateCustomerFinancials(cust, collections, loan);
-
+                    const financials = customerFinancialsMap.get(cust.id) || calculateCustomerFinancials(cust, [], null, bishiConfigs);
                     const isPaid = financials.isCurrentDuePaid;
 
                     return (

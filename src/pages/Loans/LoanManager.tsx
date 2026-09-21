@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, formatDateMarathi, getBishiNameMarathi, matchesCustomerSearch } from '../../utils/formatters';
 import { StorageService } from '../../services/db';
-import { Landmark, Search, Plus, Wallet, ArrowUpRight, X, UserPlus, Edit3, Save, Calendar } from 'lucide-react';
+import { Landmark, Search, Plus, Wallet, ArrowUpRight, X, UserPlus, Edit3, Save, Calendar, Clock } from 'lucide-react';
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 import { CustomDropdown } from '../../components/common/CustomDropdown';
 import { Link } from 'react-router-dom';
 import { CustomerFormModal } from '../Customers/CustomerFormModal';
 import { ModalPortal } from '../../components/common/ModalPortal';
 import { Loan } from '../../types';
+import { calculateElapsedMonths } from '../../utils/calculations';
 
 export const LoanManager: React.FC = () => {
   const { loans, loanPayments, customers, activeOffice, refreshData, showToast, t, language } = useApp();
@@ -47,12 +48,17 @@ export const LoanManager: React.FC = () => {
 
     const principal = Number(editPrincipal) || editingLoan.principalAmount;
     const rate = Number(editRate) || editingLoan.interestRate;
-    const totalInterest = Math.round((principal * rate) / 100);
+    const issueDate = editIssueDate || editingLoan.issueDate;
+    const months = calculateElapsedMonths(issueDate);
+    const monthlyInterest = Math.round((principal * rate) / 100);
+    const totalInterest = Math.max(monthlyInterest, months * monthlyInterest);
     const paid = Number(editingLoan.paidAmount) || 0;
     const discount = Number(editingLoan.discountAmount) || 0;
     const penalty = Number(editingLoan.penaltyAmount) || 0;
+    const paidInterest = Number(editingLoan.totalInterestPaid) || 0;
     const remainingPrincipal = Math.max(0, principal - paid - discount);
-    const remainingAmount = remainingPrincipal + penalty;
+    const dueInterest = Math.max(0, totalInterest - paidInterest);
+    const remainingAmount = remainingPrincipal + penalty + dueInterest;
     const totalPayable = principal + totalInterest;
 
     StorageService.saveLoan({
@@ -62,7 +68,7 @@ export const LoanManager: React.FC = () => {
       totalInterest,
       totalPayable,
       remainingAmount,
-      issueDate: editIssueDate || editingLoan.issueDate,
+      issueDate,
       purposeNote: editPurpose.trim() || undefined,
       status: editStatus,
     });
@@ -105,8 +111,10 @@ export const LoanManager: React.FC = () => {
       showToast(language === 'EN' ? 'Please enter a valid loan amount.' : 'कृपया योग्य कर्जाची रक्कम भरा.', 'error');
       return;
     }
-    const rate = Number(interestRateInput) || 12;
-    const totalInterest = Math.round((principal * rate) / 100);
+    const rate = Number(interestRateInput) || 2;
+    const months = calculateElapsedMonths(issueDateInput);
+    const monthlyInterest = Math.round((principal * rate) / 100);
+    const totalInterest = Math.max(monthlyInterest, months * monthlyInterest);
     const totalPayable = principal + totalInterest;
 
     StorageService.saveLoan({
@@ -122,7 +130,7 @@ export const LoanManager: React.FC = () => {
       totalInterestPaid: 0,
       totalPayable,
       paidAmount: 0,
-      remainingAmount: principal,
+      remainingAmount: principal + totalInterest,
       penaltyAmount: 0,
       status: 'ACTIVE',
       purposeNote: purposeInput.trim() || undefined,
@@ -510,6 +518,27 @@ export const LoanManager: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                {Number(principalInput) > 0 && (
+                  <div className="p-3 bg-amber-50/90 rounded-2xl border border-amber-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center shadow-2xs">
+                    <div className="p-1.5 bg-white rounded-xl border border-amber-100">
+                      <span className="text-[10px] font-bold text-amber-800 block">कालावधी (Duration)</span>
+                      <span className="text-xs font-black text-amber-950">{calculateElapsedMonths(issueDateInput)} महिने</span>
+                    </div>
+                    <div className="p-1.5 bg-white rounded-xl border border-amber-100">
+                      <span className="text-[10px] font-bold text-amber-800 block">दरमहा व्याज</span>
+                      <span className="text-xs font-black text-amber-950">₹{Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100)}</span>
+                    </div>
+                    <div className="p-1.5 bg-amber-100/80 rounded-xl border border-amber-200">
+                      <span className="text-[10px] font-black text-amber-900 block">दिनांकानुसार एकूण व्याज</span>
+                      <span className="text-xs font-black text-amber-900">₹{Math.max(Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100), calculateElapsedMonths(issueDateInput) * Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100))}</span>
+                    </div>
+                    <div className="p-1.5 bg-emerald-50 rounded-xl border border-emerald-200">
+                      <span className="text-[10px] font-black text-emerald-800 block">एकूण परतफेड</span>
+                      <span className="text-xs font-black text-emerald-900">₹{Number(principalInput) + Math.max(Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100), calculateElapsedMonths(issueDateInput) * Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100))}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="p-3.5 sm:px-6 sm:py-3.5 bg-slate-50 border-t border-slate-100 flex justify-end space-x-2 shrink-0">
@@ -639,6 +668,27 @@ export const LoanManager: React.FC = () => {
                       </button>
                     </div>
                   </div>
+
+                  {Number(editPrincipal) > 0 && (
+                    <div className="p-3 bg-amber-50/90 rounded-2xl border border-amber-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center shadow-2xs">
+                      <div className="p-1.5 bg-white rounded-xl border border-amber-100">
+                        <span className="text-[10px] font-bold text-amber-800 block">कालावधी (Duration)</span>
+                        <span className="text-xs font-black text-amber-950">{calculateElapsedMonths(editIssueDate || editingLoan.issueDate)} महिने</span>
+                      </div>
+                      <div className="p-1.5 bg-white rounded-xl border border-amber-100">
+                        <span className="text-[10px] font-bold text-amber-800 block">दरमहा व्याज</span>
+                        <span className="text-xs font-black text-amber-950">₹{Math.round((Number(editPrincipal) * (Number(editRate) || 0)) / 100)}</span>
+                      </div>
+                      <div className="p-1.5 bg-amber-100/80 rounded-xl border border-amber-200">
+                        <span className="text-[10px] font-black text-amber-900 block">दिनांकानुसार एकूण व्याज</span>
+                        <span className="text-xs font-black text-amber-900">₹{Math.max(Math.round((Number(editPrincipal) * (Number(editRate) || 0)) / 100), calculateElapsedMonths(editIssueDate || editingLoan.issueDate) * Math.round((Number(editPrincipal) * (Number(editRate) || 0)) / 100))}</span>
+                      </div>
+                      <div className="p-1.5 bg-emerald-50 rounded-xl border border-emerald-200">
+                        <span className="text-[10px] font-black text-emerald-800 block">एकूण देय रक्कम</span>
+                        <span className="text-xs font-black text-emerald-900">₹{Number(editPrincipal) + Math.max(Math.round((Number(editPrincipal) * (Number(editRate) || 0)) / 100), calculateElapsedMonths(editIssueDate || editingLoan.issueDate) * Math.round((Number(editPrincipal) * (Number(editRate) || 0)) / 100))}</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Purpose Note */}
                   <div>

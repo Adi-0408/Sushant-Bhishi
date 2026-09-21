@@ -24,6 +24,7 @@ import {
   SmsLog,
   SystemBackupData,
 } from '../types';
+import { calculateLoanTotalAccruedInterest } from '../utils/calculations';
 
 const STORAGE_KEYS = {
   ADMINS: 'sb_admins',
@@ -872,22 +873,23 @@ export const StorageService = {
         0
       );
 
+      const accruedInterest = calculateLoanTotalAccruedInterest(loan);
       const initialInterest = Math.round((principal * (loan.interestRate || 0)) / 100);
-      const totalInterest = Number(loan.totalInterest) > 0 ? Number(loan.totalInterest) : initialInterest;
+      const totalInterest = Math.max(Number(loan.totalInterest) || 0, accruedInterest, initialInterest);
+      const dueInterest = Math.max(0, totalInterest - totalInterestPaid);
 
       let status = loan.status;
       let remainingAmount = loan.remainingAmount;
       let totalPayable = loan.totalPayable;
 
       // Auto-mark loans as COMPLETED if fully paid or previously marked CLOSED
-      if ((status as string) === 'CLOSED' || (status === 'ACTIVE' && expectedRemaining <= 0)) {
+      if ((status as string) === 'CLOSED' || (status === 'ACTIVE' && expectedRemaining <= 0 && dueInterest <= 0)) {
         status = 'COMPLETED';
         remainingAmount = 0;
         totalPayable = principal + totalInterest;
-      } else if (status === 'ACTIVE' && remainingAmount !== expectedRemaining) {
-        remainingAmount = expectedRemaining;
-        const currentInterest = Math.round((remainingPrincipal * (loan.interestRate || 0)) / 100);
-        totalPayable = remainingPrincipal + penalty + (remainingPrincipal > 0 ? currentInterest : 0);
+      } else if (status === 'ACTIVE') {
+        remainingAmount = expectedRemaining + dueInterest;
+        totalPayable = principal + totalInterest;
       }
 
       if (
@@ -917,10 +919,6 @@ export const StorageService = {
         remainingAmount,
         status,
       };
-
-      if (loanChanged) {
-        syncToFirestore('loans', updatedLoan.id, updatedLoan);
-      }
 
       return updatedLoan;
     });
@@ -1043,10 +1041,6 @@ export const StorageService = {
         totalInterestPaid,
         totalPaid,
       };
-
-      if (changed) {
-        syncToFirestore('loanPayments', updatedPayment.id, updatedPayment);
-      }
 
       return updatedPayment;
     });
@@ -1427,6 +1421,13 @@ export const StorageService = {
   // Real-time synchronization listeners with Firebase Firestore across all 8 collections
   setupFirestoreListeners: (onUpdate: () => void): (() => void) => {
     const unsubscribes: (() => void)[] = [];
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedUpdate = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        onUpdate();
+      }, 150);
+    };
 
     // 1. Listen for customers in Firestore
     try {
@@ -1445,7 +1446,7 @@ export const StorageService = {
             remoteList.push(fullCustomer);
           });
           setStoredData(STORAGE_KEYS.CUSTOMERS, remoteList);
-          onUpdate();
+          debouncedUpdate();
         },
         (err: any) => console.warn('Firestore customers listener error:', err?.message || err)
       );
@@ -1468,7 +1469,7 @@ export const StorageService = {
             remoteList.push(fullLoan);
           });
           setStoredData(STORAGE_KEYS.LOANS, remoteList);
-          onUpdate();
+          debouncedUpdate();
         },
         (err: any) => console.warn('Firestore loans listener error:', err?.message || err)
       );
@@ -1491,7 +1492,7 @@ export const StorageService = {
             remoteList.push(fullColl);
           });
           setStoredData(STORAGE_KEYS.COLLECTIONS, remoteList);
-          onUpdate();
+          debouncedUpdate();
         },
         (err: any) => console.warn('Firestore collections listener error:', err?.message || err)
       );
@@ -1512,7 +1513,7 @@ export const StorageService = {
             });
           });
           setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, remoteList);
-          onUpdate();
+          debouncedUpdate();
         },
         (err: any) => console.warn('Firestore loanPayments listener error:', err?.message || err)
       );
@@ -1534,7 +1535,7 @@ export const StorageService = {
               });
             });
             setStoredData(STORAGE_KEYS.BISHI_CONFIGS, remoteList);
-            onUpdate();
+            debouncedUpdate();
           }
         },
         (err: any) => console.warn('Firestore bishi listener error:', err?.message || err)
@@ -1557,7 +1558,7 @@ export const StorageService = {
               });
             });
             setStoredData(STORAGE_KEYS.INTEREST_RATES, remoteList);
-            onUpdate();
+            debouncedUpdate();
           }
         },
         (err: any) => console.warn('Firestore interestRates listener error:', err?.message || err)
@@ -1577,7 +1578,7 @@ export const StorageService = {
             });
             if (remotePenalty) {
               setStoredData(STORAGE_KEYS.PENALTY_SETTINGS, remotePenalty);
-              onUpdate();
+              debouncedUpdate();
             }
           }
         },
@@ -1604,7 +1605,7 @@ export const StorageService = {
               }
             });
             setStoredData(STORAGE_KEYS.ADMINS, remoteList);
-            onUpdate();
+            debouncedUpdate();
           }
         },
         (err: any) => console.warn('Firestore admins listener error:', err?.message || err)
@@ -1613,6 +1614,7 @@ export const StorageService = {
     } catch (e) {}
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       unsubscribes.forEach((fn) => {
         try {
           fn();
