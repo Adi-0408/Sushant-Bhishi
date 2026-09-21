@@ -61,18 +61,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const t = translations[language] || translations.MR;
 
-  const [activeOffice, setActiveOfficeState] = useState<OfficeId>(() => {
-    const saved = sessionStorage.getItem('sushant_bishi_active_office');
-    if (saved === 'ALL' || saved === 'MAIN' || saved === 'HOME') {
-      return saved as OfficeId;
-    }
-    return 'ALL';
-  });
+  const [activeOffice, setActiveOffice] = useState<OfficeId>('ALL');
 
-  const setActiveOffice = (office: OfficeId) => {
-    setActiveOfficeState(office);
-    sessionStorage.setItem('sushant_bishi_active_office', office);
-  };
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem('sushant_bishi_active_office');
+      localStorage.removeItem('sushant_bishi_active_office');
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const [selectedBishiFilter, setSelectedBishiFilter] = useState<'ALL' | BishiType>('ALL');
 
   const [customers, setCustomers] = useState<Customer[]>(StorageService.getCustomers);

@@ -187,9 +187,7 @@ export const CustomerList: React.FC = () => {
               value={officeFilter}
               onChange={(val) => {
                 setOfficeFilter(val);
-                if (val === 'MAIN' || val === 'HOME') {
-                  setActiveOffice(val);
-                }
+                setActiveOffice(val);
               }}
               options={[
                 { value: 'ALL', label: t.allOffices },
