@@ -454,7 +454,7 @@ export const BishiManager: React.FC = () => {
                                   : 'bg-white text-slate-700 border-slate-300'
                               }`}
                             >
-                              {language === 'EN' ? 'Weekly (40 W)' : 'साप्ताहिक (४० आठवडे)'}
+                              {language === 'EN' ? 'Weekly' : 'साप्ताहिक'}
                             </button>
                             <button
                               type="button"
@@ -465,7 +465,7 @@ export const BishiManager: React.FC = () => {
                                   : 'bg-white text-slate-700 border-slate-300'
                               }`}
                             >
-                              {language === 'EN' ? 'Monthly (10 M)' : 'मासिक (१० महिने)'}
+                              {language === 'EN' ? 'Monthly' : 'मासिक'}
                             </button>
                           </div>
                         </div>
@@ -667,7 +667,7 @@ export const BishiManager: React.FC = () => {
                           : 'bg-slate-50 text-slate-700 border-slate-200'
                       }`}
                     >
-                      {language === 'EN' ? 'Weekly (40 Weeks)' : 'साप्ताहिक (४० आठवडे)'}
+                      {language === 'EN' ? 'Weekly' : 'साप्ताहिक'}
                     </button>
                     <button
                       type="button"
@@ -678,7 +678,7 @@ export const BishiManager: React.FC = () => {
                           : 'bg-slate-50 text-slate-700 border-slate-200'
                       }`}
                     >
-                      {language === 'EN' ? 'Monthly (10 Months)' : 'मासिक (१० महिने)'}
+                      {language === 'EN' ? 'Monthly' : 'मासिक'}
                     </button>
                   </div>
                 </div>

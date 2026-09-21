@@ -61,6 +61,18 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
 
   const handleBishiTypeChange = (newType: BishiType) => {
     setBishiType(newType);
+
+    const selectedConfig = bishiConfigs.find((cfg) => cfg.id === newType);
+    if (selectedConfig) {
+      const cfgModality = selectedConfig.modality || (selectedConfig.id === '26_JANUARY' ? 'M' : 'W');
+      const cfgInstallments = selectedConfig.totalInstallments || (cfgModality === 'M' ? 10 : 40);
+      setModality(cfgModality);
+      setTotalInstallments(cfgInstallments);
+      if (!editingCustomer && selectedConfig.startDate) {
+        setBishiDate(selectedConfig.startDate);
+      }
+    }
+
     if (!editingCustomer) {
       const autoAcc = generateNextAccountNumber(newType, customers, bishiConfigs);
       setAccountNumber(autoAcc);
@@ -100,13 +112,17 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
     } else {
       const initType = initialLoanOnly ? 'LOAN_ONLY' : (bishiConfigs.length > 0 ? bishiConfigs[0].id : '15_AUGUST');
       const autoAcc = generateNextAccountNumber(initType, customers, bishiConfigs);
+      const firstConfig = bishiConfigs.find((cfg) => cfg.id === initType);
+      const initModality = firstConfig?.modality || (firstConfig?.id === '26_JANUARY' ? 'M' : 'W');
+      const initInstallments = firstConfig?.totalInstallments || (initModality === 'M' ? 10 : 40);
+
       setAccountNumber(autoAcc);
       setName('');
       setMobile('');
       setBishiType(initType);
-      setBishiDate(new Date().toISOString().split('T')[0]);
-      setModality('W');
-      setTotalInstallments(40);
+      setBishiDate(firstConfig?.startDate || new Date().toISOString().split('T')[0]);
+      setModality(initModality);
+      setTotalInstallments(initInstallments);
       setAmount(initialLoanOnly ? 0 : 1000);
       setInterestRate(defaultInterestRate);
       setPenaltyRate(defaultPenaltyRate);
