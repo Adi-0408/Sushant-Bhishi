@@ -49,11 +49,11 @@ export const calculateCollectionEntry = (
 
   const remainingAmount = Math.max(0, safeExpected - totalCollected);
 
-  // Calculate interest based on expected amount
-  const interestAmount = Math.round((safeExpected * safeInterestRate) / 100);
+  // Calculate interest based on collected/paid amount
+  const interestAmount = Math.round((totalCollected * safeInterestRate) / 100);
 
   const totalPaid = totalCollected;
-  const totalPayable = remainingAmount + interestAmount + safePenalty;
+  const totalPayable = remainingAmount + safePenalty;
 
   let status: 'PAID' | 'PARTIAL' | 'PENDING' = 'PENDING';
   if (totalCollected >= safeExpected && safeExpected > 0) {
@@ -87,7 +87,7 @@ export const calculateCustomerFinancials = (
   let totalExpectedBishi = 0;
   let totalCollectedBishi = 0;
   let totalRemainingBishi = 0;
-  let totalInterest = 0;
+  let explicitInterestSum = 0;
   let totalPenalty = 0;
   let completedInstallmentsCount = 0;
 
@@ -98,7 +98,7 @@ export const calculateCustomerFinancials = (
     totalExpectedBishi += item.expectedAmount || 0;
     totalCollectedBishi += item.collectedAmount || 0;
     totalRemainingBishi += item.remainingAmount || 0;
-    totalInterest += item.interestAmount || 0;
+    explicitInterestSum += item.interestAmount || 0;
     totalPenalty += item.penaltyAmount || 0;
 
     if (item.dueDate <= todayStr) {
@@ -109,6 +109,16 @@ export const calculateCustomerFinancials = (
       completedInstallmentsCount += 1;
     }
   });
+
+  // Effective interest rate for bishi (from customer or default for modality)
+  const effectiveRate =
+    typeof customer.interestRate === 'number' && customer.interestRate > 0
+      ? customer.interestRate
+      : (customer.modality === 'W' ? 2.5 : 10);
+
+  // Interest calculated on the total amount paid
+  const calculatedInterestOnPaid = Math.round((totalCollectedBishi * effectiveRate) / 100);
+  const totalInterest = Math.max(explicitInterestSum, calculatedInterestOnPaid);
 
   // A customer has paid their current due if there are NO remaining balances on or before today
   // AND they have at least 1 collected entry or expected bishi
@@ -123,18 +133,17 @@ export const calculateCustomerFinancials = (
     ? 40
     : 10;
 
-  // ONLY calculate final interest / dividend payout if ALL set installments (e.g. 40 weeks or 10 months) are fully paid!
+  // Final interest / dividend payout on total collected bishi
   const isBishiCompleted =
     completedInstallmentsCount >= totalInstallmentsCount &&
     totalRemainingBishi === 0 &&
     totalExpectedBishi > 0;
 
-  const finalBishiPayoutInterest = isBishiCompleted
-    ? Math.round((totalCollectedBishi * (customer.interestRate || 0)) / 100)
-    : 0;
+  const finalBishiPayoutInterest = totalInterest;
+  const finalBishiTotalReturn = totalCollectedBishi + totalInterest;
 
-  const finalBishiTotalReturn = totalCollectedBishi + finalBishiPayoutInterest;
-  const totalPayableBishi = totalRemainingBishi + totalInterest + totalPenalty;
+  // What the customer owes for bishi is remaining balance + late penalty
+  const totalPayableBishi = totalRemainingBishi + totalPenalty;
 
   let loanPrincipal = 0;
   let loanInterest = 0;

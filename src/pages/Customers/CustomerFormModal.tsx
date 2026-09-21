@@ -403,15 +403,18 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
               : generateMonthlyEntries(newCustomer, bishiDate, targetInstallments);
 
           const paidCount = Math.min(targetInstallments, Math.max(0, Number(alreadyPaidInstallments) || 0));
+          const effectiveRate = Number(interestRate) || (modality === 'W' ? 2.5 : 10);
 
           const preparedCollections = collectionEntries.map((c) => {
             const isPrePaid = c.periodIndex <= paidCount;
+            const singleInterest = Math.round((c.expectedAmount * effectiveRate) / 100);
             return {
               ...c,
               customerName: newCustomer.name,
               id: `coll_${newCustomer.id}_${c.periodIndex}`,
               collectedAmount: isPrePaid ? c.expectedAmount : 0,
               remainingAmount: isPrePaid ? 0 : c.expectedAmount,
+              interestAmount: isPrePaid ? singleInterest : 0,
               totalPaid: isPrePaid ? c.expectedAmount : 0,
               totalWithPenalty: isPrePaid ? c.expectedAmount : 0,
               status: isPrePaid ? ('PAID' as const) : ('PENDING' as const),

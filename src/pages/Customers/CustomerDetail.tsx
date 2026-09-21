@@ -440,7 +440,10 @@ export const CustomerDetail: React.FC = () => {
             </div>
 
             <div className="bg-blue-50 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-blue-200 text-center">
-              <span className="text-[11px] print:text-[9px] font-bold text-blue-800 block leading-tight">{language === 'EN' ? 'Total Interest' : 'एकूण व्याज'}</span>
+              <span className="text-[11px] print:text-[9px] font-bold text-blue-800 block leading-tight">
+                {language === 'EN' ? 'Total Interest' : 'एकूण व्याज'}
+                {customer.interestRate ? ` (${customer.interestRate}%)` : ''}
+              </span>
               <span className="text-base print:text-xs font-black text-blue-900 block mt-0.5">
                 {formatCurrency(financials.totalInterest, language)}
               </span>
@@ -750,7 +753,13 @@ export const CustomerDetail: React.FC = () => {
                     )}
                   </td>
                   <td className="p-3.5 print:p-1.5 text-right text-slate-700 print:text-[10px]">
-                    {formatCurrency(entry.interestAmount, language)}
+                    {formatCurrency(
+                      entry.interestAmount ||
+                        (entry.collectedAmount > 0
+                          ? Math.round((entry.collectedAmount * (customer.interestRate || (customer.modality === 'W' ? 2.5 : 10))) / 100)
+                          : 0),
+                      language
+                    )}
                   </td>
                   <td className="p-3.5 print:p-1.5 text-right font-bold text-rose-600 print:text-[10px]">
                     {(entry.penaltyAmount || 0) > 0 ? (

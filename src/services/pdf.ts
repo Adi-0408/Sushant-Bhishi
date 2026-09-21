@@ -167,7 +167,7 @@ export const generateCustomerPDF = async (
   const totalExpected = customerCollections.reduce((sum, c) => sum + (c.expectedAmount || 0), 0);
   const totalCollected = customerCollections.reduce((sum, c) => sum + (c.collectedAmount || 0), 0);
   const totalRemaining = customerCollections.reduce((sum, c) => sum + (c.remainingAmount || 0), 0);
-  const totalInterest = customerCollections.reduce((sum, c) => sum + (c.interestAmount || 0), 0);
+  const totalInterest = financials.totalInterest;
   const totalPenalty = customerCollections.reduce((sum, c) => sum + (c.penaltyAmount || 0), 0);
 
   container.innerHTML = `
@@ -264,7 +264,7 @@ export const generateCustomerPDF = async (
                 <td style="padding: 4px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 700; color: #334155;">${formatCurrency(item.expectedAmount)}</td>
                 <td style="padding: 4px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 800; color: #15803d;">${formatCurrency(item.collectedAmount)}</td>
                 <td style="padding: 4px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #be123c;">${formatCurrency(item.remainingAmount)}</td>
-                <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: right; color: #475569;">${formatCurrency(item.interestAmount)}</td>
+                <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: right; color: #475569;">${formatCurrency(item.interestAmount || (item.collectedAmount > 0 ? Math.round((item.collectedAmount * (customer.interestRate || (customer.modality === 'W' ? 2.5 : 10))) / 100) : 0))}</td>
                 <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: right; font-weight: 700; color: #b45309;">${formatCurrency(item.penaltyAmount)}</td>
                 <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: center; color: #475569;">${
                   item.paymentMode === 'ONLINE' ? 'ऑनलाइन' : item.paymentMode === 'BANK' ? 'बँक' : 'नगद'

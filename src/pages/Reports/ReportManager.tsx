@@ -147,7 +147,8 @@ export const ReportManager: React.FC = () => {
       exp += c.expectedAmount || 0;
       coll += c.collectedAmount || 0;
       rem += c.remainingAmount || 0;
-      int += c.interestAmount || 0;
+      const cInt = c.interestAmount || (c.collectedAmount > 0 ? Math.round((c.collectedAmount * (cust.interestRate || (cust.modality === 'W' ? 2.5 : 10))) / 100) : 0);
+      int += cInt;
       pen += c.penaltyAmount || 0;
     });
 
