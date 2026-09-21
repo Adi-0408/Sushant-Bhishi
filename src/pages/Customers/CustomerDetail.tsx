@@ -82,6 +82,7 @@ export const CustomerDetail: React.FC = () => {
 
   // Loan Payment modal state
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
+  const [loanPaymentDate, setLoanPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [loanPaymentInput, setLoanPaymentInput] = useState<number | ''>('');
   const [loanInterestPaymentInput, setLoanInterestPaymentInput] = useState<number | ''>('');
   const [loanDiscountPaymentInput, setLoanDiscountPaymentInput] = useState<number | ''>('');
@@ -155,11 +156,10 @@ export const CustomerDetail: React.FC = () => {
 
   const openCollectModal = (entry: CollectionEntry) => {
     setSelectedEntry(entry);
-    // When collecting payment, record the actual payment date as today
-    setPaymentDate(todayStr);
-    setPaymentTime(getCurrentTimeStr());
+    setPaymentDate(entry.paymentDate || entry.dueDate || todayStr);
+    setPaymentTime(entry.paymentTime || getCurrentTimeStr());
     setPaymentMode(entry.paymentMode || 'CASH');
-    setCollectedInput(entry.remainingAmount > 0 ? entry.remainingAmount : (entry.collectedAmount || entry.expectedAmount));
+    setCollectedInput(entry.collectedAmount > 0 ? entry.collectedAmount : (entry.remainingAmount > 0 ? entry.remainingAmount : entry.expectedAmount));
     setInterestInput(entry.interestAmount || 0);
     setPenaltyInput(entry.penaltyAmount || 0);
     setNoteInput(entry.note || '');
@@ -240,7 +240,11 @@ export const CustomerDetail: React.FC = () => {
     StorageService.addLoanPayment({
       loanId: loan.id,
       customerId: customer.id,
-      paymentDate: new Date().toISOString().split('T')[0],
+      customerName: customer.name,
+      accountNumber: customer.accountNumber,
+      officeId: customer.officeId,
+      customerMobile: customer.mobile,
+      paymentDate: loanPaymentDate || new Date().toISOString().split('T')[0],
       paidAmount: paidPrin,
       interestPaid: paidInt,
       penaltyPaid: unpaidInt, // Unpaid interest carried forward as penalty
@@ -663,6 +667,15 @@ export const CustomerDetail: React.FC = () => {
                       <span>{language === 'EN' ? 'Upcoming' : 'आगामी'} ({formatDateMarathi(entry.dueDate, language)})</span>
                     </span>
                   )}
+                  {/* Edit button for all entries so user can edit dates/amounts */}
+                  <button
+                    type="button"
+                    onClick={() => openCollectModal(entry)}
+                    className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 flex items-center justify-center touch-target cursor-pointer"
+                    title={language === 'EN' ? 'Edit installment / date' : 'नोंद / तारीख बदला (Edit)'}
+                  >
+                    <Edit className="w-4 h-4 text-amber-700" />
+                  </button>
                   {entry.collectedAmount > 0 && (
                     <button
                       onClick={() => setDeleteConfirmEntry(entry)}
@@ -792,6 +805,15 @@ export const CustomerDetail: React.FC = () => {
                           <span>{language === 'EN' ? 'Upcoming' : 'आगामी'} ({formatDateMarathi(entry.dueDate, language)})</span>
                         </span>
                       )}
+                      {/* Edit button so user can edit dates/amounts for any entry */}
+                      <button
+                        type="button"
+                        onClick={() => openCollectModal(entry)}
+                        className="p-1 rounded-lg bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 transition-colors cursor-pointer"
+                        title={language === 'EN' ? 'Edit installment / date' : 'नोंद / तारीख बदला (Edit)'}
+                      >
+                        <Edit className="w-3.5 h-3.5 text-amber-700" />
+                      </button>
                       {entry.collectedAmount > 0 && (
                         <button
                           onClick={() => setDeleteConfirmEntry(entry)}
@@ -1210,6 +1232,34 @@ export const CustomerDetail: React.FC = () => {
                 </div>
               </div>
 
+              {/* Payment Date & Time (Editable) */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center space-x-1">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>{language === 'EN' ? 'Payment Date (Editable):' : 'जमा दिनांक (तारीख बदला):'}</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center space-x-1">
+                    <Clock className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>{language === 'EN' ? 'Payment Time (Editable):' : 'जमा वेळ:'}</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={paymentTime}
+                    onChange={(e) => setPaymentTime(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -1338,6 +1388,20 @@ export const CustomerDetail: React.FC = () => {
                     <span>📱 {language === 'EN' ? 'Online' : 'ऑनलाइन (Online)'}</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Loan Payment Date (Editable) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center space-x-1">
+                  <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                  <span>{language === 'EN' ? 'Payment Date (Editable):' : 'कर्ज जमा दिनांक (तारीख बदला):'}</span>
+                </label>
+                <input
+                  type="date"
+                  value={loanPaymentDate}
+                  onChange={(e) => setLoanPaymentDate(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                />
               </div>
 
               {/* Option 1: Loan Interest (Calculated on Loan Amount) */}

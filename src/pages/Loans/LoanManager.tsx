@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, formatDateMarathi, getBishiNameMarathi, matchesCustomerSearch } from '../../utils/formatters';
 import { StorageService } from '../../services/db';
-import { Landmark, Search, Plus, Wallet, ArrowUpRight, X, UserPlus } from 'lucide-react';
+import { Landmark, Search, Plus, Wallet, ArrowUpRight, X, UserPlus, Edit3, Save, Calendar } from 'lucide-react';
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 import { CustomDropdown } from '../../components/common/CustomDropdown';
 import { Link } from 'react-router-dom';
 import { CustomerFormModal } from '../Customers/CustomerFormModal';
 import { ModalPortal } from '../../components/common/ModalPortal';
+import { Loan } from '../../types';
 
 export const LoanManager: React.FC = () => {
   const { loans, loanPayments, customers, activeOffice, refreshData, showToast, t, language } = useApp();
@@ -22,6 +23,54 @@ export const LoanManager: React.FC = () => {
   const [interestRateInput, setInterestRateInput] = useState<number | ''>(12);
   const [issueDateInput, setIssueDateInput] = useState(new Date().toISOString().split('T')[0]);
   const [purposeInput, setPurposeInput] = useState('');
+
+  // Edit Loan Modal state
+  const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
+  const [editPrincipal, setEditPrincipal] = useState<number | ''>('');
+  const [editRate, setEditRate] = useState<number | ''>(12);
+  const [editIssueDate, setEditIssueDate] = useState('');
+  const [editPurpose, setEditPurpose] = useState('');
+  const [editStatus, setEditStatus] = useState<'ACTIVE' | 'COMPLETED'>('ACTIVE');
+
+  const startEditLoan = (l: Loan) => {
+    setEditingLoan(l);
+    setEditPrincipal(l.principalAmount);
+    setEditRate(l.interestRate);
+    setEditIssueDate(l.issueDate);
+    setEditPurpose(l.purposeNote || '');
+    setEditStatus(l.status === 'ACTIVE' ? 'ACTIVE' : 'COMPLETED');
+  };
+
+  const handleUpdateLoan = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLoan) return;
+
+    const principal = Number(editPrincipal) || editingLoan.principalAmount;
+    const rate = Number(editRate) || editingLoan.interestRate;
+    const totalInterest = Math.round((principal * rate) / 100);
+    const paid = Number(editingLoan.paidAmount) || 0;
+    const discount = Number(editingLoan.discountAmount) || 0;
+    const penalty = Number(editingLoan.penaltyAmount) || 0;
+    const remainingPrincipal = Math.max(0, principal - paid - discount);
+    const remainingAmount = remainingPrincipal + penalty;
+    const totalPayable = principal + totalInterest;
+
+    StorageService.saveLoan({
+      ...editingLoan,
+      principalAmount: principal,
+      interestRate: rate,
+      totalInterest,
+      totalPayable,
+      remainingAmount,
+      issueDate: editIssueDate || editingLoan.issueDate,
+      purposeNote: editPurpose.trim() || undefined,
+      status: editStatus,
+    });
+
+    showToast(language === 'EN' ? 'Loan updated successfully.' : 'कर्ज माहिती यशस्वीपणे अपडेट झाली.', 'success');
+    refreshData();
+    setEditingLoan(null);
+  };
 
   const officeCustomerIds = new Set(
     customers
@@ -62,12 +111,15 @@ export const LoanManager: React.FC = () => {
 
     StorageService.saveLoan({
       customerId: cust.id,
+      customerName: cust.name,
+      customerMobile: cust.mobile,
       accountNumber: cust.accountNumber,
       officeId: cust.officeId,
       principalAmount: principal,
       issueDate: issueDateInput,
       interestRate: rate,
       totalInterest,
+      totalInterestPaid: 0,
       totalPayable,
       paidAmount: 0,
       remainingAmount: principal,
@@ -235,7 +287,15 @@ export const LoanManager: React.FC = () => {
                     </div>
 
                     {/* Action */}
-                    <div className="pt-1 flex justify-end">
+                    <div className="pt-1 flex items-center justify-end space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => startEditLoan(loan)}
+                        className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200 font-extrabold text-xs flex items-center justify-center transition-colors cursor-pointer"
+                        title={language === 'EN' ? 'Edit Loan' : 'कर्ज माहिती बदला (Edit)'}
+                      >
+                        <Edit3 className="w-4 h-4 text-amber-700" />
+                      </button>
                       <Link
                         to={`/customers/${cust.id}`}
                         className="px-4 py-2.5 rounded-xl bg-amber-700 text-white font-extrabold text-xs inline-flex items-center justify-center space-x-1 shadow-xs cursor-pointer min-h-[44px]"
@@ -318,13 +378,23 @@ export const LoanManager: React.FC = () => {
                           </span>
                         </td>
                         <td className="p-3.5 text-center">
-                          <Link
-                            to={`/customers/${cust.id}`}
-                            className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-900 font-bold hover:bg-amber-200 transition-colors text-xs inline-flex items-center space-x-1"
-                          >
-                            <span>{t.btnLoanPay}</span>
-                            <ArrowUpRight className="w-3.5 h-3.5" />
-                          </Link>
+                          <div className="flex items-center justify-center space-x-1.5">
+                            <button
+                              type="button"
+                              onClick={() => startEditLoan(loan)}
+                              className="p-1.5 rounded-lg bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200 transition-colors text-xs inline-flex items-center cursor-pointer"
+                              title={language === 'EN' ? 'Edit Loan' : 'कर्ज माहिती बदला (Edit)'}
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+                            </button>
+                            <Link
+                              to={`/customers/${cust.id}`}
+                              className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-900 font-bold hover:bg-amber-200 transition-colors text-xs inline-flex items-center space-x-1"
+                            >
+                              <span>{t.btnLoanPay}</span>
+                              <ArrowUpRight className="w-3.5 h-3.5" />
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -460,6 +530,149 @@ export const LoanManager: React.FC = () => {
             </form>
           </div>
         </div>
+        </ModalPortal>
+      )}
+
+      {/* Edit Loan Modal */}
+      {editingLoan && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs no-print overflow-hidden">
+            <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto animate-in fade-in zoom-in duration-150">
+              <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 sm:p-2.5 rounded-xl bg-amber-100 text-amber-800 font-bold shrink-0">
+                    <Landmark className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-slate-900">
+                      {language === 'EN' ? 'Edit Loan Account' : 'कर्ज माहिती बदला (Edit Loan)'}
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
+                      {editingLoan.customerName} ({editingLoan.accountNumber})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingLoan(null)}
+                  className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateLoan} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+                  {/* Issue Date */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center space-x-1">
+                      <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                      <span>{language === 'EN' ? 'Loan Issue Date (Editable):' : 'कर्ज तारीख (तारीख बदला):'}</span> <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={editIssueDate}
+                      onChange={(e) => setEditIssueDate(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  {/* Principal & Interest Rate */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        {language === 'EN' ? 'Principal Amount (₹):' : 'मुद्दल रक्कम (₹):'} <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min={100}
+                        value={editPrincipal}
+                        onChange={(e) => setEditPrincipal(e.target.value ? Number(e.target.value) : '')}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        {language === 'EN' ? 'Interest Rate (%):' : 'व्याजदर (%):'} <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min={0}
+                        step={0.1}
+                        value={editRate}
+                        onChange={(e) => setEditRate(e.target.value ? Number(e.target.value) : '')}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Loan Status */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      {language === 'EN' ? 'Loan Status:' : 'कर्ज स्थिती:'}
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditStatus('ACTIVE')}
+                        className={`py-2 px-3 rounded-xl text-xs font-extrabold border transition-all cursor-pointer ${
+                          editStatus === 'ACTIVE'
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {language === 'EN' ? 'Active (Open)' : 'सुरू (Active)'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditStatus('COMPLETED')}
+                        className={`py-2 px-3 rounded-xl text-xs font-extrabold border transition-all cursor-pointer ${
+                          editStatus === 'COMPLETED'
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {language === 'EN' ? 'Completed (Paid)' : 'पूर्ण (Completed)'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Purpose Note */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {language === 'EN' ? 'Purpose / Note:' : 'कारण / नोंद:'}
+                    </label>
+                    <MarathiTextInput
+                      value={editPurpose}
+                      onChange={(val) => setEditPurpose(val)}
+                      placeholder={language === 'EN' ? 'Purpose of loan or item name' : 'कर्जाचे कारण किंवा वस्तूचे नाव'}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3.5 sm:px-6 sm:py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-end space-x-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setEditingLoan(null)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-white min-h-[44px] flex items-center justify-center cursor-pointer shadow-2xs"
+                  >
+                    {t.btnCancel}
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-xl bg-amber-700 text-white text-xs font-extrabold shadow-md hover:bg-amber-800 min-h-[44px] flex items-center justify-center space-x-1.5 cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{t.btnSave}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </ModalPortal>
       )}
 

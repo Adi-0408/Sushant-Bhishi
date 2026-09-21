@@ -92,10 +92,12 @@ export interface Loan {
   customerName?: string;
   accountNumber: string;
   officeId: OfficeId;
+  customerMobile?: string;
   principalAmount: number;
   issueDate: string;
   interestRate: number;
   totalInterest: number;
+  totalInterestPaid?: number;
   totalPayable: number;
   paidAmount: number;
   discountAmount?: number;
@@ -111,12 +113,18 @@ export interface LoanPayment {
   loanId: string;
   customerId: string;
   customerName?: string;
+  accountNumber?: string;
+  officeId?: OfficeId;
+  customerMobile?: string;
   paymentDate: string;
   paidAmount: number;
   interestPaid: number;
+  totalInterest?: number;
+  totalInterestPaid?: number;
   penaltyPaid: number;
   discountAmount?: number;
   remainingLoan: number;
+  totalPaid?: number;
   paymentMode?: 'CASH' | 'ONLINE';
   note?: string;
 }

@@ -12,6 +12,7 @@ export const BishiManager: React.FC = () => {
   const { bishiConfigs, customers, activeOffice, refreshData, showToast, language } = useApp();
 
   const [editingId, setEditingId] = useState<BishiType | null>(null);
+  const [editingName, setEditingName] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [installments, setInstallments] = useState<number>(40);
@@ -29,6 +30,7 @@ export const BishiManager: React.FC = () => {
 
   const startEdit = (config: BishiConfig) => {
     setEditingId(config.id);
+    setEditingName(config.name);
     setStartDate(config.startDate);
     setEndDate(config.endDate);
     const configModality = config.modality || (config.id === '26_JANUARY' ? 'M' : 'W');
@@ -36,11 +38,22 @@ export const BishiManager: React.FC = () => {
     setInstallments(config.totalInstallments || (configModality === 'M' ? 10 : 40));
   };
 
-  const handleSave = (id: BishiType) => {
+  const handleSave = async (id: BishiType) => {
+    const trimmedName = editingName.trim();
+    if (!trimmedName) {
+      showToast(
+        language === 'EN' ? 'Please enter a valid scheme name.' : 'कृपया भिशी योजनेचे नाव प्रविष्ट करा.',
+        'error'
+      );
+      return;
+    }
+    const finalName = language === 'MR' ? await convertTextToMarathi(trimmedName) : trimmedName;
+
     const updatedList = bishiConfigs.map((cfg) => {
       if (cfg.id === id) {
         return {
           ...cfg,
+          name: finalName,
           startDate,
           endDate,
           modality,
@@ -54,7 +67,7 @@ export const BishiManager: React.FC = () => {
     showToast(
       language === 'EN'
         ? 'Bishi scheme updated successfully.'
-        : 'भिशी योजनेचे हप्ते व तारीख यशस्वीपणे अपडेट झाली.',
+        : 'भिशी योजनेचे नाव, हप्ते व तारीख यशस्वीपणे अपडेट झाली.',
       'success'
     );
     refreshData();
@@ -408,13 +421,25 @@ export const BishiManager: React.FC = () => {
                     <span className="text-xs font-bold uppercase tracking-wider text-white/80 block mb-1">
                       {language === 'EN' ? 'Bishi Scheme' : 'भिशी प्रकार'}
                     </span>
-                    <h3 className="text-2xl font-black text-white !text-white">{config.name}</h3>
+                    <h3 className="text-2xl font-black text-white !text-white">{isEditing ? (editingName || config.name) : config.name}</h3>
                   </div>
 
                   {/* Body */}
                   <div className={`p-6 space-y-4 flex-1 ${cardPastel}`}>
                     {isEditing ? (
                       <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            {language === 'EN' ? 'Scheme Name (Editable):' : 'भिशी योजनेचे नाव (बदला):'} <span className="text-rose-500">*</span>
+                          </label>
+                          <MarathiTextInput
+                            value={editingName}
+                            onChange={(val) => setEditingName(val)}
+                            placeholder={language === 'EN' ? 'Enter scheme name' : 'योजनेचे नाव इंग्रजीत टाईप करा'}
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-black text-brand-900 bg-white focus:ring-2 focus:ring-[#0F7A5C]"
+                          />
+                        </div>
+
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-1">
                             {language === 'EN' ? 'Frequency / Modality:' : 'पद्धत (साप्ताहिक / मासिक):'}
@@ -577,7 +602,7 @@ export const BishiManager: React.FC = () => {
                           className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-extrabold text-xs hover:bg-slate-800 transition-all flex items-center justify-center space-x-2 shadow-xs cursor-pointer hover:shadow-md active:scale-[0.99]"
                         >
                           <Edit3 className="w-4 h-4" />
-                          <span>{language === 'EN' ? 'Edit Scheme' : 'तारीख / हप्ते बदला'}</span>
+                          <span>{language === 'EN' ? 'Edit Scheme' : 'नाव, तारीख व हप्ते बदला (Edit)'}</span>
                         </button>
                         <button
                           type="button"

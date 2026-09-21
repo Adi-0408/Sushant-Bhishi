@@ -5,7 +5,7 @@ import { StorageService } from '../../services/db';
 import { SmsService } from '../../services/sms';
 import { calculateCollectionEntry, getLoanRemainingPrincipal, calculateLoanDueInterest } from '../../utils/calculations';
 import { formatCurrency, formatDateMarathi, getBishiNameMarathi, matchesCustomerSearch, toEnglishDigits } from '../../utils/formatters';
-import { X, Wallet, CheckCircle2, AlertCircle, Phone, Calendar, Landmark, CreditCard } from 'lucide-react';
+import { X, Wallet, CheckCircle2, AlertCircle, Phone, Calendar, Landmark, CreditCard, Clock } from 'lucide-react';
 import { MarathiTextInput } from '../common/MarathiTextInput';
 import { CustomDropdown } from '../common/CustomDropdown';
 import { ModalPortal } from '../common/ModalPortal';
@@ -287,6 +287,10 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
       StorageService.addLoanPayment({
         loanId: activeLoan.id,
         customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+        accountNumber: selectedCustomer.accountNumber,
+        officeId: selectedCustomer.officeId,
+        customerMobile: selectedCustomer.mobile,
         paymentDate: effectiveDate,
         paidAmount: loanPrinVal,
         interestPaid: loanInterestPaidVal,
@@ -513,6 +517,34 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
               >
                 <span>📱 {language === 'EN' ? 'Online (UPI)' : 'ऑनलाइन (Online)'}</span>
               </button>
+            </div>
+
+            {/* Payment Date & Time (Editable) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-100 mt-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center space-x-1">
+                  <Calendar className="w-3.5 h-3.5 text-[#0F7A5C]" />
+                  <span>{language === 'EN' ? 'Payment Date (Editable):' : 'जमा दिनांक (तारीख बदला):'}</span>
+                </label>
+                <input
+                  type="date"
+                  value={paymentDate || todayStr}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-[#0F7A5C]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center space-x-1">
+                  <Clock className="w-3.5 h-3.5 text-[#0F7A5C]" />
+                  <span>{language === 'EN' ? 'Payment Time (Editable):' : 'जमा वेळ (वेळ बदला):'}</span>
+                </label>
+                <input
+                  type="time"
+                  value={paymentTime || currentTimeStr}
+                  onChange={(e) => setPaymentTime(e.target.value)}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-[#0F7A5C]"
+                />
+              </div>
             </div>
           </div>
 

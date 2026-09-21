@@ -148,19 +148,31 @@ const enrichFirestoreData = (collectionName: string, rawData: any): any => {
       }
 
       const allLoans = getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []);
-      const custLoan = allLoans.find(
-        (l) =>
-          (l.customerId === data.id || (data.accountNumber && l.accountNumber === data.accountNumber)) &&
-          l.status === 'ACTIVE'
+      const custLoans = allLoans.filter(
+        (l) => l.customerId === data.id || (data.accountNumber && l.accountNumber === data.accountNumber)
       );
+      const custLoan = custLoans.find((l) => l.status === 'ACTIVE')
+        || [...custLoans].sort((a, b) => (b.updatedAt || b.issueDate || '').localeCompare(a.updatedAt || a.issueDate || ''))[0];
       if (custLoan) {
+        const allLoanPayments = getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []);
+        const paymentsForLoan = allLoanPayments.filter(
+          (lp) => (lp.loanId && lp.loanId === custLoan.id) || lp.customerId === data.id
+        );
+        const totalInterestPaid = paymentsForLoan.reduce(
+          (sum, p) => sum + (Number(p.interestPaid) || 0),
+          0
+        );
+        const principal = Number(custLoan.principalAmount) || 0;
+        const rate = Number(custLoan.interestRate) || 0;
+        const calculatedInitialInterest = Math.round((principal * rate) / 100);
         data.loanDetails = {
-          principalAmount: custLoan.principalAmount,
-          interestRate: custLoan.interestRate,
-          totalInterest: custLoan.totalInterest,
-          totalPayable: custLoan.totalPayable,
-          paidAmount: custLoan.paidAmount,
-          remainingAmount: custLoan.remainingAmount,
+          principalAmount: principal,
+          interestRate: rate,
+          totalInterest: Number(custLoan.totalInterest) > 0 ? Number(custLoan.totalInterest) : calculatedInitialInterest,
+          totalInterestPaid: totalInterestPaid,
+          totalPayable: custLoan.totalPayable || (principal + calculatedInitialInterest),
+          paidAmount: custLoan.paidAmount || 0,
+          remainingAmount: custLoan.remainingAmount || 0,
           status: custLoan.status,
         };
       }
@@ -168,34 +180,78 @@ const enrichFirestoreData = (collectionName: string, rawData: any): any => {
       // Ignore enrichment lookup issues
     }
   } else if (collectionName === 'collections') {
-    if (!data.customerName) {
-      try {
-        const customers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
-        const cust = customers.find(
-          (c) => c.id === data.customerId || (data.accountNumber && c.accountNumber === data.accountNumber)
-        );
-        if (cust) {
-          data.customerName = cust.name;
-        }
-      } catch (e) {}
-    }
+    try {
+      const customers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
+      const cust = customers.find(
+        (c) => c.id === data.customerId || (data.accountNumber && c.accountNumber === data.accountNumber)
+      );
+      if (cust) {
+        data.customerName = data.customerName || cust.name;
+        data.accountNumber = data.accountNumber || cust.accountNumber;
+        data.officeId = data.officeId || cust.officeId || 'MAIN';
+        data.customerMobile = data.customerMobile || cust.mobile || '';
+      }
+    } catch (e) {}
     data.penaltyAmount = Number(data.penaltyAmount) || 0;
     data.totalWithPenalty = (Number(data.collectedAmount) || 0) + data.penaltyAmount;
-  } else if (
-    collectionName === 'loans' ||
-    collectionName === 'loanPayments'
-  ) {
-    if (!data.customerName) {
-      try {
-        const customers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
-        const cust = customers.find(
-          (c) => c.id === data.customerId || (data.accountNumber && c.accountNumber === data.accountNumber)
-        );
-        if (cust) {
-          data.customerName = cust.name;
-        }
-      } catch (e) {}
-    }
+  } else if (collectionName === 'loanPayments') {
+    try {
+      const customers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
+      const cust = customers.find(
+        (c) => c.id === data.customerId || (data.accountNumber && c.accountNumber === data.accountNumber)
+      );
+      const allLoans = getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []);
+      const loan = allLoans.find((l) => (data.loanId && l.id === data.loanId) || l.customerId === data.customerId);
+
+      if (cust || loan) {
+        data.customerName = data.customerName || cust?.name || loan?.customerName || '';
+        data.accountNumber = data.accountNumber || cust?.accountNumber || loan?.accountNumber || '';
+        data.officeId = data.officeId || cust?.officeId || loan?.officeId || 'MAIN';
+        data.customerMobile = data.customerMobile || cust?.mobile || (loan as any)?.customerMobile || '';
+      }
+
+      // Calculate cumulative total interest paid on this loan
+      const allLoanPayments = getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []);
+      const paymentsForLoan = allLoanPayments.filter(
+        (lp) => (lp.loanId && lp.loanId === data.loanId) || lp.customerId === data.customerId
+      );
+      const totalInterest = paymentsForLoan.reduce(
+        (sum, p) => sum + (Number(p.interestPaid) || 0),
+        0
+      );
+      data.totalInterest = totalInterest;
+      data.totalInterestPaid = totalInterest;
+      data.totalPaid = (Number(data.paidAmount) || 0) + (Number(data.interestPaid) || 0) + (Number(data.penaltyPaid) || 0);
+    } catch (e) {}
+  } else if (collectionName === 'loans') {
+    try {
+      const customers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
+      const cust = customers.find(
+        (c) => c.id === data.customerId || (data.accountNumber && c.accountNumber === data.accountNumber)
+      );
+      if (cust) {
+        data.customerName = data.customerName || cust.name;
+        data.accountNumber = data.accountNumber || cust.accountNumber;
+        data.officeId = data.officeId || cust.officeId || 'MAIN';
+        data.customerMobile = data.customerMobile || cust.mobile || '';
+      }
+
+      const allLoanPayments = getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []);
+      const paymentsForLoan = allLoanPayments.filter(
+        (lp) => (lp.loanId && lp.loanId === data.id) || lp.customerId === data.customerId
+      );
+      const totalInterestPaid = paymentsForLoan.reduce(
+        (sum, p) => sum + (Number(p.interestPaid) || 0),
+        0
+      );
+      data.totalInterestPaid = totalInterestPaid;
+
+      const principal = Number(data.principalAmount) || 0;
+      const rate = Number(data.interestRate) || 0;
+      const calculatedInterest = Math.round((principal * rate) / 100);
+      data.totalInterest = Number(data.totalInterest) > 0 ? Number(data.totalInterest) : calculatedInterest;
+      data.totalPayable = principal + data.totalInterest;
+    } catch (e) {}
   }
 
   return data;
@@ -554,6 +610,69 @@ export const StorageService = {
       deleteFromFirestore('customers', id, oldCustomer);
     }
 
+    // Synchronize customer changes across collections, loans, and loan payments
+    try {
+      const allColls = getStoredData<CollectionEntry[]>(STORAGE_KEYS.COLLECTIONS, []);
+      let collsChanged = false;
+      const updatedColls = allColls.map((c) => {
+        if (c.customerId === id || (oldCustomer.accountNumber && c.accountNumber === oldCustomer.accountNumber)) {
+          collsChanged = true;
+          return {
+            ...c,
+            customerId: id,
+            customerName: customers[index].name,
+            accountNumber: customers[index].accountNumber,
+            officeId: customers[index].officeId,
+            bishiType: customers[index].bishiType,
+          };
+        }
+        return c;
+      });
+      if (collsChanged) {
+        setStoredData(STORAGE_KEYS.COLLECTIONS, updatedColls);
+      }
+
+      const allLoans = getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []);
+      let loansChanged = false;
+      const updatedLoans = allLoans.map((l) => {
+        if (l.customerId === id || (oldCustomer.accountNumber && l.accountNumber === oldCustomer.accountNumber)) {
+          loansChanged = true;
+          return {
+            ...l,
+            customerId: id,
+            customerName: customers[index].name,
+            accountNumber: customers[index].accountNumber,
+            officeId: customers[index].officeId,
+            customerMobile: customers[index].mobile,
+          };
+        }
+        return l;
+      });
+      if (loansChanged) {
+        setStoredData(STORAGE_KEYS.LOANS, updatedLoans);
+      }
+
+      const allLoanPayments = getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []);
+      let paymentsChanged = false;
+      const updatedPayments = allLoanPayments.map((p) => {
+        if (p.customerId === id || (oldCustomer.accountNumber && p.accountNumber === oldCustomer.accountNumber)) {
+          paymentsChanged = true;
+          return {
+            ...p,
+            customerId: id,
+            customerName: customers[index].name,
+            accountNumber: customers[index].accountNumber,
+            officeId: customers[index].officeId,
+            customerMobile: customers[index].mobile,
+          };
+        }
+        return p;
+      });
+      if (paymentsChanged) {
+        setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, updatedPayments);
+      }
+    } catch (e) {}
+
     syncToFirestore('customers', id, customers[index]);
     return customers[index];
   },
@@ -723,8 +842,12 @@ export const StorageService = {
   // Loan Operations
   getLoans: (): Loan[] => {
     const rawLoans = getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []);
+    const rawCustomers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
+    const rawPayments = getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []);
     let hasChanges = false;
+
     const sanitized = rawLoans.map((loan) => {
+      let loanChanged = false;
       const principal = Number(loan.principalAmount) || 0;
       const paid = Number(loan.paidAmount) || 0;
       const discount = Number(loan.discountAmount) || 0;
@@ -732,36 +855,74 @@ export const StorageService = {
       const remainingPrincipal = Math.max(0, principal - paid - discount);
       const expectedRemaining = remainingPrincipal + penalty;
 
+      const cust = rawCustomers.find(
+        (c) => c.id === loan.customerId || (loan.accountNumber && c.accountNumber === loan.accountNumber)
+      );
+
+      const customerName = loan.customerName || cust?.name || '';
+      const accountNumber = loan.accountNumber || cust?.accountNumber || '';
+      const officeId = loan.officeId || cust?.officeId || 'MAIN';
+      const customerMobile = loan.customerMobile || cust?.mobile || '';
+
+      const paymentsForLoan = rawPayments.filter(
+        (lp) => (lp.loanId && lp.loanId === loan.id) || lp.customerId === loan.customerId
+      );
+      const totalInterestPaid = paymentsForLoan.reduce(
+        (sum, p) => sum + (Number(p.interestPaid) || 0),
+        0
+      );
+
+      const initialInterest = Math.round((principal * (loan.interestRate || 0)) / 100);
+      const totalInterest = Number(loan.totalInterest) > 0 ? Number(loan.totalInterest) : initialInterest;
+
+      let status = loan.status;
+      let remainingAmount = loan.remainingAmount;
+      let totalPayable = loan.totalPayable;
+
       // Auto-mark loans as COMPLETED if fully paid or previously marked CLOSED
-      if ((loan.status as string) === 'CLOSED') {
-        hasChanges = true;
-        return {
-          ...loan,
-          status: 'COMPLETED' as const,
-        };
-      }
-      if (loan.status === 'ACTIVE' && expectedRemaining <= 0) {
-        hasChanges = true;
-        return {
-          ...loan,
-          remainingAmount: 0,
-          totalInterest: 0,
-          status: 'COMPLETED' as const,
-        };
+      if ((status as string) === 'CLOSED' || (status === 'ACTIVE' && expectedRemaining <= 0)) {
+        status = 'COMPLETED';
+        remainingAmount = 0;
+        totalPayable = principal + totalInterest;
+      } else if (status === 'ACTIVE' && remainingAmount !== expectedRemaining) {
+        remainingAmount = expectedRemaining;
+        const currentInterest = Math.round((remainingPrincipal * (loan.interestRate || 0)) / 100);
+        totalPayable = remainingPrincipal + penalty + (remainingPrincipal > 0 ? currentInterest : 0);
       }
 
-      // Auto-correct active loans where remainingAmount had initial interest incorrectly baked into the balance
-      if (loan.status === 'ACTIVE' && loan.remainingAmount !== expectedRemaining) {
+      if (
+        loan.status !== status ||
+        loan.remainingAmount !== remainingAmount ||
+        loan.totalInterest !== totalInterest ||
+        loan.totalInterestPaid !== totalInterestPaid ||
+        loan.customerName !== customerName ||
+        loan.accountNumber !== accountNumber ||
+        loan.officeId !== officeId ||
+        loan.customerMobile !== customerMobile ||
+        loan.totalPayable !== totalPayable
+      ) {
+        loanChanged = true;
         hasChanges = true;
-        const currentInterest = Math.round((remainingPrincipal * (loan.interestRate || 0)) / 100);
-        return {
-          ...loan,
-          remainingAmount: expectedRemaining,
-          totalInterest: currentInterest,
-          totalPayable: remainingPrincipal + penalty + (remainingPrincipal > 0 ? currentInterest : 0),
-        };
       }
-      return loan;
+
+      const updatedLoan: Loan = {
+        ...loan,
+        customerName,
+        accountNumber,
+        officeId,
+        customerMobile,
+        totalInterest,
+        totalInterestPaid,
+        totalPayable,
+        remainingAmount,
+        status,
+      };
+
+      if (loanChanged) {
+        syncToFirestore('loans', updatedLoan.id, updatedLoan);
+      }
+
+      return updatedLoan;
     });
 
     if (hasChanges) {
@@ -781,8 +942,33 @@ export const StorageService = {
       (l) => (loanData.id && l.id === loanData.id) || (l.customerId === loanData.customerId && l.status === 'ACTIVE')
     );
 
+    const customers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
+    const cust = customers.find(
+      (c) => c.id === loanData.customerId || (loanData.accountNumber && c.accountNumber === loanData.accountNumber)
+    );
+
+    const principal = Number(loanData.principalAmount) || 0;
+    const rate = Number(loanData.interestRate) || 0;
+    const initialInterest = Math.round((principal * rate) / 100);
+    const totalInterest = Number(loanData.totalInterest) > 0 ? Number(loanData.totalInterest) : initialInterest;
+
+    const allLoanPayments = getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []);
+    const paymentsForLoan = allLoanPayments.filter(
+      (lp) => (loanData.id && lp.loanId === loanData.id) || lp.customerId === loanData.customerId
+    );
+    const totalInterestPaid = paymentsForLoan.reduce(
+      (sum, p) => sum + (Number(p.interestPaid) || 0),
+      0
+    );
+
     const newLoan: Loan = {
       ...loanData,
+      customerName: loanData.customerName || cust?.name || '',
+      accountNumber: loanData.accountNumber || cust?.accountNumber || '',
+      officeId: loanData.officeId || cust?.officeId || 'MAIN',
+      customerMobile: loanData.customerMobile || cust?.mobile || '',
+      totalInterest,
+      totalInterestPaid,
       id: loanData.id || (existingIndex >= 0 ? loans[existingIndex].id : 'loan_' + Date.now()),
       updatedAt: new Date().toISOString(),
     };
@@ -799,19 +985,121 @@ export const StorageService = {
   },
 
   // Loan Payment History Operations
-  getLoanPayments: (): LoanPayment[] => getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []),
+  getLoanPayments: (): LoanPayment[] => {
+    const rawPayments = getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []);
+    const rawCustomers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
+    const rawLoans = getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []);
+    let hasChanges = false;
+
+    const sanitized = rawPayments.map((p) => {
+      let changed = false;
+      const cust = rawCustomers.find(
+        (c) => c.id === p.customerId || (p.accountNumber && c.accountNumber === p.accountNumber)
+      );
+      const loan = rawLoans.find((l) => (p.loanId && l.id === p.loanId) || l.customerId === p.customerId);
+
+      const customerName = p.customerName || cust?.name || loan?.customerName || '';
+      const accountNumber = p.accountNumber || cust?.accountNumber || loan?.accountNumber || '';
+      const officeId = p.officeId || cust?.officeId || loan?.officeId || 'MAIN';
+      const customerMobile = p.customerMobile || cust?.mobile || (loan as any)?.customerMobile || '';
+
+      const paymentsForLoan = rawPayments.filter(
+        (lp) => (lp.loanId && lp.loanId === p.loanId) || lp.customerId === p.customerId
+      );
+      const totalInterestPaid = paymentsForLoan.reduce(
+        (sum, item) => sum + (Number(item.interestPaid) || 0),
+        0
+      );
+
+      const principal = Number(loan?.principalAmount) || 0;
+      const rate = Number(loan?.interestRate) || 0;
+      const calculatedInterest = Math.round((principal * rate) / 100);
+      const totalInterest = loan && Number(loan.totalInterest) > 0
+        ? Number(loan.totalInterest)
+        : (calculatedInterest > 0 ? calculatedInterest : totalInterestPaid);
+
+      const totalPaid = (Number(p.paidAmount) || 0) + (Number(p.interestPaid) || 0) + (Number(p.penaltyPaid) || 0);
+
+      if (
+        p.customerName !== customerName ||
+        p.accountNumber !== accountNumber ||
+        p.officeId !== officeId ||
+        p.customerMobile !== customerMobile ||
+        p.totalInterest !== totalInterest ||
+        p.totalInterestPaid !== totalInterestPaid ||
+        p.totalPaid !== totalPaid
+      ) {
+        changed = true;
+        hasChanges = true;
+      }
+
+      const updatedPayment: LoanPayment = {
+        ...p,
+        customerName,
+        accountNumber,
+        officeId,
+        customerMobile,
+        totalInterest,
+        totalInterestPaid,
+        totalPaid,
+      };
+
+      if (changed) {
+        syncToFirestore('loanPayments', updatedPayment.id, updatedPayment);
+      }
+
+      return updatedPayment;
+    });
+
+    if (hasChanges) {
+      setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, sanitized);
+    }
+    return sanitized;
+  },
 
   addLoanPayment: (payment: Omit<LoanPayment, 'id'>): LoanPayment => {
     const payments = StorageService.getLoanPayments();
+    const customers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
+    const cust = customers.find(
+      (c) => c.id === payment.customerId || (payment.accountNumber && c.accountNumber === payment.accountNumber)
+    );
+    const allLoans = StorageService.getLoans();
+    const loan = allLoans.find((l) => l.id === payment.loanId || l.customerId === payment.customerId);
+
+    const customerName = payment.customerName || cust?.name || loan?.customerName || '';
+    const accountNumber = payment.accountNumber || cust?.accountNumber || loan?.accountNumber || '';
+    const officeId = payment.officeId || cust?.officeId || loan?.officeId || 'MAIN';
+    const customerMobile = payment.customerMobile || cust?.mobile || (loan as any)?.customerMobile || '';
+
+    const prevPaymentsForLoan = payments.filter(
+      (lp) => (lp.loanId && lp.loanId === payment.loanId) || lp.customerId === payment.customerId
+    );
+    const totalInterestPaid = prevPaymentsForLoan.reduce(
+      (sum, p) => sum + (Number(p.interestPaid) || 0),
+      0
+    ) + (Number(payment.interestPaid) || 0);
+
+    const principal = Number(loan?.principalAmount) || 0;
+    const rate = Number(loan?.interestRate) || 0;
+    const initialInterest = Math.round((principal * rate) / 100);
+    const totalInterest = loan && Number(loan.totalInterest) > 0 ? Number(loan.totalInterest) : initialInterest;
+    const totalPaid = (Number(payment.paidAmount) || 0) + (Number(payment.interestPaid) || 0) + (Number(payment.penaltyPaid) || 0);
+
     const newPayment: LoanPayment = {
       ...payment,
+      customerName,
+      accountNumber,
+      officeId,
+      customerMobile,
+      totalInterest,
+      totalInterestPaid,
+      totalPaid,
       id: 'lpay_' + Date.now(),
     };
     payments.unshift(newPayment);
     setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, payments);
     syncToFirestore('loanPayments', newPayment.id, newPayment);
 
-    const loan = StorageService.getLoans().find((l) => l.id === payment.loanId);
     if (loan) {
       const newPaid = (loan.paidAmount || 0) + (payment.paidAmount || 0);
       const newDiscount = (loan.discountAmount || 0) + (payment.discountAmount || 0);
@@ -824,8 +1112,13 @@ export const StorageService = {
 
       StorageService.saveLoan({
         ...loan,
+        customerName,
+        accountNumber,
+        officeId,
+        customerMobile,
         totalPayable: newTotalPayable,
-        totalInterest: nextDueInterest,
+        totalInterest, // Preserves the loan's base totalInterest! Never sets to 0!
+        totalInterestPaid,
         paidAmount: newPaid,
         discountAmount: newDiscount,
         remainingAmount: newRemaining,
