@@ -370,6 +370,17 @@ const deleteFromFirestore = async (collectionName: string, docId: string, data?:
   }
 };
 
+const sortInterestRatesHelper = (rates: InterestRateConfig[]): InterestRateConfig[] => {
+  return [...rates].sort((a, b) => {
+    const timeA = a.id?.startsWith('ir_') ? Number(a.id.replace('ir_', '')) : 0;
+    const timeB = b.id?.startsWith('ir_') ? Number(b.id.replace('ir_', '')) : 0;
+    if (timeA && timeB) return timeB - timeA;
+    if (timeA && !timeB) return -1;
+    if (!timeA && timeB) return 1;
+    return (b.effectiveDate || '').localeCompare(a.effectiveDate || '');
+  });
+};
+
 // Initialize default configs if empty
 const initializeDefaultConfigs = () => {
   const isInitialized = localStorage.getItem(STORAGE_KEYS.BISHI_CONFIGS) !== null;
@@ -1125,7 +1136,10 @@ export const StorageService = {
   },
 
   // Interest & Penalty Settings
-  getInterestRates: (): InterestRateConfig[] => getStoredData<InterestRateConfig[]>(STORAGE_KEYS.INTEREST_RATES, []),
+  getInterestRates: (): InterestRateConfig[] => {
+    const rates = getStoredData<InterestRateConfig[]>(STORAGE_KEYS.INTEREST_RATES, []);
+    return sortInterestRatesHelper(rates);
+  },
 
   addInterestRate: (rate: number, rateType: 'MONTHLY' | 'WEEKLY' = 'MONTHLY', note?: string): InterestRateConfig => {
     const rates = StorageService.getInterestRates();
@@ -1137,9 +1151,16 @@ export const StorageService = {
       note: note || 'नवीन लागू केलेला व्याजदर',
     };
     rates.unshift(newRate);
-    setStoredData(STORAGE_KEYS.INTEREST_RATES, rates);
+    const sorted = sortInterestRatesHelper(rates);
+    setStoredData(STORAGE_KEYS.INTEREST_RATES, sorted);
     syncToFirestore('interestRates', newRate.id, newRate);
     return newRate;
+  },
+
+  deleteInterestRate: (id: string): void => {
+    const rates = StorageService.getInterestRates().filter((r) => r.id !== id);
+    setStoredData(STORAGE_KEYS.INTEREST_RATES, rates);
+    deleteFromFirestore('interestRates', id);
   },
 
   getPenaltySettings: (): PenaltySetting => {
@@ -1374,7 +1395,7 @@ export const StorageService = {
             id: raw.id || d.id,
           });
         });
-        setStoredData(STORAGE_KEYS.INTEREST_RATES, remoteRates);
+        setStoredData(STORAGE_KEYS.INTEREST_RATES, sortInterestRatesHelper(remoteRates));
       }
 
       if (!penaltySnap.empty) {
@@ -1557,7 +1578,7 @@ export const StorageService = {
                 id: raw.id || d.id,
               });
             });
-            setStoredData(STORAGE_KEYS.INTEREST_RATES, remoteList);
+            setStoredData(STORAGE_KEYS.INTEREST_RATES, sortInterestRatesHelper(remoteList));
             debouncedUpdate();
           }
         },

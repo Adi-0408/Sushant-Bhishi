@@ -26,7 +26,8 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
 }) => {
   const { customers, activeOffice, bishiConfigs, interestRates, penaltySettings, showToast, refreshData, language, t } = useApp();
 
-  const defaultInterestRate = interestRates[0]?.rate || 10;
+  const defaultMonthlyRate = interestRates.find((r) => (r.rateType || 'MONTHLY') === 'MONTHLY')?.rate ?? 10;
+  const defaultWeeklyRate = interestRates.find((r) => r.rateType === 'WEEKLY')?.rate ?? 2.5;
   const defaultPenaltyRate = penaltySettings?.weeklyPenalty || 50;
 
   const [accountNumber, setAccountNumber] = useState('');
@@ -37,7 +38,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
   const [modality, setModality] = useState<Modality>('W');
   const [totalInstallments, setTotalInstallments] = useState<number | ''>(40);
   const [amount, setAmount] = useState<number | ''>(1000);
-  const [interestRate, setInterestRate] = useState<number | ''>(defaultInterestRate);
+  const [interestRate, setInterestRate] = useState<number | ''>(defaultWeeklyRate);
   const [penaltyRate, setPenaltyRate] = useState<number | ''>(defaultPenaltyRate);
   const [officeId, setOfficeId] = useState<OfficeId>(activeOffice === 'ALL' ? 'MAIN' : activeOffice);
   const [address, setAddress] = useState('');
@@ -74,6 +75,9 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
       const cfgInstallments = selectedConfig.totalInstallments || (cfgModality === 'M' ? 10 : 40);
       setModality(cfgModality);
       setTotalInstallments(cfgInstallments);
+      if (!editingCustomer) {
+        setInterestRate(cfgModality === 'W' ? defaultWeeklyRate : defaultMonthlyRate);
+      }
       if (!editingCustomer && selectedConfig.startDate) {
         setBishiDate(selectedConfig.startDate);
       }
@@ -135,7 +139,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
       setModality(initModality);
       setTotalInstallments(initInstallments);
       setAmount(initialLoanOnly ? 0 : 1000);
-      setInterestRate(defaultInterestRate);
+      setInterestRate(initModality === 'W' ? defaultWeeklyRate : defaultMonthlyRate);
       setPenaltyRate(defaultPenaltyRate);
       setOfficeId(activeOffice === 'ALL' ? 'MAIN' : activeOffice);
       setAddress('');
@@ -149,7 +153,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
       setAlreadyPaidAmount('');
     }
     setError('');
-  }, [editingCustomer, isOpen, activeOffice, defaultInterestRate, defaultPenaltyRate, initialLoanOnly, customers, bishiConfigs]);
+  }, [editingCustomer, isOpen, activeOffice, defaultWeeklyRate, defaultMonthlyRate, defaultPenaltyRate, initialLoanOnly, customers, bishiConfigs]);
 
   if (!isOpen) return null;
 
@@ -403,7 +407,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
               : generateMonthlyEntries(newCustomer, bishiDate, targetInstallments);
 
           let remainingPaidBudget = Math.max(0, Number(alreadyPaidAmount) || 0);
-          const effectiveRate = Number(interestRate) || (modality === 'W' ? 2.5 : 10);
+          const effectiveRate = Number(interestRate) || (modality === 'W' ? defaultWeeklyRate : defaultMonthlyRate);
 
           const preparedCollections = collectionEntries.map((c) => {
             const exp = c.expectedAmount || 0;
@@ -707,6 +711,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                     setModality(val);
                     if (!editingCustomer) {
                       setTotalInstallments(val === 'W' ? 40 : 10);
+                      setInterestRate(val === 'W' ? defaultWeeklyRate : defaultMonthlyRate);
                     }
                   }}
                   options={[

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { StorageService } from '../../services/db';
 import { formatDateMarathi } from '../../utils/formatters';
-import { TrendingUp, Plus, ShieldAlert, Calendar } from 'lucide-react';
+import { TrendingUp, Plus, ShieldAlert, Calendar, Trash2 } from 'lucide-react';
 import { MarathiTextInput, convertTextToMarathi } from '../../components/common/MarathiTextInput';
 
 export const InterestManager: React.FC = () => {
@@ -12,8 +12,35 @@ export const InterestManager: React.FC = () => {
   const [rateTypeInput, setRateTypeInput] = useState<'MONTHLY' | 'WEEKLY'>('MONTHLY');
   const [noteInput, setNoteInput] = useState('');
 
-  const activeMonthly = interestRates.find((r) => (r.rateType || 'MONTHLY') === 'MONTHLY');
-  const activeWeekly = interestRates.find((r) => r.rateType === 'WEEKLY');
+  // Always sort rates newest first
+  const sortedRates = [...interestRates].sort((a, b) => {
+    const timeA = a.id?.startsWith('ir_') ? Number(a.id.replace('ir_', '')) : 0;
+    const timeB = b.id?.startsWith('ir_') ? Number(b.id.replace('ir_', '')) : 0;
+    if (timeA && timeB) return timeB - timeA;
+    if (timeA && !timeB) return -1;
+    if (!timeA && timeB) return 1;
+    return (b.effectiveDate || '').localeCompare(a.effectiveDate || '');
+  });
+
+  const activeMonthly = sortedRates.find((r) => (r.rateType || 'MONTHLY') === 'MONTHLY');
+  const activeWeekly = sortedRates.find((r) => r.rateType === 'WEEKLY');
+
+  const handleTypeSelect = (type: 'MONTHLY' | 'WEEKLY') => {
+    setRateTypeInput(type);
+    if (type === 'WEEKLY') {
+      setRateInput(activeWeekly ? activeWeekly.rate : 2.5);
+    } else {
+      setRateInput(activeMonthly ? activeMonthly.rate : 10);
+    }
+  };
+
+  const handleDeleteRate = (id: string) => {
+    if (window.confirm(language === 'EN' ? 'Are you sure you want to delete this rate entry?' : 'तुम्हाला ही व्याजदर नोंद हटवायची आहे का?')) {
+      StorageService.deleteInterestRate(id);
+      showToast(language === 'EN' ? 'Interest rate deleted.' : 'व्याजदर नोंद हटवली.', 'info');
+      refreshData();
+    }
+  };
 
   const handleSaveRate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,7 +137,7 @@ export const InterestManager: React.FC = () => {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => setRateTypeInput('MONTHLY')}
+                  onClick={() => handleTypeSelect('MONTHLY')}
                   className={`min-h-[44px] py-2.5 px-3 rounded-xl border text-xs font-extrabold flex items-center justify-center space-x-2 transition-all cursor-pointer ${
                     rateTypeInput === 'MONTHLY'
                       ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
@@ -123,7 +150,7 @@ export const InterestManager: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => setRateTypeInput('WEEKLY')}
+                  onClick={() => handleTypeSelect('WEEKLY')}
                   className={`min-h-[44px] py-2.5 px-3 rounded-xl border text-xs font-extrabold flex items-center justify-center space-x-2 transition-all cursor-pointer ${
                     rateTypeInput === 'WEEKLY'
                       ? 'bg-blue-700 text-white border-blue-700 shadow-sm'
@@ -192,13 +219,14 @@ export const InterestManager: React.FC = () => {
                   <th className="p-3.5">{language === 'EN' ? 'Effective Date' : 'लागू तारीख'}</th>
                   <th className="p-3.5">{language === 'EN' ? 'Note' : 'टीप'}</th>
                   <th className="p-3.5 text-center">{language === 'EN' ? 'Status' : 'स्थिती'}</th>
+                  <th className="p-3.5 text-center">{language === 'EN' ? 'Action' : 'क्रिया'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
-                {interestRates.map((item, idx) => {
+                {sortedRates.map((item, idx) => {
                   const isMonthly = (item.rateType || 'MONTHLY') === 'MONTHLY';
                   const isFirstOfKind =
-                    interestRates.findIndex((r) => (r.rateType || 'MONTHLY') === (item.rateType || 'MONTHLY')) === idx;
+                    sortedRates.findIndex((r) => (r.rateType || 'MONTHLY') === (item.rateType || 'MONTHLY')) === idx;
 
                   return (
                     <tr key={item.id} className="hover:bg-slate-50">
@@ -230,6 +258,16 @@ export const InterestManager: React.FC = () => {
                             {language === 'EN' ? 'Previous' : 'मागील दर'}
                           </span>
                         )}
+                      </td>
+                      <td className="p-3.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRate(item.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center"
+                          title={language === 'EN' ? 'Delete' : 'हटवा'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   );
