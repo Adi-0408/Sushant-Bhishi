@@ -118,8 +118,8 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           setLoanPrincipal(existingLoan.principalAmount);
           setLoanInterestRate(existingLoan.interestRate);
           setLoanIssueDate(existingLoan.issueDate || editingCustomer.bishiDate || new Date().toISOString().split('T')[0]);
-          setLoanPaidPrincipal(existingLoan.paidAmount || '');
-          setLoanPaidInterest(existingLoan.totalInterestPaid || '');
+          setLoanPaidPrincipal(existingLoan.paidAmount !== undefined && existingLoan.paidAmount !== null ? existingLoan.paidAmount : '');
+          setLoanPaidInterest(existingLoan.totalInterestPaid !== undefined && existingLoan.totalInterestPaid !== null ? existingLoan.totalInterestPaid : '');
         }
       }
       setAlreadyPaidAmount('');
@@ -287,8 +287,8 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           const totalInterest = Math.max(monthlyInterest, months * monthlyInterest);
 
           const existingLoan = StorageService.getLoanByCustomerId(editingCustomer.id);
-          const paidPrin = existingLoan ? (Number(existingLoan.paidAmount) || 0) : (Number(loanPaidPrincipal) || 0);
-          const paidInt = existingLoan ? (Number(existingLoan.totalInterestPaid) || 0) : (Number(loanPaidInterest) || 0);
+          const paidPrin = loanPaidPrincipal !== '' ? Math.max(0, Number(loanPaidPrincipal) || 0) : (existingLoan ? (Number(existingLoan.paidAmount) || 0) : 0);
+          const paidInt = loanPaidInterest !== '' ? Math.max(0, Number(loanPaidInterest) || 0) : (existingLoan ? (Number(existingLoan.totalInterestPaid) || 0) : 0);
           const discount = existingLoan ? (Number(existingLoan.discountAmount) || 0) : 0;
           const penalty = existingLoan ? (Number(existingLoan.penaltyAmount) || 0) : 0;
           const remPrincipal = Math.max(0, principal - paidPrin - discount);
@@ -985,7 +985,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                       min={0}
                       max={loanPrinNum || undefined}
                       value={loanPaidPrincipal}
-                      onChange={(e) => setLoanPaidPrincipal(e.target.value ? Number(e.target.value) : '')}
+                      onChange={(e) => setLoanPaidPrincipal(e.target.value !== '' ? Number(e.target.value) : '')}
                       placeholder="0"
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white"
                     />
@@ -998,7 +998,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                       type="number"
                       min={0}
                       value={loanPaidInterest}
-                      onChange={(e) => setLoanPaidInterest(e.target.value ? Number(e.target.value) : '')}
+                      onChange={(e) => setLoanPaidInterest(e.target.value !== '' ? Number(e.target.value) : '')}
                       placeholder="0"
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white"
                     />

@@ -114,7 +114,7 @@ const enrichFirestoreData = (collectionName: string, rawData: any): any => {
       const dedupMap = new Map<number, CollectionEntry>();
       rawCustColls.forEach((c) => {
         const existing = dedupMap.get(c.periodIndex);
-        if (!existing || (c.status === 'PAID' && existing.status !== 'PAID')) {
+        if (!existing || (c.updatedAt && (!existing.updatedAt || c.updatedAt >= existing.updatedAt))) {
           dedupMap.set(c.periodIndex, c);
         }
       });

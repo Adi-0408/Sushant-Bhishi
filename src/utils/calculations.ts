@@ -26,7 +26,8 @@ export const calculateCollectionEntry = (
   newCollectedInput: number,
   interestRate: number,
   penaltyAmount: number,
-  alreadyCollectedAmount: number = 0
+  alreadyCollectedAmount: number = 0,
+  isDirectEdit: boolean = false
 ) => {
   const safeExpected = Math.max(0, expectedAmount || 0);
   const inputAmount = Math.max(0, newCollectedInput || 0);
@@ -34,23 +35,25 @@ export const calculateCollectionEntry = (
   const safeInterestRate = Math.max(0, interestRate || 0);
   const safePenalty = Math.max(0, penaltyAmount || 0);
 
-  // If inputAmount is already >= safeExpected, treat it as the total accumulated collected amount.
-  // Otherwise, accumulate alreadyCollected + inputAmount.
   let totalCollected = 0;
-  if (inputAmount >= safeExpected) {
+  if (isDirectEdit || alreadyCollected === 0) {
+    // When editing directly or when no prior collection exists, the input is the exact target collected amount
     totalCollected = inputAmount;
-  } else if (alreadyCollected > 0 && inputAmount <= safeExpected - alreadyCollected) {
-    totalCollected = alreadyCollected + inputAmount;
-  } else if (inputAmount + alreadyCollected >= safeExpected) {
-    totalCollected = safeExpected;
   } else {
-    totalCollected = alreadyCollected + inputAmount;
+    // Incremental collection deposit (e.g. Quick Collection modal)
+    if (inputAmount >= safeExpected) {
+      totalCollected = inputAmount;
+    } else if (inputAmount + alreadyCollected >= safeExpected) {
+      totalCollected = safeExpected;
+    } else {
+      totalCollected = alreadyCollected + inputAmount;
+    }
   }
 
   const remainingAmount = Math.max(0, safeExpected - totalCollected);
 
   // Calculate interest based on collected/paid amount
-  const interestAmount = Math.round((totalCollected * safeInterestRate) / 100);
+  const interestAmount = totalCollected > 0 ? Math.round((totalCollected * safeInterestRate) / 100) : 0;
 
   const totalPaid = totalCollected;
   const totalPayable = remainingAmount + safePenalty;

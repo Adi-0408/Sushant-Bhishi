@@ -159,7 +159,11 @@ export const CustomerDetail: React.FC = () => {
     setPaymentDate(entry.paymentDate || entry.dueDate || todayStr);
     setPaymentTime(entry.paymentTime || getCurrentTimeStr());
     setPaymentMode(entry.paymentMode || 'CASH');
-    setCollectedInput(entry.collectedAmount > 0 ? entry.collectedAmount : (entry.remainingAmount > 0 ? entry.remainingAmount : entry.expectedAmount));
+    setCollectedInput(
+      entry.status === 'PAID' || entry.status === 'PARTIAL'
+        ? (entry.collectedAmount ?? 0)
+        : (entry.remainingAmount > 0 ? entry.remainingAmount : entry.expectedAmount)
+    );
     setInterestInput(entry.interestAmount || 0);
     setPenaltyInput(entry.penaltyAmount || 0);
     setNoteInput(entry.note || '');
@@ -170,26 +174,27 @@ export const CustomerDetail: React.FC = () => {
     e.preventDefault();
     if (!selectedEntry) return;
 
-    const collected = Number(collectedInput) || 0;
-    const interest = Number(interestInput) || 0;
-    const penalty = Number(penaltyInput) || 0;
+    const collected = Math.max(0, Number(collectedInput) || 0);
+    const interest = Math.max(0, Number(interestInput) || 0);
+    const penalty = Math.max(0, Number(penaltyInput) || 0);
 
     const calc = calculateCollectionEntry(
       selectedEntry.expectedAmount,
       collected,
       customer.interestRate,
       penalty,
-      selectedEntry.collectedAmount || 0
+      0,
+      true
     );
 
     const totalWithPen = calc.collectedAmount + penalty;
     const updated = StorageService.updateCollectionEntry(selectedEntry.id, {
-      paymentDate,
-      paymentTime,
-      paymentMode,
+      paymentDate: calc.collectedAmount > 0 ? paymentDate : '',
+      paymentTime: calc.collectedAmount > 0 ? paymentTime : '',
+      paymentMode: calc.collectedAmount > 0 ? paymentMode : 'CASH',
       collectedAmount: calc.collectedAmount,
       remainingAmount: calc.remainingAmount,
-      interestAmount: interest || calc.interestAmount,
+      interestAmount: calc.collectedAmount > 0 ? (interest || calc.interestAmount) : 0,
       penaltyAmount: penalty,
       totalPaid: totalWithPen,
       totalWithPenalty: totalWithPen,
@@ -197,15 +202,22 @@ export const CustomerDetail: React.FC = () => {
       note: noteInput.trim(),
     });
 
-    showToast(language === 'EN' ? 'Collection recorded successfully.' : 'जमा नोंद यशस्वी झाली.', 'success');
+    showToast(
+      calc.collectedAmount === 0
+        ? (language === 'EN' ? 'Installment reset to 0 (Pending).' : 'हप्ता ० (शिल्लक बाकी) करण्यात आला.')
+        : (language === 'EN' ? 'Collection recorded successfully.' : 'जमा नोंद यशस्वी झाली.'),
+      'success'
+    );
     refreshData();
     setIsCollectModalOpen(false);
 
-    // Send SMS notification automatically or prompt log
-    SmsService.sendSms(customer, 'COLLECTION', {
-      amount: collected,
-      remaining: calc.remainingAmount,
-    });
+    // Send SMS notification automatically only if payment was recorded
+    if (calc.collectedAmount > 0) {
+      SmsService.sendSms(customer, 'COLLECTION', {
+        amount: collected,
+        remaining: calc.remainingAmount,
+      });
+    }
   };
 
   const effectiveModalLoanDueInterest = loan ? calculateLoanDueInterest(loan, loanPaymentDate || todayStr) : 0;
@@ -1296,7 +1308,7 @@ export const CustomerDetail: React.FC = () => {
                     required
                     min={0}
                     value={collectedInput}
-                    onChange={(e) => setCollectedInput(e.target.value ? Number(e.target.value) : '')}
+                    onChange={(e) => setCollectedInput(e.target.value !== '' ? Number(e.target.value) : '')}
                     className="w-full px-4 py-2 rounded-xl border border-emerald-300 text-sm font-bold text-emerald-800 focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
