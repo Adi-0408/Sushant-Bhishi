@@ -511,3 +511,28 @@ table tbody tr:hover {
   }
 }
 
+/* ==========================================
+   Blinking / Attention-Grabbing Tab Animation
+   ========================================== */
+@keyframes tab-blink {
+  0%, 100% {
+    background-color: #FEF3C7;
+    border-color: #F59E0B;
+    color: #92400E;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.45), 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    transform: translateY(0);
+  }
+  50% {
+    background-color: #FFFFFF;
+    border-color: #FCD34D;
+    color: #10241E;
+    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.15);
+    transform: translateY(-1px);
+  }
+}
+
+.animate-tab-blink {
+  animation: tab-blink 1.8s infinite ease-in-out;
+}
+
+

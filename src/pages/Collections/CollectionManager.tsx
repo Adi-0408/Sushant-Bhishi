@@ -118,33 +118,33 @@ export const CollectionManager: React.FC = () => {
           </button>
 
           {/* Tab Switcher */}
-          <div className="flex w-full sm:w-auto justify-center bg-[#F4F6F5] p-1.5 rounded-xl border border-[#E4EAE7] shadow-2xs">
+          <div className="flex w-full sm:w-auto justify-center bg-[#F4F6F5] p-1.5 rounded-xl border border-[#E4EAE7] shadow-2xs gap-1.5">
             <button
               onClick={() => setActiveTab('TODAY')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 min-h-[38px] rounded-lg text-xs font-black transition-all cursor-pointer ${
                 activeTab === 'TODAY'
-                  ? 'bg-[#0B5C45] text-white shadow-xs'
-                  : 'text-[#5F6E68] hover:text-[#10241E] hover:bg-white/80'
+                  ? 'bg-[#0B5C45] text-white shadow-xs border border-[#0B5C45]'
+                  : 'bg-white text-[#5F6E68] hover:text-[#10241E] border border-slate-200 hover:bg-slate-50'
               }`}
             >
               {t.tabToday}
             </button>
             <button
               onClick={() => setActiveTab('WEEKLY')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 min-h-[38px] rounded-lg text-xs font-black transition-all cursor-pointer ${
                 activeTab === 'WEEKLY'
-                  ? 'bg-[#0B5C45] text-white shadow-xs'
-                  : 'text-[#5F6E68] hover:text-[#10241E] hover:bg-white/80'
+                  ? 'bg-[#0B5C45] text-white shadow-xs border border-[#0B5C45]'
+                  : 'bg-white text-[#5F6E68] hover:text-[#10241E] border border-slate-200 hover:bg-slate-50'
               }`}
             >
               {t.tabWeekly}
             </button>
             <button
               onClick={() => setActiveTab('MONTHLY')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 min-h-[38px] rounded-lg text-xs font-black transition-all cursor-pointer ${
                 activeTab === 'MONTHLY'
-                  ? 'bg-[#0B5C45] text-white shadow-xs'
-                  : 'text-[#5F6E68] hover:text-[#10241E] hover:bg-white/80'
+                  ? 'bg-[#0B5C45] text-white shadow-xs border border-[#0B5C45]'
+                  : 'bg-white text-[#5F6E68] hover:text-[#10241E] border border-slate-200 hover:bg-slate-50'
               }`}
             >
               {t.tabMonthly}

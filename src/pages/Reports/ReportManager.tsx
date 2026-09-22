@@ -351,29 +351,41 @@ export const ReportManager: React.FC = () => {
       {/* Mode Switcher Tabs (Member Ledger Card vs General Summary) */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-4 no-print">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 w-full sm:w-auto">
+          <div className="flex flex-wrap sm:flex-nowrap bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-200/80 gap-2 w-full sm:w-auto shadow-inner">
             <button
               onClick={() => setViewMode('LEDGER_CARD')}
-              className={`flex-1 sm:flex-initial px-4 py-2 min-h-[44px] rounded-lg text-xs font-extrabold transition-all flex items-center justify-center space-x-2 touch-target cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-4 py-2.5 min-h-[46px] rounded-xl text-xs font-black transition-all flex items-center justify-center space-x-2 touch-target cursor-pointer relative ${
                 viewMode === 'LEDGER_CARD'
-                  ? 'bg-brand-900 text-white shadow-xs'
-                  : 'text-slate-700 hover:bg-slate-200'
+                  ? 'bg-[#0B5C45] text-white shadow-md border-2 border-[#0B5C45] scale-[1.01]'
+                  : 'bg-white text-slate-800 border-2 border-amber-400 hover:border-amber-500 animate-tab-blink hover:bg-amber-50 shadow-xs'
               }`}
             >
-              <BookOpen className="w-4 h-4 text-amber-400" />
-              <span>{language === 'EN' ? 'Member Ledger Card Template' : 'खातेदार खाते उतारा (Ledger Card Template)'}</span>
+              <BookOpen className={`w-4 h-4 shrink-0 ${viewMode === 'LEDGER_CARD' ? 'text-amber-300' : 'text-amber-700'}`} />
+              <span className="truncate">{language === 'EN' ? 'Member Ledger Card' : 'खातेदार खाते उतारा (Ledger Card)'}</span>
+              {viewMode !== 'LEDGER_CARD' && (
+                <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white shadow-xs inline-flex items-center gap-1 shrink-0 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                  <span>{language === 'EN' ? 'Click' : 'टॅब उपलब्ध'}</span>
+                </span>
+              )}
             </button>
 
             <button
               onClick={() => setViewMode('SUMMARY')}
-              className={`flex-1 sm:flex-initial px-4 py-2 min-h-[44px] rounded-lg text-xs font-extrabold transition-all flex items-center justify-center space-x-2 touch-target cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-4 py-2.5 min-h-[46px] rounded-xl text-xs font-black transition-all flex items-center justify-center space-x-2 touch-target cursor-pointer relative ${
                 viewMode === 'SUMMARY'
-                  ? 'bg-brand-900 text-white shadow-xs'
-                  : 'text-slate-700 hover:bg-slate-200'
+                  ? 'bg-[#0B5C45] text-white shadow-md border-2 border-[#0B5C45] scale-[1.01]'
+                  : 'bg-white text-slate-800 border-2 border-amber-400 hover:border-amber-500 animate-tab-blink hover:bg-amber-50 shadow-xs'
               }`}
             >
-              <BarChart3 className="w-4 h-4" />
-              <span>{language === 'EN' ? 'Summary Report' : 'सामान्य अहवाल (Summary Report)'}</span>
+              <BarChart3 className={`w-4 h-4 shrink-0 ${viewMode === 'SUMMARY' ? 'text-amber-300' : 'text-amber-700'}`} />
+              <span className="truncate">{language === 'EN' ? 'Summary Report' : 'सामान्य अहवाल (Summary Report)'}</span>
+              {viewMode !== 'SUMMARY' && (
+                <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white shadow-xs inline-flex items-center gap-1 shrink-0 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                  <span>{language === 'EN' ? 'Click' : 'टॅब उपलब्ध'}</span>
+                </span>
+              )}
             </button>
           </div>
 
