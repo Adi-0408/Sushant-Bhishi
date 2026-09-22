@@ -3,6 +3,7 @@ import { CollectionEntry, Customer, Loan, BishiConfig } from '../types';
 export interface CalculatedFinancials {
   totalExpectedBishi: number;
   totalCollectedBishi: number;
+  totalExtraAmount: number;
   totalRemainingBishi: number;
   currentDueRemaining: number;
   isCurrentDuePaid: boolean;
@@ -27,10 +28,12 @@ export const calculateCollectionEntry = (
   interestRate: number,
   penaltyAmount: number,
   alreadyCollectedAmount: number = 0,
-  isDirectEdit: boolean = false
+  isDirectEdit: boolean = false,
+  extraAmount: number = 0
 ) => {
   const safeExpected = Math.max(0, expectedAmount || 0);
   const inputAmount = Math.max(0, newCollectedInput || 0);
+  const safeExtra = Math.max(0, extraAmount || 0);
   const alreadyCollected = Math.max(0, alreadyCollectedAmount || 0);
   const safeInterestRate = Math.max(0, interestRate || 0);
   const safePenalty = Math.max(0, penaltyAmount || 0);
@@ -52,10 +55,10 @@ export const calculateCollectionEntry = (
 
   const remainingAmount = Math.max(0, safeExpected - totalCollected);
 
-  // Calculate interest based on collected/paid amount
+  // Calculate interest based on bishi collected/paid amount ONLY (interest is NOT applicable for extra amount)
   const interestAmount = totalCollected > 0 ? Math.round((totalCollected * safeInterestRate) / 100) : 0;
 
-  const totalPaid = totalCollected;
+  const totalPaid = totalCollected + safeExtra;
   const totalPayable = remainingAmount + safePenalty;
 
   let status: 'PAID' | 'PARTIAL' | 'PENDING' = 'PENDING';
@@ -68,6 +71,7 @@ export const calculateCollectionEntry = (
   return {
     expectedAmount: safeExpected,
     collectedAmount: totalCollected,
+    extraAmount: safeExtra,
     remainingAmount,
     interestAmount,
     penaltyAmount: safePenalty,
@@ -104,6 +108,7 @@ export const calculateCustomerFinancials = (
 
   let totalExpectedBishi = 0;
   let totalCollectedBishi = 0;
+  let totalExtraAmount = 0;
   let totalRemainingBishi = 0;
   let explicitInterestSum = 0;
   let totalPenalty = 0;
@@ -115,6 +120,7 @@ export const calculateCustomerFinancials = (
   customerCollections.forEach((item) => {
     totalExpectedBishi += item.expectedAmount || 0;
     totalCollectedBishi += item.collectedAmount || 0;
+    totalExtraAmount += item.extraAmount || 0;
     totalRemainingBishi += item.remainingAmount || 0;
     explicitInterestSum += item.interestAmount || 0;
     totalPenalty += item.penaltyAmount || 0;
@@ -134,7 +140,7 @@ export const calculateCustomerFinancials = (
       ? customer.interestRate
       : (customer.modality === 'W' ? 2.5 : 10);
 
-  // Interest calculated on the total amount paid
+  // Interest calculated strictly on the total bishi collected amount (NOT extra amount)
   const calculatedInterestOnPaid = Math.round((totalCollectedBishi * effectiveRate) / 100);
   const totalInterest = Math.max(explicitInterestSum, calculatedInterestOnPaid);
 
@@ -158,7 +164,8 @@ export const calculateCustomerFinancials = (
     totalExpectedBishi > 0;
 
   const finalBishiPayoutInterest = totalInterest;
-  const finalBishiTotalReturn = totalCollectedBishi + totalInterest;
+  // Final return: Bishi collected + Interest (on bishi only) + Extra submitted amount (trust/saving)
+  const finalBishiTotalReturn = totalCollectedBishi + totalInterest + totalExtraAmount;
 
   // What the customer owes for bishi is remaining balance + late penalty
   const totalPayableBishi = totalRemainingBishi + totalPenalty;
@@ -168,7 +175,7 @@ export const calculateCustomerFinancials = (
   let loanPaid = 0;
   let loanRemaining = 0;
 
-  if (customer.hasLoan && loan) {
+  if ((customer.hasLoan || customer.bishiType === 'LOAN_ONLY' || Boolean(loan)) && loan) {
     loanPrincipal = loan.principalAmount || 0;
     const dueInterest = calculateLoanDueInterest(loan, todayStr);
     loanInterest = dueInterest;
@@ -181,6 +188,7 @@ export const calculateCustomerFinancials = (
   return {
     totalExpectedBishi,
     totalCollectedBishi,
+    totalExtraAmount,
     totalRemainingBishi,
     currentDueRemaining,
     isCurrentDuePaid,

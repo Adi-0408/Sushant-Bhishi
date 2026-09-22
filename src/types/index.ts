@@ -51,6 +51,7 @@ export interface Customer {
   summary?: {
     totalExpected: number;
     totalCollected: number;
+    totalExtraAmount?: number;
     totalRemaining: number;
     completedInstallments: number;
     pendingInstallments: number;
@@ -73,6 +74,7 @@ export interface CollectionEntry {
   paymentDate?: string;
   expectedAmount: number;
   collectedAmount: number;
+  extraAmount?: number;
   remainingAmount: number;
   interestAmount: number;
   historicalInterestRate: number;
@@ -156,6 +158,36 @@ export interface SmsLog {
   status: 'SENT' | 'FAILED';
 }
 
+// ── Thakbaki (थकबाकी) Types ──────────────────────────────────────────────────
+export interface ThakbakiPayment {
+  id: string;
+  paymentDate: string;
+  paidAmount: number;
+  paymentMode: 'CASH' | 'ONLINE' | 'BANK';
+  note?: string;
+  createdAt: string;
+}
+
+export interface ThakbakiEntry {
+  id: string;
+  customerId?: string; // Optional link to an existing registered customer
+  accountNumber: string;
+  name: string;
+  mobile: string;
+  officeId: OfficeId;
+  initialAmount: number;   // Original arrears / dues amount
+  paidAmount: number;      // Total paid so far
+  remainingAmount: number; // Current balance due
+  status: 'PENDING' | 'CLEARED';
+  startDate: string;
+  lastPaymentDate?: string;
+  note?: string;
+  payments: ThakbakiPayment[];
+  createdAt: string;
+  updatedAt: string;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface SystemBackupData {
   version: string;
   exportedAt: string;
@@ -168,7 +200,9 @@ export interface SystemBackupData {
   interestRates: InterestRateConfig[];
   penaltySettings: PenaltySetting[];
   smsLogs: SmsLog[];
+  thakbaki?: ThakbakiEntry[]; // Optional - keeps backward compatibility with old backups
 }
+
 
 export interface LocalBackupSnapshot {
   id: string;

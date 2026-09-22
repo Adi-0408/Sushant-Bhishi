@@ -23,6 +23,8 @@ import {
   PenaltySetting,
   SmsLog,
   SystemBackupData,
+  ThakbakiEntry,
+  ThakbakiPayment,
 } from '../types';
 import { calculateLoanTotalAccruedInterest } from '../utils/calculations';
 
@@ -36,6 +38,7 @@ const STORAGE_KEYS = {
   INTEREST_RATES: 'sb_interest_rates',
   PENALTY_SETTINGS: 'sb_penalty_settings',
   SMS_LOGS: 'sb_sms_logs',
+  THAKBAKI: 'sb_thakbaki',
 };
 
 // Local storage helper
@@ -123,12 +126,14 @@ const enrichFirestoreData = (collectionName: string, rawData: any): any => {
       if (custColls.length > 0) {
         const totalExpected = custColls.reduce((acc, c) => acc + (c.expectedAmount || 0), 0);
         const totalCollected = custColls.reduce((acc, c) => acc + (c.collectedAmount || 0), 0);
+        const totalExtraAmount = custColls.reduce((acc, c) => acc + (c.extraAmount || 0), 0);
         const totalPenalty = custColls.reduce((acc, c) => acc + (c.penaltyAmount || 0), 0);
         data.summary = {
           totalExpected,
           totalCollected,
+          totalExtraAmount,
           totalPenalty,
-          totalCollectedWithPenalty: totalCollected + totalPenalty,
+          totalCollectedWithPenalty: totalCollected + totalExtraAmount + totalPenalty,
           totalRemaining: Math.max(0, totalExpected - totalCollected),
           totalInstallments: custColls.length,
           paidInstallments: custColls.filter((c) => c.status === 'PAID').length,
@@ -141,9 +146,10 @@ const enrichFirestoreData = (collectionName: string, rawData: any): any => {
           paymentDate: c.paymentDate || null,
           expectedAmount: c.expectedAmount,
           collectedAmount: c.collectedAmount,
+          extraAmount: c.extraAmount || 0,
           remainingAmount: c.remainingAmount,
           penaltyAmount: c.penaltyAmount || 0,
-          totalWithPenalty: (c.collectedAmount || 0) + (c.penaltyAmount || 0),
+          totalWithPenalty: (c.collectedAmount || 0) + (c.extraAmount || 0) + (c.penaltyAmount || 0),
           status: c.status,
         }));
       }
@@ -194,7 +200,8 @@ const enrichFirestoreData = (collectionName: string, rawData: any): any => {
       }
     } catch (e) {}
     data.penaltyAmount = Number(data.penaltyAmount) || 0;
-    data.totalWithPenalty = (Number(data.collectedAmount) || 0) + data.penaltyAmount;
+    data.extraAmount = Number(data.extraAmount) || 0;
+    data.totalWithPenalty = (Number(data.collectedAmount) || 0) + data.extraAmount + data.penaltyAmount;
   } else if (collectionName === 'loanPayments') {
     try {
       const customers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
@@ -1040,28 +1047,40 @@ export const StorageService = {
     const sanitized = rawLoans.map((loan) => {
       let loanChanged = false;
       const principal = Number(loan.principalAmount) || 0;
-      const paid = Number(loan.paidAmount) || 0;
       const discount = Number(loan.discountAmount) || 0;
       const penalty = Number(loan.penaltyAmount) || 0;
-      const remainingPrincipal = Math.max(0, principal - paid - discount);
-      const expectedRemaining = remainingPrincipal + penalty;
 
       const cust = rawCustomers.find(
         (c) => c.id === loan.customerId || (loan.accountNumber && c.accountNumber === loan.accountNumber)
       );
 
+      const customerId = cust?.id || loan.customerId || '';
       const customerName = loan.customerName || cust?.name || '';
       const accountNumber = loan.accountNumber || cust?.accountNumber || '';
       const officeId = loan.officeId || cust?.officeId || 'MAIN';
       const customerMobile = loan.customerMobile || cust?.mobile || '';
 
       const paymentsForLoan = rawPayments.filter(
-        (lp) => (lp.loanId && lp.loanId === loan.id) || lp.customerId === loan.customerId
+        (lp) => (lp.loanId && lp.loanId === loan.id) ||
+                (loan.customerId && lp.customerId === loan.customerId) ||
+                (loan.accountNumber && lp.accountNumber === loan.accountNumber)
       );
-      const totalInterestPaid = paymentsForLoan.reduce(
+
+      const paymentsInterestSum = paymentsForLoan.reduce(
         (sum, p) => sum + (Number(p.interestPaid) || 0),
         0
       );
+      // Ensure interest paid is never wiped to 0 if tracked directly on the loan
+      const totalInterestPaid = paymentsForLoan.length > 0 ? paymentsInterestSum : (Number(loan.totalInterestPaid) || 0);
+
+      const paymentsPrincipalSum = paymentsForLoan.reduce(
+        (sum, p) => sum + (Number(p.paidAmount) || 0),
+        0
+      );
+      const paid = paymentsForLoan.length > 0 ? Math.max(paymentsPrincipalSum, Number(loan.paidAmount) || 0) : (Number(loan.paidAmount) || 0);
+
+      const remainingPrincipal = Math.max(0, principal - paid - discount);
+      const expectedRemaining = remainingPrincipal + penalty;
 
       const accruedInterest = calculateLoanTotalAccruedInterest(loan);
       const initialInterest = Math.round((principal * (loan.interestRate || 0)) / 100);
@@ -1087,6 +1106,8 @@ export const StorageService = {
         loan.remainingAmount !== remainingAmount ||
         loan.totalInterest !== totalInterest ||
         loan.totalInterestPaid !== totalInterestPaid ||
+        loan.paidAmount !== paid ||
+        loan.customerId !== customerId ||
         loan.customerName !== customerName ||
         loan.accountNumber !== accountNumber ||
         loan.officeId !== officeId ||
@@ -1099,12 +1120,14 @@ export const StorageService = {
 
       const updatedLoan: Loan = {
         ...loan,
+        customerId,
         customerName,
         accountNumber,
         officeId,
         customerMobile,
         totalInterest,
         totalInterestPaid,
+        paidAmount: paid,
         totalPayable,
         remainingAmount,
         status,
@@ -1120,20 +1143,38 @@ export const StorageService = {
   },
 
   getLoanByCustomerId: (customerId: string): Loan | undefined => {
-    const custLoans = StorageService.getLoans().filter((l) => l.customerId === customerId);
+    const cust = StorageService.getCustomerById(customerId);
+    const custLoans = StorageService.getLoans().filter(
+      (l) => l.customerId === customerId || (cust && cust.accountNumber && l.accountNumber === cust.accountNumber)
+    );
     return custLoans.find((l) => l.status === 'ACTIVE') || [...custLoans].sort((a, b) => (b.updatedAt || b.issueDate || '').localeCompare(a.updatedAt || a.issueDate || ''))[0];
   },
 
   saveLoan: (loanData: Omit<Loan, 'id' | 'updatedAt'> & { id?: string }): Loan => {
     const loans = StorageService.getLoans();
     const existingIndex = loans.findIndex(
-      (l) => (loanData.id && l.id === loanData.id) || (l.customerId === loanData.customerId && l.status === 'ACTIVE')
+      (l) => (loanData.id && l.id === loanData.id) ||
+             (loanData.customerId && l.customerId === loanData.customerId && l.status === 'ACTIVE') ||
+             (loanData.accountNumber && l.accountNumber === loanData.accountNumber && l.status === 'ACTIVE') ||
+             (loanData.customerId && l.customerId === loanData.customerId) ||
+             (loanData.accountNumber && l.accountNumber === loanData.accountNumber)
     );
 
     const customers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
-    const cust = customers.find(
-      (c) => c.id === loanData.customerId || (loanData.accountNumber && c.accountNumber === loanData.accountNumber)
+    const custIndex = customers.findIndex(
+      (c) => (loanData.customerId && c.id === loanData.customerId) ||
+             (loanData.accountNumber && c.accountNumber === loanData.accountNumber)
     );
+    const cust = custIndex >= 0 ? customers[custIndex] : undefined;
+
+    // Ensure customer has hasLoan flag set to true if loan is active
+    if (custIndex >= 0 && loanData.status !== 'COMPLETED' && loanData.status !== 'CLOSED') {
+      if (!customers[custIndex].hasLoan) {
+        customers[custIndex].hasLoan = true;
+        setStoredData(STORAGE_KEYS.CUSTOMERS, customers);
+        syncToFirestore('customers', customers[custIndex].id, customers[custIndex]);
+      }
+    }
 
     const principal = Number(loanData.principalAmount) || 0;
     const rate = Number(loanData.interestRate) || 0;
@@ -1142,22 +1183,40 @@ export const StorageService = {
 
     const allLoanPayments = getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []);
     const paymentsForLoan = allLoanPayments.filter(
-      (lp) => (loanData.id && lp.loanId === loanData.id) || lp.customerId === loanData.customerId
+      (lp) => (loanData.id && lp.loanId === loanData.id) ||
+              (loanData.customerId && lp.customerId === loanData.customerId) ||
+              (loanData.accountNumber && lp.accountNumber === loanData.accountNumber)
     );
-    const totalInterestPaid = paymentsForLoan.reduce(
+    const paymentsInterestSum = paymentsForLoan.reduce(
       (sum, p) => sum + (Number(p.interestPaid) || 0),
       0
     );
+    // Explicitly preserve and prioritize user-entered paid interest
+    const totalInterestPaid = paymentsForLoan.length > 0
+      ? paymentsInterestSum
+      : (loanData.totalInterestPaid !== undefined ? Number(loanData.totalInterestPaid) || 0 : 0);
+
+    const paymentsPrincipalSum = paymentsForLoan.reduce(
+      (sum, p) => sum + (Number(p.paidAmount) || 0),
+      0
+    );
+    const paidAmount = paymentsForLoan.length > 0
+      ? Math.max(paymentsPrincipalSum, Number(loanData.paidAmount) || 0)
+      : (Number(loanData.paidAmount) || 0);
+
+    const targetId = loanData.id || (existingIndex >= 0 ? loans[existingIndex].id : 'loan_' + Date.now());
 
     const newLoan: Loan = {
       ...loanData,
+      id: targetId,
+      customerId: loanData.customerId || cust?.id || '',
       customerName: loanData.customerName || cust?.name || '',
       accountNumber: loanData.accountNumber || cust?.accountNumber || '',
       officeId: loanData.officeId || cust?.officeId || 'MAIN',
       customerMobile: loanData.customerMobile || cust?.mobile || '',
       totalInterest,
       totalInterestPaid,
-      id: loanData.id || (existingIndex >= 0 ? loans[existingIndex].id : 'loan_' + Date.now()),
+      paidAmount,
       updatedAt: new Date().toISOString(),
     };
 
@@ -1184,7 +1243,7 @@ export const StorageService = {
       const cust = rawCustomers.find(
         (c) => c.id === p.customerId || (p.accountNumber && c.accountNumber === p.accountNumber)
       );
-      const loan = rawLoans.find((l) => (p.loanId && l.id === p.loanId) || l.customerId === p.customerId);
+      const loan = rawLoans.find((l) => (p.loanId && l.id === p.loanId) || (p.customerId && l.customerId === p.customerId) || (p.accountNumber && l.accountNumber === p.accountNumber));
 
       const customerName = p.customerName || cust?.name || loan?.customerName || '';
       const accountNumber = p.accountNumber || cust?.accountNumber || loan?.accountNumber || '';
@@ -1192,7 +1251,7 @@ export const StorageService = {
       const customerMobile = p.customerMobile || cust?.mobile || (loan as any)?.customerMobile || '';
 
       const paymentsForLoan = rawPayments.filter(
-        (lp) => (lp.loanId && lp.loanId === p.loanId) || lp.customerId === p.customerId
+        (lp) => (p.loanId && lp.loanId === p.loanId) || (p.customerId && lp.customerId === p.customerId) || (p.accountNumber && lp.accountNumber === p.accountNumber)
       );
       const totalInterestPaid = paymentsForLoan.reduce(
         (sum, item) => sum + (Number(item.interestPaid) || 0),
@@ -1241,6 +1300,12 @@ export const StorageService = {
     return sanitized;
   },
 
+  saveLoanPaymentsBatch: (updatedPayments: LoanPayment[]): void => {
+    const deduped = deduplicateLoanPayments(updatedPayments);
+    setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, deduped);
+    deduped.forEach((p) => syncToFirestore('loanPayments', p.id, p));
+  },
+
   addLoanPayment: (payment: Omit<LoanPayment, 'id'>): LoanPayment => {
     const payments = StorageService.getLoanPayments();
     const customers = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
@@ -1248,7 +1313,7 @@ export const StorageService = {
       (c) => c.id === payment.customerId || (payment.accountNumber && c.accountNumber === payment.accountNumber)
     );
     const allLoans = StorageService.getLoans();
-    const loan = allLoans.find((l) => l.id === payment.loanId || l.customerId === payment.customerId);
+    const loan = allLoans.find((l) => (payment.loanId && l.id === payment.loanId) || (payment.customerId && l.customerId === payment.customerId) || (payment.accountNumber && l.accountNumber === payment.accountNumber));
 
     const customerName = payment.customerName || cust?.name || loan?.customerName || '';
     const accountNumber = payment.accountNumber || cust?.accountNumber || loan?.accountNumber || '';
@@ -1256,7 +1321,7 @@ export const StorageService = {
     const customerMobile = payment.customerMobile || cust?.mobile || (loan as any)?.customerMobile || '';
 
     const prevPaymentsForLoan = payments.filter(
-      (lp) => (lp.loanId && lp.loanId === payment.loanId) || lp.customerId === payment.customerId
+      (lp) => (payment.loanId && lp.loanId === payment.loanId) || (payment.customerId && lp.customerId === payment.customerId) || (payment.accountNumber && lp.accountNumber === payment.accountNumber)
     );
     const totalInterestPaid = prevPaymentsForLoan.reduce(
       (sum, p) => sum + (Number(p.interestPaid) || 0),
@@ -1285,14 +1350,15 @@ export const StorageService = {
     syncToFirestore('loanPayments', newPayment.id, newPayment);
 
     if (loan) {
-      const newPaid = (loan.paidAmount || 0) + (payment.paidAmount || 0);
-      const newDiscount = (loan.discountAmount || 0) + (payment.discountAmount || 0);
-      const newPenalty = (loan.penaltyAmount || 0) + (payment.penaltyPaid || 0);
-      const remainingPrincipal = Math.max(0, (loan.principalAmount || 0) - newPaid - newDiscount);
-      const newRemaining = remainingPrincipal + newPenalty;
+      const allLoanPayments = [newPayment, ...prevPaymentsForLoan];
+      const newPaid = allLoanPayments.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
+      const newDiscount = allLoanPayments.reduce((sum, p) => sum + (Number(p.discountAmount) || 0), 0);
+      const newPenalty = (loan.penaltyAmount || 0) + (Number(payment.penaltyPaid) || 0);
+      const remainingPrincipal = Math.max(0, principal - newPaid - newDiscount);
+      const dueInterest = Math.max(0, totalInterest - totalInterestPaid);
+      const newRemaining = remainingPrincipal + newPenalty + dueInterest;
       const isClosed = newRemaining <= 0;
-      const nextDueInterest = Math.round((remainingPrincipal * (loan.interestRate || 0)) / 100);
-      const newTotalPayable = remainingPrincipal + newPenalty + (remainingPrincipal > 0 ? nextDueInterest : 0);
+      const newTotalPayable = principal + totalInterest;
 
       StorageService.saveLoan({
         ...loan,
@@ -1301,7 +1367,7 @@ export const StorageService = {
         officeId,
         customerMobile,
         totalPayable: newTotalPayable,
-        totalInterest, // Preserves the loan's base totalInterest! Never sets to 0!
+        totalInterest,
         totalInterestPaid,
         paidAmount: newPaid,
         discountAmount: newDiscount,
@@ -1372,6 +1438,115 @@ export const StorageService = {
     return newLog;
   },
 
+  // ── Thakbaki (थकबाकी) Operations ──────────────────────────────────────────
+  getThakbakiList: (): ThakbakiEntry[] => {
+    return getStoredData<ThakbakiEntry[]>(STORAGE_KEYS.THAKBAKI, []);
+  },
+
+  getThakbakiById: (id: string): ThakbakiEntry | undefined => {
+    return StorageService.getThakbakiList().find((e) => e.id === id);
+  },
+
+  addThakbaki: (data: Omit<ThakbakiEntry, 'id' | 'createdAt' | 'updatedAt' | 'payments' | 'paidAmount' | 'remainingAmount' | 'status'>): ThakbakiEntry => {
+    const list = StorageService.getThakbakiList();
+    const entry: ThakbakiEntry = {
+      ...data,
+      id: 'tb_' + Date.now(),
+      paidAmount: 0,
+      remainingAmount: data.initialAmount,
+      status: 'PENDING',
+      payments: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setStoredData(STORAGE_KEYS.THAKBAKI, [entry, ...list]);
+    syncToFirestore('thakbaki', entry.id, entry);
+    return entry;
+  },
+
+  updateThakbaki: (id: string, updates: Partial<Omit<ThakbakiEntry, 'id' | 'createdAt' | 'payments'>>): ThakbakiEntry => {
+    const list = StorageService.getThakbakiList();
+    const index = list.findIndex((e) => e.id === id);
+    if (index === -1) throw new Error('थकबाकी नोंद सापडली नाही.');
+    list[index] = { ...list[index], ...updates, updatedAt: new Date().toISOString() };
+    setStoredData(STORAGE_KEYS.THAKBAKI, list);
+    syncToFirestore('thakbaki', id, list[index]);
+    return list[index];
+  },
+
+  recordThakbakiPayment: (id: string, paymentData: { paymentDate: string; paidAmount: number; paymentMode: 'CASH' | 'ONLINE' | 'BANK'; note?: string }): ThakbakiEntry => {
+    const list = StorageService.getThakbakiList();
+    const index = list.findIndex((e) => e.id === id);
+    if (index === -1) throw new Error('थकबाकी नोंद सापडली नाही.');
+
+    const entry = list[index];
+    const payment: ThakbakiPayment = {
+      id: 'tbp_' + Date.now(),
+      paymentDate: paymentData.paymentDate,
+      paidAmount: paymentData.paidAmount,
+      paymentMode: paymentData.paymentMode,
+      note: paymentData.note,
+      createdAt: new Date().toISOString(),
+    };
+
+    const newPaidAmount = (entry.paidAmount || 0) + paymentData.paidAmount;
+    const newRemainingAmount = Math.max(0, entry.initialAmount - newPaidAmount);
+
+    const updatedEntry: ThakbakiEntry = {
+      ...entry,
+      payments: [...(entry.payments || []), payment],
+      paidAmount: newPaidAmount,
+      remainingAmount: newRemainingAmount,
+      status: newRemainingAmount <= 0 ? 'CLEARED' : 'PENDING',
+      lastPaymentDate: paymentData.paymentDate,
+      updatedAt: new Date().toISOString(),
+    };
+
+    list[index] = updatedEntry;
+    setStoredData(STORAGE_KEYS.THAKBAKI, list);
+    syncToFirestore('thakbaki', id, updatedEntry);
+    return updatedEntry;
+  },
+
+  deleteThakbakiPayment: (thakbakiId: string, paymentId: string): ThakbakiEntry => {
+    const list = StorageService.getThakbakiList();
+    const index = list.findIndex((e) => e.id === thakbakiId);
+    if (index === -1) throw new Error('थकबाकी नोंद सापडली नाही.');
+
+    const entry = list[index];
+    const paymentToDelete = (entry.payments || []).find((p) => p.id === paymentId);
+    if (!paymentToDelete) throw new Error('जमा नोंद सापडली नाही.');
+
+    const newPayments = (entry.payments || []).filter((p) => p.id !== paymentId);
+    const newPaidAmount = Math.max(0, (entry.paidAmount || 0) - paymentToDelete.paidAmount);
+    const newRemainingAmount = Math.max(0, entry.initialAmount - newPaidAmount);
+    const lastPayment = newPayments.length > 0 ? newPayments[newPayments.length - 1].paymentDate : undefined;
+
+    const updatedEntry: ThakbakiEntry = {
+      ...entry,
+      payments: newPayments,
+      paidAmount: newPaidAmount,
+      remainingAmount: newRemainingAmount,
+      status: newRemainingAmount <= 0 ? 'CLEARED' : 'PENDING',
+      lastPaymentDate: lastPayment,
+      updatedAt: new Date().toISOString(),
+    };
+
+    list[index] = updatedEntry;
+    setStoredData(STORAGE_KEYS.THAKBAKI, list);
+    syncToFirestore('thakbaki', thakbakiId, updatedEntry);
+    return updatedEntry;
+  },
+
+  deleteThakbaki: (id: string): void => {
+    const list = StorageService.getThakbakiList();
+    const entry = list.find((e) => e.id === id);
+    const filtered = list.filter((e) => e.id !== id);
+    setStoredData(STORAGE_KEYS.THAKBAKI, filtered);
+    if (entry) deleteFromFirestore('thakbaki', id, entry);
+  },
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // Backup & Restore Operations
   exportBackup: (): SystemBackupData => {
     return {
@@ -1386,6 +1561,7 @@ export const StorageService = {
       interestRates: StorageService.getInterestRates(),
       penaltySettings: [StorageService.getPenaltySettings()],
       smsLogs: StorageService.getSmsLogs(),
+      thakbaki: StorageService.getThakbakiList(),
     };
   },
 
@@ -1404,11 +1580,15 @@ export const StorageService = {
       setStoredData(STORAGE_KEYS.PENALTY_SETTINGS, backup.penaltySettings[0]);
     }
     setStoredData(STORAGE_KEYS.SMS_LOGS, backup.smsLogs || []);
+    if (backup.thakbaki) {
+      setStoredData(STORAGE_KEYS.THAKBAKI, backup.thakbaki);
+    }
 
     // Sync full restoration to Firestore
     (backup.customers || []).forEach((c) => syncToFirestore('customers', c.id, c));
     (backup.collections || []).forEach((c) => syncToFirestore('collections', c.id, c));
     (backup.loans || []).forEach((l) => syncToFirestore('loans', l.id, l));
+    (backup.thakbaki || []).forEach((tb) => syncToFirestore('thakbaki', tb.id, tb));
   },
 
   clearAllData: async (): Promise<void> => {
@@ -1462,6 +1642,10 @@ export const StorageService = {
       const penalty = StorageService.getPenaltySettings();
       if (penalty) {
         await syncToFirestore('penaltySettings', penalty.id || 'default', penalty);
+      }
+      const thakbakiList = StorageService.getThakbakiList();
+      for (const tb of thakbakiList) {
+        await syncToFirestore('thakbaki', tb.id, tb);
       }
       console.log('[Firestore] Complete synchronization finished.');
     } catch (err) {
@@ -1853,6 +2037,30 @@ export const StorageService = {
         (err: any) => console.warn('Firestore admins listener error:', err?.message || err)
       );
       unsubscribes.push(unsubAdmins);
+    } catch (e) {}
+
+    // 9. Listen for thakbaki in Firestore
+    try {
+      const unsubThakbaki = onSnapshot(
+        collection(db, 'thakbaki'),
+        (snapshot: any) => {
+          if (!snapshot.empty) {
+            const remoteList: ThakbakiEntry[] = [];
+            snapshot.forEach((d: any) => {
+              const raw = d.data();
+              remoteList.push({
+                ...raw,
+                id: raw.id || d.id,
+                payments: raw.payments || [],
+              });
+            });
+            setStoredData(STORAGE_KEYS.THAKBAKI, remoteList);
+            debouncedUpdate();
+          }
+        },
+        (err: any) => console.warn('Firestore thakbaki listener error:', err?.message || err)
+      );
+      unsubscribes.push(unsubThakbaki);
     } catch (e) {}
 
     return () => {

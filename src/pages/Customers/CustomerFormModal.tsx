@@ -64,6 +64,9 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
     mobile: string;
     amount: number;
     modality: Modality;
+    loanAmount?: number;
+    loanRate?: number;
+    loanPaidInterest?: number;
   } | null>(null);
 
   const handleBishiTypeChange = (newType: BishiType) => {
@@ -110,17 +113,24 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
       setOfficeId(editingCustomer.officeId);
       setAddress(editingCustomer.address || '');
       setPhotoURL(editingCustomer.photoURL || '');
-      setHasLoan(editingCustomer.hasLoan);
 
-      if (editingCustomer.hasLoan) {
-        const existingLoan = StorageService.getLoanByCustomerId(editingCustomer.id);
-        if (existingLoan) {
-          setLoanPrincipal(existingLoan.principalAmount);
-          setLoanInterestRate(existingLoan.interestRate);
-          setLoanIssueDate(existingLoan.issueDate || editingCustomer.bishiDate || new Date().toISOString().split('T')[0]);
-          setLoanPaidPrincipal(existingLoan.paidAmount !== undefined && existingLoan.paidAmount !== null ? existingLoan.paidAmount : '');
-          setLoanPaidInterest(existingLoan.totalInterestPaid !== undefined && existingLoan.totalInterestPaid !== null ? existingLoan.totalInterestPaid : '');
-        }
+      const existingLoan = StorageService.getLoanByCustomerId(editingCustomer.id) ||
+        StorageService.getLoans().find((l) => (editingCustomer.accountNumber && l.accountNumber === editingCustomer.accountNumber) || l.customerId === editingCustomer.id);
+      const customerHasLoan = Boolean(editingCustomer.hasLoan || editingCustomer.bishiType === 'LOAN_ONLY' || existingLoan);
+      setHasLoan(customerHasLoan);
+
+      if (existingLoan) {
+        setLoanPrincipal(existingLoan.principalAmount);
+        setLoanInterestRate(existingLoan.interestRate);
+        setLoanIssueDate(existingLoan.issueDate || editingCustomer.bishiDate || new Date().toISOString().split('T')[0]);
+        setLoanPaidPrincipal(existingLoan.paidAmount !== undefined && existingLoan.paidAmount !== null ? existingLoan.paidAmount : '');
+        setLoanPaidInterest(existingLoan.totalInterestPaid !== undefined && existingLoan.totalInterestPaid !== null ? existingLoan.totalInterestPaid : '');
+      } else {
+        setLoanPrincipal('');
+        setLoanInterestRate(2);
+        setLoanIssueDate(editingCustomer.bishiDate || new Date().toISOString().split('T')[0]);
+        setLoanPaidPrincipal('');
+        setLoanPaidInterest('');
       }
       setAlreadyPaidAmount('');
     } else {
@@ -198,6 +208,22 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                   ₹{successCustomer.amount} ({successCustomer.modality === 'W' ? (language === 'EN' ? 'Weekly' : 'साप्ताहिक') : (language === 'EN' ? 'Monthly' : 'मासिक')})
                 </span>
               </div>
+              {successCustomer.loanAmount ? (
+                <div className="flex justify-between items-center text-sm border-t border-slate-200/80 pt-2 mt-1">
+                  <span className="text-slate-600 font-medium">{language === 'EN' ? 'Loan Principal:' : 'कर्ज मुद्दल:'}</span>
+                  <span className="font-extrabold text-amber-800">
+                    ₹{successCustomer.loanAmount.toLocaleString('en-IN')} ({successCustomer.loanRate}% {language === 'EN' ? 'Interest' : 'व्याज'})
+                  </span>
+                </div>
+              ) : null}
+              {successCustomer.loanPaidInterest ? (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-600 font-medium">{language === 'EN' ? 'Previously Paid Interest:' : 'आधी भरलेले व्याज:'}</span>
+                  <span className="font-extrabold text-emerald-700">
+                    ₹{successCustomer.loanPaidInterest.toLocaleString('en-IN')}
+                  </span>
+                </div>
+              ) : null}
             </div>
 
             {/* Action Buttons */}
@@ -243,7 +269,10 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
       return;
     }
 
-    if (hasLoan && (!loanPrincipal || Number(loanPrincipal) <= 0)) {
+    const shouldHaveLoan = Boolean(hasLoan || bishiType === 'LOAN_ONLY');
+    const principalNum = Number(loanPrincipal);
+
+    if (shouldHaveLoan && (!loanPrincipal || principalNum <= 0)) {
       setError(language === 'EN' ? 'Please enter valid loan principal amount.' : 'कृपया कर्जाची योग्य रक्कम भरा.');
       return;
     }
@@ -274,19 +303,21 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           officeId,
           address: finalAddress,
           photoURL: photoURL.trim() || undefined,
-          hasLoan: bishiType === 'LOAN_ONLY' ? true : hasLoan,
+          hasLoan: shouldHaveLoan,
         });
 
+        const existingLoan = StorageService.getLoanByCustomerId(editingCustomer.id) ||
+          StorageService.getLoans().find((l) => (editingCustomer.accountNumber && l.accountNumber === editingCustomer.accountNumber) || l.customerId === editingCustomer.id);
+
         // Update Loan if applicable
-        if (hasLoan && loanPrincipal) {
-          const principal = Number(loanPrincipal);
+        if (shouldHaveLoan && principalNum > 0) {
+          const principal = principalNum;
           const rate = Number(loanInterestRate) || 2;
           const effectiveDate = loanIssueDate || bishiDate;
           const months = calculateElapsedMonths(effectiveDate);
           const monthlyInterest = Math.round((principal * rate) / 100);
           const totalInterest = Math.max(monthlyInterest, months * monthlyInterest);
 
-          const existingLoan = StorageService.getLoanByCustomerId(editingCustomer.id);
           const paidPrin = loanPaidPrincipal !== '' ? Math.max(0, Number(loanPaidPrincipal) || 0) : (existingLoan ? (Number(existingLoan.paidAmount) || 0) : 0);
           const paidInt = loanPaidInterest !== '' ? Math.max(0, Number(loanPaidInterest) || 0) : (existingLoan ? (Number(existingLoan.totalInterestPaid) || 0) : 0);
           const discount = existingLoan ? (Number(existingLoan.discountAmount) || 0) : 0;
@@ -296,7 +327,8 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           const remainingAmount = remPrincipal + penalty + remInterest;
           const isCompleted = remainingAmount <= 0;
 
-          StorageService.saveLoan({
+          const savedLoan = StorageService.saveLoan({
+            id: existingLoan?.id,
             customerId: updated.id,
             accountNumber: updated.accountNumber,
             officeId: updated.officeId,
@@ -313,6 +345,58 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             remainingAmount,
             penaltyAmount: penalty,
             status: isCompleted ? 'COMPLETED' : 'ACTIVE',
+          });
+
+          // Sync initial / historical payment in loanPayments
+          const allPayments = StorageService.getLoanPayments();
+          const existingInitialPayment = allPayments.find(
+            (lp) => ((savedLoan.id && lp.loanId === savedLoan.id) || lp.customerId === updated.id || (updated.accountNumber && lp.accountNumber === updated.accountNumber)) &&
+                    (lp.note?.includes('Initial') || lp.note?.includes('सुरुवातीची') || lp.note?.includes('जुनी'))
+          );
+
+          if (paidPrin > 0 || paidInt > 0) {
+            if (existingInitialPayment) {
+              const updatedPayments = allPayments.map((p) => {
+                if (p.id === existingInitialPayment.id) {
+                  return {
+                    ...p,
+                    paidAmount: paidPrin,
+                    interestPaid: paidInt,
+                    totalPaid: paidPrin + paidInt + (p.penaltyPaid || 0),
+                    remainingLoan: remainingAmount,
+                    customerName: updated.name,
+                    accountNumber: updated.accountNumber,
+                    officeId: updated.officeId,
+                    customerMobile: updated.mobile,
+                  };
+                }
+                return p;
+              });
+              StorageService.saveLoanPaymentsBatch(updatedPayments);
+            } else {
+              StorageService.addLoanPayment({
+                loanId: savedLoan.id,
+                customerId: updated.id,
+                customerName: updated.name,
+                accountNumber: updated.accountNumber,
+                officeId: updated.officeId,
+                customerMobile: updated.mobile,
+                paymentDate: effectiveDate,
+                paidAmount: paidPrin,
+                interestPaid: paidInt,
+                penaltyPaid: 0,
+                discountAmount: 0,
+                remainingLoan: remainingAmount,
+                paymentMode: 'CASH',
+                note: language === 'EN' ? 'Initial historical loan payment recorded' : 'सुरुवातीची जुनी कर्ज भरणा नोंद',
+              });
+            }
+          }
+        } else if (!shouldHaveLoan && existingLoan && existingLoan.status === 'ACTIVE') {
+          StorageService.saveLoan({
+            ...existingLoan,
+            status: 'COMPLETED',
+            remainingAmount: 0,
           });
         }
 
@@ -391,7 +475,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           officeId,
           address: finalAddress,
           photoURL: photoURL.trim() || undefined,
-          hasLoan: isLoanOnly ? true : hasLoan,
+          hasLoan: shouldHaveLoan,
           status: 'ACTIVE',
         });
 
@@ -444,8 +528,8 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
         }
 
         // Save Loan if applicable
-        if (hasLoan && loanPrincipal) {
-          const principal = Number(loanPrincipal);
+        if (shouldHaveLoan && principalNum > 0) {
+          const principal = principalNum;
           const rate = Number(loanInterestRate) || 2;
           const effectiveDate = loanIssueDate || bishiDate;
           const months = calculateElapsedMonths(effectiveDate);
@@ -504,6 +588,9 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           mobile: newCustomer.mobile,
           amount: newCustomer.amount,
           modality: newCustomer.modality,
+          loanAmount: shouldHaveLoan && principalNum > 0 ? principalNum : undefined,
+          loanRate: shouldHaveLoan && principalNum > 0 ? (Number(loanInterestRate) || 2) : undefined,
+          loanPaidInterest: shouldHaveLoan && Number(loanPaidInterest) > 0 ? Number(loanPaidInterest) : undefined,
         });
         refreshData();
       }

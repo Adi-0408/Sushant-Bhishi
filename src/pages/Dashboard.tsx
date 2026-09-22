@@ -91,7 +91,10 @@ export const Dashboard: React.FC = () => {
     }
     return Array.from(seen.values());
   }, [collections, filteredCustomerIds]);
-  const filteredLoans = loans.filter((l) => filteredCustomerIds.has(l.customerId) && l.status === 'ACTIVE');
+  const filteredLoans = loans.filter((l) => (
+    filteredCustomerIds.has(l.customerId) ||
+    Boolean(l.accountNumber && customers.some((c) => filteredCustomerIds.has(c.id) && c.accountNumber === l.accountNumber))
+  ) && l.status === 'ACTIVE');
 
   const totalCustomersCount = filteredCustomers.length;
 

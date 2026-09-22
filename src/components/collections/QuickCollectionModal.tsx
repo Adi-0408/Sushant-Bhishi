@@ -30,6 +30,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [selectedEntryId, setSelectedEntryId] = useState<string>('');
   const [collectedInput, setCollectedInput] = useState<number | ''>('');
+  const [extraAmountInput, setExtraAmountInput] = useState<number | ''>('');
   const [penaltyInput, setPenaltyInput] = useState<number | ''>('');
   const [loanPrincipalInput, setLoanPrincipalInput] = useState<number | ''>('');
   const [loanInterestInput, setLoanInterestInput] = useState<number | ''>('');
@@ -152,6 +153,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
         setSelectedCustomerId('');
         setSelectedEntryId('');
         setCollectedInput('');
+        setExtraAmountInput('');
         setPenaltyInput('');
         setLoanPrincipalInput('');
         setLoanInterestInput('');
@@ -164,6 +166,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
   // When customer selection changes
   const handleCustomerChange = (customerId: string) => {
     setSelectedCustomerId(customerId);
+    setExtraAmountInput('');
     setPenaltyInput('');
     setLoanPrincipalInput('');
     setLoanInterestInput('');
@@ -173,6 +176,7 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
     if (!customerId) {
       setSelectedEntryId('');
       setCollectedInput('');
+      setExtraAmountInput('');
       setPenaltyInput('');
       return;
     }
@@ -216,9 +220,10 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
 
   // Calculate live preview totals
   const bishiVal = isLoanOnly ? 0 : (Number(collectedInput) || 0);
+  const extraVal = isLoanOnly ? 0 : (Number(extraAmountInput) || 0);
   const bishiPenaltyVal = isLoanOnly ? 0 : (Number(penaltyInput) || 0);
   const loanPrinVal = Number(loanPrincipalInput) || 0;
-  const totalDepositVal = bishiVal + bishiPenaltyVal + loanPrinVal + loanInterestPaidVal;
+  const totalDepositVal = bishiVal + extraVal + bishiPenaltyVal + loanPrinVal + loanInterestPaidVal;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -241,37 +246,40 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
     let bishiStatus = '';
 
     // 1. Record Bishi Collection Deposit
-    if (!isLoanOnly && selectedEntry && (collectedInput !== '' || bishiPenaltyVal > 0)) {
+    if (!isLoanOnly && selectedEntry && (collectedInput !== '' || extraVal > 0 || bishiPenaltyVal > 0)) {
       const calc = calculateCollectionEntry(
         selectedEntry.expectedAmount,
         bishiVal,
         selectedCustomer.interestRate,
         bishiPenaltyVal,
         0,
-        true
+        true,
+        extraVal
       );
 
-      const totalWithPen = calc.collectedAmount + bishiPenaltyVal;
+      const totalWithPen = calc.collectedAmount + extraVal + bishiPenaltyVal;
+      const hasPayment = calc.collectedAmount > 0 || extraVal > 0;
 
       StorageService.updateCollectionEntry(selectedEntry.id, {
-        paymentDate: calc.collectedAmount > 0 ? effectiveDate : '',
-        paymentTime: calc.collectedAmount > 0 ? effectiveTime : '',
+        paymentDate: hasPayment ? effectiveDate : '',
+        paymentTime: hasPayment ? effectiveTime : '',
         paymentMode: paymentMode,
         collectedAmount: calc.collectedAmount,
+        extraAmount: extraVal,
         remainingAmount: calc.remainingAmount,
         interestAmount: calc.collectedAmount > 0 ? calc.interestAmount : 0,
         penaltyAmount: bishiPenaltyVal,
         totalPaid: totalWithPen,
         totalWithPenalty: totalWithPen,
         status: calc.status,
-        note: `पद्धत: ${paymentMode === 'ONLINE' ? 'ऑनलाइन' : 'रोख'}${bishiPenaltyVal > 0 ? ` [दंड/लेट फी ₹${bishiPenaltyVal}]` : ''}`,
+        note: `पद्धत: ${paymentMode === 'ONLINE' ? 'ऑनलाइन' : 'रोख'}${extraVal > 0 ? ` [अतिरिक्त जमा ₹${extraVal}]` : ''}${bishiPenaltyVal > 0 ? ` [दंड/लेट फी ₹${bishiPenaltyVal}]` : ''}`,
       });
 
       bishiSuccess = true;
       bishiRemaining = calc.remainingAmount;
       bishiStatus = calc.status === 'PAID' ? `✅ ${t.statusPaid}` : (calc.status === 'PARTIAL' ? `⚠️ ${t.statusPartial}` : '⏳ बाकी');
 
-      if (calc.collectedAmount > 0) {
+      if (hasPayment) {
         SmsService.sendSms(selectedCustomer, 'COLLECTION', {
           amount: totalWithPen,
           remaining: calc.remainingAmount,
@@ -676,6 +684,22 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
 
                         <div>
                           <div className="flex justify-between items-center mb-1">
+                            <label className="block text-xs font-extrabold text-blue-900">
+                              {language === 'EN' ? 'Extra Submitted (₹)' : 'अतिरिक्त जमा रक्कम (₹)'} <span className="text-blue-700 font-normal text-[10px]">({language === 'EN' ? 'Trust/Saving - No Int.' : 'विश्वास/बचत - व्याज नाही'})</span>
+                            </label>
+                          </div>
+                          <input
+                            type="number"
+                            min={0}
+                            value={extraAmountInput}
+                            onChange={(e) => setExtraAmountInput(e.target.value ? Number(e.target.value) : '')}
+                            placeholder="0"
+                            className="w-full px-3.5 py-2 rounded-xl border border-blue-400 text-sm font-black text-blue-900 bg-blue-50/20 focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <div className="flex justify-between items-center mb-1">
                             <label className="block text-xs font-extrabold text-rose-900">
                               {language === 'EN' ? 'Late Fee / Penalty (₹)' : 'लेट फी / दंड (Penalty ₹)'} <span className="text-rose-700 font-normal text-[10px]">({language === 'EN' ? 'If paid late' : 'उशिरा भरल्यास'})</span>
                             </label>
@@ -691,10 +715,10 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
                         </div>
                       </div>
 
-                      {bishiPenaltyVal > 0 && (
-                        <div className="text-[11px] font-bold text-rose-800 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200 flex justify-between items-center">
-                          <span>{language === 'EN' ? `Installment: ₹${bishiVal} + Penalty: ₹${bishiPenaltyVal}` : `हप्ता: ₹${bishiVal} + दंड: ₹${bishiPenaltyVal}`}</span>
-                          <span className="font-extrabold">{language === 'EN' ? `Total Bishi Deposit: ₹${bishiVal + bishiPenaltyVal}` : `दंडासह भिशी जमा: ₹${bishiVal + bishiPenaltyVal}`}</span>
+                      {(extraVal > 0 || bishiPenaltyVal > 0) && (
+                        <div className="text-[11px] font-bold text-slate-800 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 flex justify-between items-center">
+                          <span>{language === 'EN' ? `Bishi: ₹${bishiVal}${extraVal > 0 ? ` + Extra: ₹${extraVal}` : ''}${bishiPenaltyVal > 0 ? ` + Penalty: ₹${bishiPenaltyVal}` : ''}` : `हप्ता: ₹${bishiVal}${extraVal > 0 ? ` + अतिरिक्त: ₹${extraVal}` : ''}${bishiPenaltyVal > 0 ? ` + दंड: ₹${bishiPenaltyVal}` : ''}`}</span>
+                          <span className="font-extrabold text-emerald-800">{language === 'EN' ? `Total Bishi Deposit: ₹${bishiVal + extraVal + bishiPenaltyVal}` : `एकूण भिशी भरणा: ₹${bishiVal + extraVal + bishiPenaltyVal}`}</span>
                         </div>
                       )}
                     </div>

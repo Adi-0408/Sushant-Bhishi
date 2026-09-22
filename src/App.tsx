@@ -19,6 +19,7 @@ import { SmsLogs } from './pages/Sms/SmsLogs';
 import { BackupManager } from './pages/Backup/BackupManager';
 import { ProfileManager } from './pages/Profile/ProfileManager';
 import { SettingsManager } from './pages/Settings/SettingsManager';
+import { ThakbakiManager } from './pages/Thakbaki/ThakbakiManager';
 
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
@@ -93,6 +94,7 @@ const ProtectedLayout: React.FC = () => {
               <Route path="/loans" element={<LoanManager />} />
               <Route path="/interest" element={<InterestManager />} />
               <Route path="/penalty" element={<PenaltyManager />} />
+              <Route path="/thakbaki" element={<ThakbakiManager />} />
               <Route path="/reports" element={<ReportManager />} />
               <Route path="/sms" element={<SmsLogs />} />
               <Route path="/backup" element={<BackupManager />} />

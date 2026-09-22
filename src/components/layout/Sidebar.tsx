@@ -16,6 +16,7 @@ import {
   LogOut,
   Plus,
   X,
+  ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
@@ -40,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onLogoutClick
     { label: t.navLoans, icon: Landmark, path: '/loans' },
     { label: t.navInterest, icon: TrendingUp, path: '/interest' },
     { label: t.navPenalty, icon: AlertTriangle, path: '/penalty' },
+    { label: t.navThakbaki, icon: ClipboardList, path: '/thakbaki' },
     { label: t.navReports, icon: BarChart3, path: '/reports' },
     { label: t.navSms, icon: MessageSquare, path: '/sms' },
     { label: t.navBackup, icon: HardDrive, path: '/backup' },

@@ -5,6 +5,7 @@ export interface MemberLedgerRow {
   srNo: number;
   date: string;
   deposit: number;
+  extraAmount?: number;
   cumulativeDeposit: number;
   bishiPenalty: number;
   expected: number;
@@ -149,7 +150,9 @@ export const calculateMemberLedger = (
     const c = entry.collection;
     const lp = entry.loanPayment;
 
-    const deposit = c ? (c.collectedAmount || 0) : 0;
+    const extra = c ? (c.extraAmount || 0) : 0;
+    const bishiDeposit = c ? (c.collectedAmount || 0) : 0;
+    const deposit = bishiDeposit + extra;
     cumulativeDeposit += deposit;
     totalDeposit += deposit;
 
@@ -189,6 +192,7 @@ export const calculateMemberLedger = (
       srNo: idx + 1,
       date: entry.date,
       deposit,
+      extraAmount: extra,
       cumulativeDeposit,
       bishiPenalty,
       expected,

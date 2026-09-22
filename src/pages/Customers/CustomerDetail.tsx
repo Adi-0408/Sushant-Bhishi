@@ -47,7 +47,9 @@ export const CustomerDetail: React.FC = () => {
   const { customers, collections, loans, loanPayments, bishiConfigs, refreshData, showToast, language, t } = useApp();
 
   const customer = customers.find((c) => c.id === id);
-  const customerLoans = customer ? loans.filter((l) => l.customerId === customer.id) : [];
+  const customerLoans = customer
+    ? loans.filter((l) => l.customerId === customer.id || (customer.accountNumber && l.accountNumber === customer.accountNumber))
+    : [];
   const loan = customerLoans.find((l) => l.status === 'ACTIVE')
     || [...customerLoans].sort((a, b) => (b.updatedAt || b.issueDate || '').localeCompare(a.updatedAt || a.issueDate || ''))[0]
     || null;
@@ -57,9 +59,10 @@ export const CustomerDetail: React.FC = () => {
   const loanDueInterest = loan ? calculateLoanDueInterest(loan) : 0;
 
   const customerLoanPayments = customer
-    ? loanPayments.filter((lp) => lp.customerId === customer.id || (loan && lp.loanId === loan.id))
+    ? loanPayments.filter((lp) => lp.customerId === customer.id || (loan && lp.loanId === loan.id) || (customer.accountNumber && lp.accountNumber === customer.accountNumber))
     : [];
-  const totalInterestPaid = customerLoanPayments.reduce((sum, lp) => sum + (Number(lp.interestPaid) || 0), 0);
+  const recordedInterestPaid = customerLoanPayments.reduce((sum, lp) => sum + (Number(lp.interestPaid) || 0), 0);
+  const totalInterestPaid = recordedInterestPaid > 0 ? recordedInterestPaid : (Number(loan?.totalInterestPaid) || 0);
 
   // Collection modal state
   const [selectedEntry, setSelectedEntry] = useState<CollectionEntry | null>(null);
@@ -76,6 +79,7 @@ export const CustomerDetail: React.FC = () => {
   const [paymentTime, setPaymentTime] = useState(getCurrentTimeStr());
   const [paymentMode, setPaymentMode] = useState<'CASH' | 'ONLINE' | 'BANK'>('CASH');
   const [collectedInput, setCollectedInput] = useState<number | ''>('');
+  const [extraAmountInput, setExtraAmountInput] = useState<number | ''>('');
   const [interestInput, setInterestInput] = useState<number | ''>('');
   const [penaltyInput, setPenaltyInput] = useState<number | ''>('');
   const [noteInput, setNoteInput] = useState('');
@@ -181,6 +185,7 @@ export const CustomerDetail: React.FC = () => {
         ? (entry.collectedAmount ?? 0)
         : (entry.collectedAmount !== undefined && entry.collectedAmount > 0 ? entry.collectedAmount : (entry.remainingAmount > 0 ? entry.remainingAmount : entry.expectedAmount))
     );
+    setExtraAmountInput(entry.extraAmount || '');
     setInterestInput(entry.interestAmount || 0);
     setPenaltyInput(entry.penaltyAmount || 0);
     setNoteInput(entry.note || '');
@@ -192,6 +197,7 @@ export const CustomerDetail: React.FC = () => {
     if (!selectedEntry) return;
 
     const collected = Math.max(0, Number(collectedInput) || 0);
+    const extra = Math.max(0, Number(extraAmountInput) || 0);
     const interest = Math.max(0, Number(interestInput) || 0);
     const penalty = Math.max(0, Number(penaltyInput) || 0);
 
@@ -201,15 +207,18 @@ export const CustomerDetail: React.FC = () => {
       customer.interestRate,
       penalty,
       0,
-      true
+      true,
+      extra
     );
 
-    const totalWithPen = calc.collectedAmount + penalty;
+    const totalWithPen = calc.collectedAmount + extra + penalty;
+    const hasPayment = calc.collectedAmount > 0 || extra > 0;
     const updated = StorageService.updateCollectionEntry(selectedEntry.id, {
-      paymentDate: calc.collectedAmount > 0 ? paymentDate : '',
-      paymentTime: calc.collectedAmount > 0 ? paymentTime : '',
-      paymentMode: calc.collectedAmount > 0 ? paymentMode : 'CASH',
+      paymentDate: hasPayment ? paymentDate : '',
+      paymentTime: hasPayment ? paymentTime : '',
+      paymentMode: hasPayment ? paymentMode : 'CASH',
       collectedAmount: calc.collectedAmount,
+      extraAmount: extra,
       remainingAmount: calc.remainingAmount,
       interestAmount: calc.collectedAmount > 0 ? (interest || calc.interestAmount) : 0,
       penaltyAmount: penalty,
@@ -220,7 +229,7 @@ export const CustomerDetail: React.FC = () => {
     });
 
     showToast(
-      calc.collectedAmount === 0
+      !hasPayment
         ? (language === 'EN' ? 'Installment reset to 0 (Pending).' : 'हप्ता ० (शिल्लक बाकी) करण्यात आला.')
         : (language === 'EN' ? 'Collection recorded successfully.' : 'जमा नोंद यशस्वी झाली.'),
       'success'
@@ -229,9 +238,9 @@ export const CustomerDetail: React.FC = () => {
     setIsCollectModalOpen(false);
 
     // Send SMS notification automatically only if payment was recorded
-    if (calc.collectedAmount > 0) {
+    if (hasPayment) {
       SmsService.sendSms(customer, 'COLLECTION', {
-        amount: collected,
+        amount: collected + extra,
         remaining: calc.remainingAmount,
       });
     }
@@ -446,8 +455,13 @@ export const CustomerDetail: React.FC = () => {
             <div className="bg-emerald-50 p-3.5 print:p-1.5 rounded-xl print:rounded-lg border border-emerald-200 text-center">
               <span className="text-[11px] print:text-[9px] font-bold text-emerald-800 block leading-tight">{language === 'EN' ? 'Total Collected' : 'आतापर्यंत जमा'}</span>
               <span className="text-base print:text-xs font-black text-emerald-700 block mt-0.5">
-                {formatCurrency(financials.totalCollectedBishi, language)}
+                {formatCurrency(financials.totalCollectedBishi + (financials.totalExtraAmount || 0), language)}
               </span>
+              {(financials.totalExtraAmount || 0) > 0 && (
+                <span className="text-[10px] print:text-[8px] text-blue-700 font-bold block mt-0.5">
+                  ({language === 'EN' ? 'Bishi:' : 'भिशी:'} {formatCurrency(financials.totalCollectedBishi, language)} + {language === 'EN' ? 'Extra:' : 'अतिरिक्त:'} {formatCurrency(financials.totalExtraAmount, language)})
+                </span>
+              )}
             </div>
 
             <div className={`p-3.5 print:p-1.5 rounded-xl print:rounded-lg border-2 text-center transition-all ${
@@ -526,10 +540,18 @@ export const CustomerDetail: React.FC = () => {
                 <div>
                   <span className="text-[11px] print:text-[9px] font-bold text-emerald-800 block leading-tight">{language === 'EN' ? 'Total Collected Bishi Amount' : 'एकूण जमा भिशी रक्कम'}</span>
                   <span className="text-lg print:text-sm font-black text-emerald-900">{formatCurrency(financials.totalCollectedBishi, language)}</span>
+                  {financials.totalExtraAmount > 0 && (
+                    <span className="text-[11px] print:text-[9px] font-bold text-blue-800 block mt-0.5">
+                      + {language === 'EN' ? 'Extra' : 'अतिरिक्त'}: {formatCurrency(financials.totalExtraAmount, language)}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <span className="text-[11px] print:text-[9px] font-bold text-emerald-800 block leading-tight">{language === 'EN' ? `Final Interest / Dividend (${customer.interestRate}%)` : `अंतिम व्याज / लाभांश (${customer.interestRate}%)`}</span>
                   <span className="text-lg print:text-sm font-black text-emerald-700">+{formatCurrency(financials.finalBishiPayoutInterest, language)}</span>
+                  <span className="text-[10px] print:text-[8px] text-slate-500 font-medium block">
+                    {language === 'EN' ? '(Only on Bishi amount)' : '(फक्त भिशी रकमेवर)'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-[11px] print:text-[9px] font-bold text-emerald-900 block leading-tight">{language === 'EN' ? 'Total Final Return to Customer' : 'खातेदाराला मिळणारा एकूण अंतिम परतावा'}</span>
@@ -656,9 +678,14 @@ export const CustomerDetail: React.FC = () => {
                   <span className="font-black text-emerald-700">
                     {formatCurrency(entry.collectedAmount, language)}
                   </span>
+                  {(entry.extraAmount || 0) > 0 && (
+                    <div className="text-[10px] font-extrabold text-blue-700">
+                      + {language === 'EN' ? 'Extra' : 'अतिरिक्त'}: {formatCurrency(entry.extraAmount || 0, language)}
+                    </div>
+                  )}
                   {(entry.penaltyAmount || 0) > 0 && (
                     <div className="text-[10px] font-extrabold text-amber-800">
-                      + {language === 'EN' ? 'Penalty' : 'दंड'}: {formatCurrency(entry.penaltyAmount, language)} ({language === 'EN' ? 'Total' : 'एकूण'}: {formatCurrency(entry.totalWithPenalty || ((entry.collectedAmount || 0) + (entry.penaltyAmount || 0)), language)})
+                      + {language === 'EN' ? 'Penalty' : 'दंड'}: {formatCurrency(entry.penaltyAmount, language)} ({language === 'EN' ? 'Total' : 'एकूण'}: {formatCurrency(entry.totalWithPenalty || ((entry.collectedAmount || 0) + (entry.extraAmount || 0) + (entry.penaltyAmount || 0)), language)})
                     </div>
                   )}
                 </div>
@@ -713,7 +740,7 @@ export const CustomerDetail: React.FC = () => {
                   >
                     <Edit className="w-4 h-4 text-amber-700" />
                   </button>
-                  {entry.collectedAmount > 0 && (
+                  {(entry.collectedAmount > 0 || (entry.extraAmount || 0) > 0) && (
                     <button
                       onClick={() => setDeleteConfirmEntry(entry)}
                       className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 flex items-center justify-center touch-target"
@@ -766,9 +793,14 @@ export const CustomerDetail: React.FC = () => {
                   </td>
                   <td className="p-3.5 print:p-1.5 text-right font-bold text-emerald-700">
                     <div>{formatCurrency(entry.collectedAmount, language)}</div>
+                    {(entry.extraAmount || 0) > 0 && (
+                      <div className="text-[10px] print:text-[8px] text-blue-700 font-extrabold whitespace-nowrap">
+                        + {language === 'EN' ? 'Extra' : 'अतिरिक्त'}: {formatCurrency(entry.extraAmount || 0, language)}
+                      </div>
+                    )}
                     {(entry.penaltyAmount || 0) > 0 && (
                       <div className="text-[10px] print:text-[8px] text-amber-800 font-extrabold whitespace-nowrap">
-                        {language === 'EN' ? 'With Penalty:' : 'दंडासह:'} {formatCurrency(entry.totalWithPenalty || ((entry.collectedAmount || 0) + (entry.penaltyAmount || 0)), language)}
+                        {language === 'EN' ? 'With Penalty:' : 'दंडासह:'} {formatCurrency(entry.totalWithPenalty || ((entry.collectedAmount || 0) + (entry.extraAmount || 0) + (entry.penaltyAmount || 0)), language)}
                       </div>
                     )}
                   </td>
@@ -857,7 +889,7 @@ export const CustomerDetail: React.FC = () => {
                       >
                         <Edit className="w-3.5 h-3.5 text-amber-700" />
                       </button>
-                      {entry.collectedAmount > 0 && (
+                      {(entry.collectedAmount > 0 || (entry.extraAmount || 0) > 0) && (
                         <button
                           onClick={() => setDeleteConfirmEntry(entry)}
                           className="p-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer"
@@ -1171,6 +1203,26 @@ export const CustomerDetail: React.FC = () => {
             )}
           </div>
         </div>
+      ) : hasAnyLoan ? (
+        <div className="bg-amber-50/70 rounded-2xl border-2 border-dashed border-amber-300 p-6 text-center space-y-3 print:hidden">
+          <Landmark className="w-8 h-8 text-amber-600 mx-auto" />
+          <h4 className="text-sm font-extrabold text-amber-950">
+            {language === 'EN' ? 'Loan record is enabled for this customer' : 'या खातेदारासाठी कर्ज समाविष्ट आहे'}
+          </h4>
+          <p className="text-xs text-amber-800 font-medium max-w-md mx-auto">
+            {language === 'EN'
+              ? 'Please update the loan principal, interest rate, and issue date to view the live interest calculation.'
+              : 'थेट व्याज गणना पाहण्यासाठी कृपया कर्जाची मुद्दल, व्याजदर आणि तारीख तपासा व जतन करा.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsEditCustomerOpen(true)}
+            className="px-4 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-black shadow-md cursor-pointer inline-flex items-center space-x-1.5"
+          >
+            <Edit className="w-3.5 h-3.5" />
+            <span>{language === 'EN' ? 'Add / Edit Loan Details' : 'कर्ज माहिती भरा / बदला'}</span>
+          </button>
+        </div>
       ) : null}
 
       {/* Print-Only Verification & Signature Block */}
@@ -1331,16 +1383,33 @@ export const CustomerDetail: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  {language === 'EN' ? 'Late Fee / Penalty (₹)' : 'दंड (₹)'}
-                </label>
-                <input
-                  type="number"
-                  value={penaltyInput}
-                  onChange={(e) => setPenaltyInput(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-4 py-2 rounded-xl border border-rose-300 text-sm font-bold text-rose-800"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {language === 'EN' ? 'Extra Submitted Amount (₹)' : 'अतिरिक्त जमा रक्कम (₹)'}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={extraAmountInput}
+                    onChange={(e) => setExtraAmountInput(e.target.value !== '' ? Number(e.target.value) : '')}
+                    placeholder="0"
+                    className="w-full px-4 py-2 rounded-xl border border-blue-300 text-sm font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 bg-blue-50/20"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {language === 'EN' ? 'Late Fee / Penalty (₹)' : 'दंड (₹)'}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={penaltyInput}
+                    onChange={(e) => setPenaltyInput(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full px-4 py-2 rounded-xl border border-rose-300 text-sm font-bold text-rose-800"
+                  />
+                </div>
               </div>
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 space-y-1.5">
@@ -1353,11 +1422,24 @@ export const CustomerDetail: React.FC = () => {
                     )}
                   </span>
                 </div>
-                {(Number(penaltyInput) || 0) > 0 && (
-                  <div className="flex justify-between pt-1.5 border-t border-slate-200 text-amber-900">
-                    <span>{language === 'EN' ? 'Total Collection with Penalty:' : 'दंड समावेश एकूण जमा:'}</span>
+                {(Number(extraAmountInput) || 0) > 0 && (
+                  <div className="flex justify-between pt-1.5 border-t border-slate-200 text-blue-900">
+                    <span>{language === 'EN' ? 'Extra Submitted (No Interest):' : 'अतिरिक्त जमा (व्याज लागू नाही):'}</span>
+                    <span className="text-blue-800 font-black">
+                      +{formatCurrency(Number(extraAmountInput) || 0, language)}
+                    </span>
+                  </div>
+                )}
+                {((Number(penaltyInput) || 0) > 0 || (Number(extraAmountInput) || 0) > 0) && (
+                  <div className="flex justify-between pt-1.5 border-t border-slate-200 text-slate-900">
+                    <span>{language === 'EN' ? 'Total Payment Collected:' : 'एकूण भरलेली रक्कम:'}</span>
                     <span className="text-emerald-800 font-black">
-                      {formatCurrency((Number(collectedInput) || 0) + (Number(penaltyInput) || 0), language)}
+                      {formatCurrency(
+                        (Number(collectedInput) || 0) +
+                        (Number(extraAmountInput) || 0) +
+                        (Number(penaltyInput) || 0),
+                        language
+                      )}
                     </span>
                   </div>
                 )}

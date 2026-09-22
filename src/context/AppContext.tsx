@@ -10,6 +10,7 @@ import {
   OfficeId,
   PenaltySetting,
   SmsLog,
+  ThakbakiEntry,
 } from '../types';
 import { StorageService } from '../services/db';
 
@@ -37,6 +38,7 @@ interface AppContextType {
   interestRates: InterestRateConfig[];
   penaltySettings: PenaltySetting;
   smsLogs: SmsLog[];
+  thakbakiList: ThakbakiEntry[];
   refreshData: () => void;
   toasts: Toast[];
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
@@ -82,6 +84,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [interestRates, setInterestRates] = useState<InterestRateConfig[]>(StorageService.getInterestRates);
   const [penaltySettings, setPenaltySettings] = useState<PenaltySetting>(StorageService.getPenaltySettings);
   const [smsLogs, setSmsLogs] = useState<SmsLog[]>(StorageService.getSmsLogs);
+  const [thakbakiList, setThakbakiList] = useState<ThakbakiEntry[]>(StorageService.getThakbakiList);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
 
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -95,6 +98,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setInterestRates(StorageService.getInterestRates());
     setPenaltySettings(StorageService.getPenaltySettings());
     setSmsLogs(StorageService.getSmsLogs());
+    setThakbakiList(StorageService.getThakbakiList());
   };
 
   const syncWithFirebase = async () => {
@@ -176,6 +180,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         interestRates,
         penaltySettings,
         smsLogs,
+        thakbakiList,
         refreshData,
         toasts,
         showToast,

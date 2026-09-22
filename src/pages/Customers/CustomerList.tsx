@@ -62,10 +62,14 @@ export const CustomerList: React.FC = () => {
     }
 
     const loansByCust = new Map<string, Loan>();
+    const loansByAcc = new Map<string, Loan>();
     for (let i = 0; i < loans.length; i++) {
       const l = loans[i];
       if (!loansByCust.has(l.customerId) || l.status === 'ACTIVE') {
         loansByCust.set(l.customerId, l);
+      }
+      if (l.accountNumber && (!loansByAcc.has(l.accountNumber) || l.status === 'ACTIVE')) {
+        loansByAcc.set(l.accountNumber, l);
       }
     }
 
@@ -73,7 +77,7 @@ export const CustomerList: React.FC = () => {
     for (let i = 0; i < customers.length; i++) {
       const cust = customers[i];
       const custColls = collsByCust.get(cust.id) || [];
-      const custLoan = loansByCust.get(cust.id) || null;
+      const custLoan = loansByCust.get(cust.id) || (cust.accountNumber ? loansByAcc.get(cust.accountNumber) : null) || null;
       map.set(cust.id, calculateCustomerFinancials(cust, custColls, custLoan, bishiConfigs));
     }
     return map;
@@ -106,7 +110,7 @@ export const CustomerList: React.FC = () => {
     // Status filter
     if (statusFilter !== 'ALL') {
       const financials = customerFinancialsMap.get(cust.id);
-      if (statusFilter === 'BORROWER' && !cust.hasLoan) return false;
+      if (statusFilter === 'BORROWER' && !cust.hasLoan && cust.bishiType !== 'LOAN_ONLY' && (!financials || financials.loanPrincipal <= 0)) return false;
       if (statusFilter === 'PAID' && !financials?.isCurrentDuePaid) return false;
       if (statusFilter === 'PENDING' && financials?.isCurrentDuePaid) return false;
     }
@@ -325,8 +329,13 @@ export const CustomerList: React.FC = () => {
                       <div>
                         <span className="text-[10px] text-slate-500 font-bold block">{t.colCollected}:</span>
                         <span className="font-black text-emerald-700">
-                          {formatCurrency(financials.totalCollectedBishi, language)}
+                          {formatCurrency(financials.totalCollectedBishi + (financials.totalExtraAmount || 0), language)}
                         </span>
+                        {(financials.totalExtraAmount || 0) > 0 && (
+                          <span className="text-[10px] text-blue-700 font-bold block">
+                            +{language === 'EN' ? 'Extra' : 'अतिरिक्त'} {formatCurrency(financials.totalExtraAmount, language)}
+                          </span>
+                        )}
                       </div>
                       <div className="text-right">
                         <span className="text-[10px] text-rose-700 font-bold block">
@@ -343,7 +352,7 @@ export const CustomerList: React.FC = () => {
                     </div>
 
                     {/* Loan Remaining pill if customer has active loan */}
-                    {cust.hasLoan && financials.loanRemaining > 0 && (
+                    {(cust.hasLoan || financials.loanPrincipal > 0) && financials.loanRemaining > 0 && (
                       <div className="flex items-center justify-between bg-amber-50/80 px-2.5 py-1.5 rounded-xl border border-amber-200 text-xs">
                         <span className="text-[10px] text-amber-900 font-bold">
                           {language === 'EN' ? 'Remaining Loan Due:' : 'कर्ज येणे बाकी:'}
@@ -458,7 +467,12 @@ export const CustomerList: React.FC = () => {
                           {formatCurrency(cust.amount, language)}
                         </td>
                         <td className="p-3.5 text-right font-bold text-emerald-700">
-                          {formatCurrency(financials.totalCollectedBishi, language)}
+                          <div>{formatCurrency(financials.totalCollectedBishi + (financials.totalExtraAmount || 0), language)}</div>
+                          {(financials.totalExtraAmount || 0) > 0 && (
+                            <div className="text-[10px] text-blue-700 font-bold whitespace-nowrap">
+                              +{language === 'EN' ? 'Extra' : 'अतिरिक्त'} {formatCurrency(financials.totalExtraAmount, language)}
+                            </div>
+                          )}
                         </td>
                         <td className="p-3.5 text-right font-extrabold">
                           {financials.totalRemainingBishi > 0 ? (
@@ -470,11 +484,11 @@ export const CustomerList: React.FC = () => {
                           )}
                         </td>
                         <td className="p-3.5 text-center">
-                          {cust.hasLoan && financials.loanRemaining > 0 ? (
+                          {(cust.hasLoan || financials.loanPrincipal > 0) && financials.loanRemaining > 0 ? (
                             <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 text-amber-950 border border-amber-300 shadow-2xs">
                               {formatCurrency(financials.loanRemaining, language)}
                             </span>
-                          ) : cust.hasLoan ? (
+                          ) : (cust.hasLoan || financials.loanPrincipal > 0) ? (
                             <span className="text-emerald-700 font-extrabold text-xs">₹0</span>
                           ) : (
                             <span className="text-slate-400 font-medium">-</span>

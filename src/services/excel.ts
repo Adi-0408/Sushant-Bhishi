@@ -1,5 +1,5 @@
-import { CollectionEntry, Customer, Loan, LoanPayment } from '../types';
-import { formatDateMarathi, getBishiNameMarathi } from '../utils/formatters';
+import { CollectionEntry, Customer, Loan, LoanPayment, ThakbakiEntry } from '../types';
+import { formatDateMarathi, getBishiNameMarathi, getOfficeNameMarathi } from '../utils/formatters';
 import { calculateMemberLedger } from './ledger';
 
 /**
@@ -247,6 +247,93 @@ export const exportGeneralReportToExcel = (
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = `${title.replace(/\s+/g, '_')}_अहवाल.xls`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+/**
+ * Export Thakbaki (थकबाकी) Report to Excel.
+ */
+export const exportThakbakiReportToExcel = (
+  entries: ThakbakiEntry[],
+  lang: 'MR' | 'EN' = 'MR'
+) => {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const title = lang === 'EN' ? 'Sushant Bishi - Thak Baki Report' : 'सुषांत भिशी - थकबाकी अहवाल';
+  const dateLabel = lang === 'EN' ? 'Date' : 'दिनांक';
+  const dateFormatted = formatDateMarathi(todayStr, lang);
+
+  const totalInitial = entries.reduce((s, e) => s + (e.initialAmount || 0), 0);
+  const totalPaid = entries.reduce((s, e) => s + (e.paidAmount || 0), 0);
+  const totalRemaining = entries.reduce((s, e) => s + (e.remainingAmount || 0), 0);
+
+  const tableRowsHtml = entries
+    .map(
+      (e, idx) => `
+      <tr style="background-color:${idx % 2 === 0 ? '#ffffff' : '#fffbeb'};">
+        <td style="text-align:center; font-weight:bold;">${idx + 1}</td>
+        <td style="font-weight:bold;">${e.accountNumber}</td>
+        <td style="font-weight:bold;">${e.name}</td>
+        <td>${e.mobile || '-'}</td>
+        <td>${getOfficeNameMarathi(e.officeId, lang)}</td>
+        <td style="text-align:right;">${e.initialAmount.toFixed(2)}</td>
+        <td style="text-align:right; color:#065f46;">${e.paidAmount.toFixed(2)}</td>
+        <td style="text-align:right; color:#991b1b; font-weight:bold;">${e.remainingAmount.toFixed(2)}</td>
+        <td style="text-align:center;">${e.status === 'CLEARED' ? '✅ ' + (lang === 'EN' ? 'Cleared' : 'पूर्ण') : '⏳ ' + (lang === 'EN' ? 'Pending' : 'बाकी')}</td>
+        <td style="text-align:center;">${e.lastPaymentDate ? formatDateMarathi(e.lastPaymentDate, lang) : '-'}</td>
+      </tr>`
+    )
+    .join('');
+
+  const h1 = lang === 'EN' ? 'Sr' : 'अ.क्र.';
+  const h2 = lang === 'EN' ? 'Acc No.' : 'खाते क्र.';
+  const h3 = lang === 'EN' ? 'Customer Name' : 'खातेदाराचे नाव';
+  const h4 = lang === 'EN' ? 'Mobile' : 'मोबाईल';
+  const h5 = lang === 'EN' ? 'Office' : 'कार्यालय';
+  const h6 = lang === 'EN' ? 'Initial Amount (Rs)' : 'मूळ थकबाकी (रु.)';
+  const h7 = lang === 'EN' ? 'Paid Amount (Rs)' : 'जमा रक्कम (रु.)';
+  const h8 = lang === 'EN' ? 'Balance Due (Rs)' : 'शिल्लक बाकी (रु.)';
+  const h9 = lang === 'EN' ? 'Status' : 'स्थिती';
+  const h10 = lang === 'EN' ? 'Last Payment' : 'शेवटची जमा';
+
+  const excelHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="UTF-8">
+    <style>
+      body { font-family: Arial, sans-serif; font-size: 11px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #d1d5db; padding: 5px 8px; }
+      th { background-color: #92400e; color: #ffffff; font-weight: bold; text-align: center; }
+    </style>
+    </head>
+    <body>
+      <h2 style="color:#92400e;">${title}</h2>
+      <p style="font-size:10px;">${dateLabel}: ${dateFormatted} | ${lang === 'EN' ? 'Total Records' : 'एकूण नोंदी'}: ${entries.length}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>${h1}</th><th>${h2}</th><th>${h3}</th><th>${h4}</th><th>${h5}</th>
+            <th>${h6}</th><th>${h7}</th><th>${h8}</th><th>${h9}</th><th>${h10}</th>
+          </tr>
+        </thead>
+        <tbody>${tableRowsHtml}</tbody>
+        <tfoot>
+          <tr style="background-color:#92400e; color:#ffffff; font-weight:bold;">
+            <td colspan="5" style="text-align:center;">${lang === 'EN' ? 'TOTAL' : 'एकूण'} (${entries.length})</td>
+            <td style="text-align:right;">${totalInitial.toFixed(2)}</td>
+            <td style="text-align:right;">${totalPaid.toFixed(2)}</td>
+            <td style="text-align:right;">${totalRemaining.toFixed(2)}</td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </body>
+    </html>`;
+
+  const blob = new Blob(['\uFEFF' + excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = (lang === 'EN' ? 'ThakBaki_Report_' : 'थकबाकी_अहवाल_') + todayStr + '.xls';
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

@@ -295,9 +295,14 @@ export const CollectionManager: React.FC = () => {
                         <span className="font-black text-emerald-700">
                           {formatCurrency(item.collectedAmount, language)}
                         </span>
+                        {(item.extraAmount || 0) > 0 && (
+                          <div className="text-[10px] font-extrabold text-blue-700">
+                            + {language === 'EN' ? 'Extra' : 'अतिरिक्त'}: {formatCurrency(item.extraAmount || 0, language)}
+                          </div>
+                        )}
                         {(item.penaltyAmount || 0) > 0 && (
                           <div className="text-[10px] font-extrabold text-amber-800">
-                            + {language === 'EN' ? 'Penalty' : 'दंड'}: {formatCurrency(item.penaltyAmount, language)} ({language === 'EN' ? 'Total' : 'एकूण'}: {formatCurrency(item.totalWithPenalty || ((item.collectedAmount || 0) + (item.penaltyAmount || 0)), language)})
+                            + {language === 'EN' ? 'Penalty' : 'दंड'}: {formatCurrency(item.penaltyAmount, language)} ({language === 'EN' ? 'Total' : 'एकूण'}: {formatCurrency(item.totalWithPenalty || ((item.collectedAmount || 0) + (item.extraAmount || 0) + (item.penaltyAmount || 0)), language)})
                           </div>
                         )}
                       </div>
@@ -381,9 +386,14 @@ export const CollectionManager: React.FC = () => {
                         </td>
                         <td className="p-3.5 text-right font-bold text-emerald-700">
                           <div>{formatCurrency(item.collectedAmount, language)}</div>
+                          {(item.extraAmount || 0) > 0 && (
+                            <div className="text-[10px] text-blue-700 font-extrabold whitespace-nowrap">
+                              + {language === 'EN' ? 'Extra' : 'अतिरिक्त'}: {formatCurrency(item.extraAmount || 0, language)}
+                            </div>
+                          )}
                           {(item.penaltyAmount || 0) > 0 && (
                             <div className="text-[10px] text-amber-800 font-extrabold whitespace-nowrap">
-                              + {language === 'EN' ? 'Penalty' : 'दंड'} {formatCurrency(item.penaltyAmount, language)} ({language === 'EN' ? 'Total' : 'एकूण'}: {formatCurrency(item.totalWithPenalty || ((item.collectedAmount || 0) + (item.penaltyAmount || 0)), language)})
+                              + {language === 'EN' ? 'Penalty' : 'दंड'} {formatCurrency(item.penaltyAmount, language)} ({language === 'EN' ? 'Total' : 'एकूण'}: {formatCurrency(item.totalWithPenalty || ((item.collectedAmount || 0) + (item.extraAmount || 0) + (item.penaltyAmount || 0)), language)})
                             </div>
                           )}
                         </td>

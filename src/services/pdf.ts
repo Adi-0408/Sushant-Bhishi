@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { CollectionEntry, Customer, Loan, LoanPayment } from '../types';
+import { CollectionEntry, Customer, Loan, LoanPayment, ThakbakiEntry } from '../types';
 import {
   formatCurrency,
   formatDateMarathi,
@@ -146,12 +146,13 @@ export const generateCustomerPDF = async (
 
   const effectiveLoanPayments = loanPayments.length > 0 ? loanPayments : StorageService.getLoanPayments();
   const customerLoanPayments = effectiveLoanPayments.filter(
-    (lp: LoanPayment) => lp.customerId === customer.id || (loan && lp.loanId === loan.id)
+    (lp: LoanPayment) => lp.customerId === customer.id || (loan && lp.loanId === loan.id) || (customer.accountNumber && lp.accountNumber === customer.accountNumber)
   );
-  const totalLoanInterestPaid = customerLoanPayments.reduce(
+  const recordedLoanInterestPaid = customerLoanPayments.reduce(
     (sum: number, lp: LoanPayment) => sum + (Number(lp.interestPaid) || 0),
     0
   );
+  const totalLoanInterestPaid = recordedLoanInterestPaid > 0 ? recordedLoanInterestPaid : (Number(loan?.totalInterestPaid) || 0);
   const totalLoanPrincipalPaid = customerLoanPayments.reduce(
     (sum: number, lp: LoanPayment) => sum + (Number(lp.paidAmount) || 0),
     0
@@ -166,6 +167,7 @@ export const generateCustomerPDF = async (
   // Table Totals
   const totalExpected = customerCollections.reduce((sum, c) => sum + (c.expectedAmount || 0), 0);
   const totalCollected = customerCollections.reduce((sum, c) => sum + (c.collectedAmount || 0), 0);
+  const totalExtra = customerCollections.reduce((sum, c) => sum + (c.extraAmount || 0), 0);
   const totalRemaining = customerCollections.reduce((sum, c) => sum + (c.remainingAmount || 0), 0);
   const totalInterest = financials.totalInterest;
   const totalPenalty = customerCollections.reduce((sum, c) => sum + (c.penaltyAmount || 0), 0);
@@ -214,7 +216,8 @@ export const generateCustomerPDF = async (
         </div>
         <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 6px; border-radius: 6px; text-align: center;">
           <span style="font-size: 9px; font-weight: 700; color: #166534; display: block;">एकूण जमा</span>
-          <span style="font-size: 12px; font-weight: 900; color: #15803d;">${formatCurrency(financials.totalCollectedBishi)}</span>
+          <span style="font-size: 12px; font-weight: 900; color: #15803d;">${formatCurrency(financials.totalCollectedBishi + (financials.totalExtraAmount || 0))}</span>
+          ${(financials.totalExtraAmount || 0) > 0 ? `<span style="font-size: 8px; color: #1d4ed8; display: block; font-weight: 700;">(अतिरिक्त: ₹${financials.totalExtraAmount})</span>` : ''}
         </div>
         <div style="background: #fff1f2; border: 1px solid #fecdd3; padding: 6px; border-radius: 6px; text-align: center;">
           <span style="font-size: 9px; font-weight: 700; color: #9f1239; display: block;">उरलेली बाकी</span>
@@ -228,29 +231,29 @@ export const generateCustomerPDF = async (
           <span style="font-size: 9px; font-weight: 700; color: #92400e; display: block;">एकूण दंड</span>
           <span style="font-size: 12px; font-weight: 900; color: #b45309;">${formatCurrency(financials.totalPenalty)}</span>
         </div>
-        <div style="background: #8B4513; padding: 6px; border-radius: 6px; text-align: center; color: #ffffff;">
-          <span style="font-size: 9px; font-weight: 700; color: #f5e6d3; display: block;">एकूण देय</span>
+        <div style="background: #2e1065; color: white; padding: 6px; border-radius: 6px; text-align: center;">
+          <span style="font-size: 9px; font-weight: 700; color: #ddd6fe; display: block;">एकूण देय</span>
           <span style="font-size: 12px; font-weight: 900; color: #ffffff;">${formatCurrency(financials.totalPayableBishi)}</span>
         </div>
       </div>
 
-      <!-- Transaction History Table -->
+      <!-- Weekly / Monthly Bishi Table -->
       <div style="margin-bottom: 12px;">
         <h3 style="font-size: 12px; font-weight: 800; color: #5c3a21; margin: 0 0 6px 0; display: flex; justify-content: space-between;">
           <span>भिशी व्यवहार इतिहास (${customer.modality === 'W' ? 'साप्ताहिक' : 'मासिक'})</span>
           <span style="font-size: 11px; color: #8B4513; font-weight: 700;">एकूण हप्ते: ${customerCollections.length}</span>
         </h3>
-        <table style="width: 100%; border-collapse: collapse; font-size: 10px; font-weight: 600; border: 1px solid #8B4513;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 10px; border: 1px solid #8B4513;">
           <thead>
-            <tr style="background: #f5e6d3; color: #333333; font-weight: 900;">
-              <th style="padding: 5px 3px; border: 1px solid #8B4513; text-align: center; width: 30px;">क्र.</th>
-              <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: center; width: 80px;">देय तारीख</th>
-              <th style="padding: 5px 6px; border: 1px solid #8B4513; text-align: right; width: 75px;">अपेक्षित (₹)</th>
-              <th style="padding: 5px 6px; border: 1px solid #8B4513; text-align: right; width: 75px;">जमा (₹)</th>
-              <th style="padding: 5px 6px; border: 1px solid #8B4513; text-align: right; width: 75px;">बाकी (₹)</th>
-              <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: right; width: 60px;">व्याज (₹)</th>
-              <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: right; width: 60px;">दंड (₹)</th>
-              <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: center; width: 65px;">पद्धत</th>
+            <tr style="background: #8B4513; color: #ffffff; font-weight: 900;">
+              <th style="padding: 5px 3px; border: 1px solid #8B4513; text-align: center; width: 25px;">क्र.</th>
+              <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: center; width: 70px;">देय तारीख</th>
+              <th style="padding: 5px 6px; border: 1px solid #8B4513; text-align: right; width: 65px;">अपेक्षित (₹)</th>
+              <th style="padding: 5px 6px; border: 1px solid #8B4513; text-align: right; width: 65px;">जमा (₹)</th>
+              <th style="padding: 5px 6px; border: 1px solid #8B4513; text-align: right; width: 65px;">बाकी (₹)</th>
+              <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: right; width: 55px;">व्याज (₹)</th>
+              <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: right; width: 50px;">दंड (₹)</th>
+              <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: center; width: 55px;">पद्धत</th>
               <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: center; width: 70px;">स्थिती</th>
             </tr>
           </thead>
@@ -262,7 +265,10 @@ export const generateCustomerPDF = async (
                 <td style="padding: 4px 3px; border: 1px solid #b8a99a; text-align: center; font-weight: 700;">${idx + 1}</td>
                 <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: center; font-weight: 700;">${formatDateMarathi(item.dueDate)}</td>
                 <td style="padding: 4px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 700; color: #334155;">${formatCurrency(item.expectedAmount)}</td>
-                <td style="padding: 4px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 800; color: #15803d;">${formatCurrency(item.collectedAmount)}</td>
+                <td style="padding: 4px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 800; color: #15803d;">
+                  <div>${formatCurrency(item.collectedAmount)}</div>
+                  ${(item.extraAmount || 0) > 0 ? `<div style="font-size: 8px; color: #1d4ed8; font-weight: 800;">+अतिरिक्त: ₹${item.extraAmount}</div>` : ''}
+                </td>
                 <td style="padding: 4px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #be123c;">${formatCurrency(item.remainingAmount)}</td>
                 <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: right; color: #475569;">${formatCurrency(item.interestAmount || (item.collectedAmount > 0 ? Math.round((item.collectedAmount * (customer.interestRate || (customer.modality === 'W' ? 2.5 : 10))) / 100) : 0))}</td>
                 <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: right; font-weight: 700; color: #b45309;">${formatCurrency(item.penaltyAmount)}</td>
@@ -286,7 +292,10 @@ export const generateCustomerPDF = async (
               <td style="padding: 5px 3px; border: 1px solid #5c3a21; text-align: center;">-</td>
               <td style="padding: 5px 4px; border: 1px solid #5c3a21; text-align: center;">एकूण (TOTAL)</td>
               <td style="padding: 5px 6px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalExpected)}</td>
-              <td style="padding: 5px 6px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalCollected)}</td>
+              <td style="padding: 5px 6px; border: 1px solid #5c3a21; text-align: right;">
+                <div>${formatCurrency(totalCollected + totalExtra)}</div>
+                ${totalExtra > 0 ? `<div style="font-size: 8px; color: #dbeafe;">+अतिरिक्त: ₹${totalExtra}</div>` : ''}
+              </td>
               <td style="padding: 5px 6px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalRemaining)}</td>
               <td style="padding: 5px 4px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalInterest)}</td>
               <td style="padding: 5px 4px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalPenalty)}</td>
@@ -695,4 +704,96 @@ export const generateMemberLedgerPDF = async (
     'landscape',
     `खातेदार_उतारा_${customer.accountNumber}_${customer.name.replace(/\s+/g, '_')}.pdf`
   );
+};
+
+/**
+ * Generate Thakbaki (थकबाकी) Report PDF.
+ */
+export const generateThakbakiReportPDF = async (
+  entries: ThakbakiEntry[],
+  lang: 'MR' | 'EN' = 'MR'
+): Promise<void> => {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const title = lang === 'EN' ? 'Sushant Bishi - Thak Baki Report' : 'सुषांत भिशी - थकबाकी अहवाल';
+  const dateLabel = lang === 'EN' ? 'Date' : 'दिनांक';
+  const dateFormatted = formatDateMarathi(todayStr, lang);
+
+  const totalInitial = entries.reduce((s, e) => s + (e.initialAmount || 0), 0);
+  const totalPaid = entries.reduce((s, e) => s + (e.paidAmount || 0), 0);
+  const totalRemaining = entries.reduce((s, e) => s + (e.remainingAmount || 0), 0);
+
+  const tableRows = entries
+    .map(
+      (e, idx) => `
+      <tr style="background-color:${idx % 2 === 0 ? '#ffffff' : '#fffbeb'};">
+        <td style="text-align:center; font-weight:bold; padding:6px 8px;">${idx + 1}</td>
+        <td style="font-weight:bold; padding:6px 8px;">${e.accountNumber}</td>
+        <td style="font-weight:bold; padding:6px 8px;">${e.name}</td>
+        <td style="padding:6px 8px;">${e.mobile || '-'}</td>
+        <td style="padding:6px 8px;">${getOfficeNameMarathi(e.officeId, lang)}</td>
+        <td style="text-align:right; padding:6px 8px;">${formatCurrency(e.initialAmount, lang)}</td>
+        <td style="text-align:right; padding:6px 8px; color:#065f46;">${formatCurrency(e.paidAmount, lang)}</td>
+        <td style="text-align:right; padding:6px 8px; color:#991b1b; font-weight:bold;">${formatCurrency(e.remainingAmount, lang)}</td>
+        <td style="text-align:center; padding:6px 8px;">
+          <span style="padding:2px 8px; border-radius:999px; font-weight:bold; font-size:10px;
+            background-color:${e.status === 'CLEARED' ? '#d1fae5' : '#fef3c7'};
+            color:${e.status === 'CLEARED' ? '#065f46' : '#92400e'};">
+            ${e.status === 'CLEARED' ? (lang === 'EN' ? 'Cleared' : 'पूर्ण') : (lang === 'EN' ? 'Pending' : 'बाकी')}
+          </span>
+        </td>
+        <td style="text-align:center; padding:6px 8px; color:#64748b;">${e.lastPaymentDate ? formatDateMarathi(e.lastPaymentDate, lang) : '-'}</td>
+      </tr>`
+    )
+    .join('');
+
+  const container = createPdfContainer(1200);
+  container.innerHTML = `
+    <div style="font-family: 'Noto Sans Devanagari', Mangal, Arial, sans-serif; font-size: 11px; padding: 24px;">
+      <div style="border-bottom: 3px solid #92400e; padding-bottom: 12px; margin-bottom: 16px;">
+        <h1 style="font-size: 18px; font-weight: 900; color: #92400e; margin: 0;">${title}</h1>
+        <p style="margin: 4px 0 0; font-size: 10px; color: #6b7280; font-weight: 600;">
+          ${dateLabel}: ${dateFormatted} &nbsp;|&nbsp;
+          ${lang === 'EN' ? 'Total Records' : 'एकूण नोंदी'}: ${entries.length} &nbsp;|&nbsp;
+          ${lang === 'EN' ? 'Total Initial Dues' : 'एकूण मूळ थकबाकी'}: ${formatCurrency(totalInitial, lang)} &nbsp;|&nbsp;
+          ${lang === 'EN' ? 'Total Paid' : 'एकूण जमा'}: ${formatCurrency(totalPaid, lang)} &nbsp;|&nbsp;
+          ${lang === 'EN' ? 'Balance Due' : 'शिल्लक बाकी'}: ${formatCurrency(totalRemaining, lang)}
+        </p>
+      </div>
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background-color: #92400e; color: #ffffff;">
+            <th style="padding: 8px 8px; text-align: center; font-weight: bold; font-size: 10px;">${lang === 'EN' ? 'Sr' : 'अ.क्र.'}</th>
+            <th style="padding: 8px 8px; text-align: left; font-weight: bold; font-size: 10px;">${lang === 'EN' ? 'Acc No.' : 'खाते क्र.'}</th>
+            <th style="padding: 8px 8px; text-align: left; font-weight: bold; font-size: 10px;">${lang === 'EN' ? 'Customer Name' : 'खातेदाराचे नाव'}</th>
+            <th style="padding: 8px 8px; text-align: left; font-weight: bold; font-size: 10px;">${lang === 'EN' ? 'Mobile' : 'मोबाईल'}</th>
+            <th style="padding: 8px 8px; text-align: left; font-weight: bold; font-size: 10px;">${lang === 'EN' ? 'Office' : 'कार्यालय'}</th>
+            <th style="padding: 8px 8px; text-align: right; font-weight: bold; font-size: 10px;">${lang === 'EN' ? 'Initial (Rs)' : 'मूळ थकबाकी'}</th>
+            <th style="padding: 8px 8px; text-align: right; font-weight: bold; font-size: 10px;">${lang === 'EN' ? 'Paid (Rs)' : 'जमा रक्कम'}</th>
+            <th style="padding: 8px 8px; text-align: right; font-weight: bold; font-size: 10px;">${lang === 'EN' ? 'Balance (Rs)' : 'शिल्लक बाकी'}</th>
+            <th style="padding: 8px 8px; text-align: center; font-weight: bold; font-size: 10px;">${lang === 'EN' ? 'Status' : 'स्थिती'}</th>
+            <th style="padding: 8px 8px; text-align: center; font-weight: bold; font-size: 10px;">${lang === 'EN' ? 'Last Payment' : 'शेवटची जमा'}</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+        <tfoot>
+          <tr style="background-color: #92400e; color: #ffffff; font-weight: bold;">
+            <td colspan="5" style="padding: 8px; text-align: center; font-size: 11px;">
+              ${lang === 'EN' ? 'TOTAL' : 'एकूण'} (${entries.length})
+            </td>
+            <td style="padding: 8px; text-align: right;">${formatCurrency(totalInitial, lang)}</td>
+            <td style="padding: 8px; text-align: right; color: #fcd34d;">${formatCurrency(totalPaid, lang)}</td>
+            <td style="padding: 8px; text-align: right; color: #fca5a5;">${formatCurrency(totalRemaining, lang)}</td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+      <div style="margin-top: 24px; padding-top: 12px; border-top: 1px dashed #d1d5db; font-size: 9px; color: #94a3b8; display: flex; justify-content: space-between;">
+        <span>${lang === 'EN' ? 'Generated: ' : 'निर्मिती दिनांक: '} ${dateFormatted}</span>
+        <span>• ${lang === 'EN' ? 'Computer Generated — Sushant Bishi Management System' : 'संगणकीकृत प्रत — सुषांत भिशी व्यवस्थापन प्रणाली'}</span>
+      </div>
+    </div>
+  `;
+
+  const filename = (lang === 'EN' ? 'ThakBaki_Report_' : 'थकबाकी_अहवाल_') + todayStr + '.pdf';
+  await renderHtmlToMultiPagePdf(container, 'landscape', filename);
 };

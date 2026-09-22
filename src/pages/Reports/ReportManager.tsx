@@ -12,8 +12,8 @@ import {
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 import { CustomDropdown } from '../../components/common/CustomDropdown';
 import { ModalPortal } from '../../components/common/ModalPortal';
-import { generateReportPDF, generateMemberLedgerPDF } from '../../services/pdf';
-import { exportMemberLedgerToExcel, exportGeneralReportToExcel } from '../../services/excel';
+import { generateReportPDF, generateMemberLedgerPDF, generateThakbakiReportPDF } from '../../services/pdf';
+import { exportMemberLedgerToExcel, exportGeneralReportToExcel, exportThakbakiReportToExcel } from '../../services/excel';
 import { calculateMemberLedger } from '../../services/ledger';
 import {
   BarChart3,
@@ -26,12 +26,13 @@ import {
   FileSpreadsheet,
   BookOpen,
   User,
+  ClipboardList,
 } from 'lucide-react';
 
 export const ReportManager: React.FC = () => {
-  const { customers, collections, loans, bishiConfigs, activeOffice, selectedBishiFilter, t, language } = useApp();
+  const { customers, collections, loans, bishiConfigs, activeOffice, selectedBishiFilter, t, language, thakbakiList } = useApp();
 
-  const [viewMode, setViewMode] = useState<'LEDGER_CARD' | 'SUMMARY'>('LEDGER_CARD');
+  const [viewMode, setViewMode] = useState<'LEDGER_CARD' | 'SUMMARY' | 'THAKBAKI'>('LEDGER_CARD');
   const [timePeriodFilter, setTimePeriodFilter] = useState<'ALL' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'>('ALL');
   const [bishiFilter, setBishiFilter] = useState<'ALL' | BishiType>(selectedBishiFilter);
   const [modalityFilter, setModalityFilter] = useState<'ALL' | Modality>('ALL');
@@ -126,6 +127,9 @@ export const ReportManager: React.FC = () => {
   let grandRemaining = 0;
   let grandInterest = 0;
   let grandPenalty = 0;
+  let grandPayable = 0;
+  let grandExtraSubmitted = 0;
+  let grandFinalReturn = 0;
 
   const allRows = (summarySearch.trim() ? customers : officeCustomers).map((cust) => {
     const custColls = collections.filter((c) => {
@@ -178,6 +182,13 @@ export const ReportManager: React.FC = () => {
     const isPending = totalRem > 0;
     const isPartial = totalColl > 0 && totalRem > 0;
 
+    // Field 1: Total payable to customer with interest (scheme target payout)
+    // Field 2: Extra submitted amount over expected
+    // Field 3: Grand total payout = extra submitted + total amount (sum of collected + interest)
+    const extraSubmitted = Math.max(0, totalColl - totalExp);
+    const totalWithExtra = isLoanOnly ? 0 : (totalColl > 0 ? totalColl + totalInt : 0);
+    const totalPayable = isLoanOnly ? 0 : Math.max(0, totalWithExtra - extraSubmitted);
+
     return {
       customer: cust,
       exp: totalExp,
@@ -191,6 +202,9 @@ export const ReportManager: React.FC = () => {
       loanPaid,
       loanIntPaid,
       custLoan,
+      totalPayable,
+      extraSubmitted,
+      totalWithExtra,
     };
   });
 
@@ -210,6 +224,9 @@ export const ReportManager: React.FC = () => {
     grandRemaining += r.rem;
     grandInterest += r.int;
     grandPenalty += r.pen;
+    grandPayable += r.totalPayable;
+    grandExtraSubmitted += r.extraSubmitted;
+    grandFinalReturn += r.totalWithExtra;
   });
 
   const pendingCount = allRows.filter((r) => r.isPending).length;
@@ -248,6 +265,10 @@ export const ReportManager: React.FC = () => {
   const reportTitle = `${getStatusLabelText()} - ${getPeriodLabelText()}`;
 
   const handleDownloadPDF = () => {
+    if (viewMode === 'THAKBAKI') {
+      generateThakbakiReportPDF(thakbakiList, language);
+      return;
+    }
     if (viewMode === 'LEDGER_CARD' && activeLedgerCustomer) {
       const custLoan = loans.find((l) => l.customerId === activeLedgerCustomer.id);
       generateMemberLedgerPDF(activeLedgerCustomer, collections, custLoan, loanPayments, showAllLedgerPeriods);
@@ -264,6 +285,10 @@ export const ReportManager: React.FC = () => {
   };
 
   const handleDownloadExcel = () => {
+    if (viewMode === 'THAKBAKI') {
+      exportThakbakiReportToExcel(thakbakiList, language);
+      return;
+    }
     if (viewMode === 'LEDGER_CARD' && activeLedgerCustomer) {
       const custLoan = loans.find((l) => l.customerId === activeLedgerCustomer.id);
       exportMemberLedgerToExcel(activeLedgerCustomer, collections, custLoan, loanPayments, showAllLedgerPeriods);
@@ -381,6 +406,25 @@ export const ReportManager: React.FC = () => {
               <BarChart3 className={`w-4 h-4 shrink-0 ${viewMode === 'SUMMARY' ? 'text-amber-300' : 'text-amber-700'}`} />
               <span className="truncate">{language === 'EN' ? 'Summary Report' : 'सामान्य अहवाल (Summary Report)'}</span>
               {viewMode !== 'SUMMARY' && (
+                <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white shadow-xs inline-flex items-center gap-1 shrink-0 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                  <span>{language === 'EN' ? 'Click' : 'टॅब उपलब्ध'}</span>
+                </span>
+              )}
+            </button>
+
+            {/* Thakbaki Report Tab */}
+            <button
+              onClick={() => setViewMode('THAKBAKI')}
+              className={`flex-1 sm:flex-initial px-4 py-2.5 min-h-[46px] rounded-xl text-xs font-black transition-all flex items-center justify-center space-x-2 touch-target cursor-pointer relative ${
+                viewMode === 'THAKBAKI'
+                  ? 'bg-amber-700 text-white shadow-md border-2 border-amber-700 scale-[1.01]'
+                  : 'bg-white text-slate-800 border-2 border-amber-400 hover:border-amber-500 animate-tab-blink hover:bg-amber-50 shadow-xs'
+              }`}
+            >
+              <ClipboardList className={`w-4 h-4 shrink-0 ${viewMode === 'THAKBAKI' ? 'text-amber-200' : 'text-amber-700'}`} />
+              <span className="truncate">{t.thakbakiReportTitle}</span>
+              {viewMode !== 'THAKBAKI' && (
                 <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white shadow-xs inline-flex items-center gap-1 shrink-0 animate-pulse">
                   <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
                   <span>{language === 'EN' ? 'Click' : 'टॅब उपलब्ध'}</span>
@@ -749,7 +793,7 @@ export const ReportManager: React.FC = () => {
               <>
                 {/* Mobile Cards View (< md screens, hidden in print) */}
                 <div className="block md:hidden print:hidden space-y-3 p-3 bg-slate-50/50">
-                  {filteredRows.map(({ customer: cust, exp, coll, rem, int, pen, isPaid, isPending, isPartial }, idx) => (
+                  {filteredRows.map(({ customer: cust, exp, coll, rem, int, pen, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
                     <div key={cust.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                         <div className="flex items-center space-x-2">
@@ -799,6 +843,34 @@ export const ReportManager: React.FC = () => {
                           <span className="font-black text-rose-600">{formatCurrency(rem, language)}</span>
                         </div>
                       </div>
+
+                      {/* 3 New Fields in Mobile Card */}
+                      <div className="bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100 grid grid-cols-3 gap-2 text-center text-xs">
+                        <div>
+                          <span className="text-[9px] text-slate-500 font-bold block">
+                            {language === 'EN' ? 'Total Payable' : 'एकूण देय'}
+                          </span>
+                          <span className="font-bold text-blue-900">
+                            {totalPayable > 0 ? formatCurrency(totalPayable, language) : '-'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-500 font-bold block">
+                            {language === 'EN' ? 'Extra Subm.' : 'जादा जमा'}
+                          </span>
+                          <span className="font-bold text-purple-900">
+                            {extraSubmitted > 0 ? `+${formatCurrency(extraSubmitted, language)}` : '-'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-emerald-800 font-extrabold block">
+                            {language === 'EN' ? 'Total Return' : 'एकूण परतावा'}
+                          </span>
+                          <span className="font-black text-emerald-800">
+                            {totalWithExtra > 0 ? formatCurrency(totalWithExtra, language) : '-'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -817,11 +889,14 @@ export const ReportManager: React.FC = () => {
                         <th className="p-3 text-right border border-emerald-800">{t.colCollectedAmount}</th>
                         <th className="p-3 text-right border border-emerald-800">{t.colRemainingAmount}</th>
                         <th className="p-3 text-right border border-emerald-800">{language === 'EN' ? 'Interest/Penalty (₹)' : 'व्याज/दंड (₹)'}</th>
+                        <th className="p-3 text-right border border-emerald-800 bg-emerald-950/40">{language === 'EN' ? 'Total Payable (₹)' : 'एकूण देय (₹)'}</th>
+                        <th className="p-3 text-right border border-emerald-800 bg-emerald-950/40">{language === 'EN' ? 'Extra Submitted (₹)' : 'जादा जमा (₹)'}</th>
+                        <th className="p-3 text-right border border-emerald-800 bg-emerald-950/40">{language === 'EN' ? 'Total Return (₹)' : 'एकूण परतावा (₹)'}</th>
                         <th className="p-3 text-center border border-emerald-800">{t.colStatus}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 font-medium">
-                      {filteredRows.map(({ customer: cust, exp, coll, rem, int, pen, isPaid, isPending, isPartial }, idx) => (
+                      {filteredRows.map(({ customer: cust, exp, coll, rem, int, pen, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
                         <tr key={cust.id} className="hover:bg-slate-50 transition-colors odd:bg-white even:bg-slate-50/50">
                           <td className="p-3 text-center font-bold text-slate-700 border border-slate-300">{idx + 1}</td>
                           <td className="p-3 font-extrabold text-slate-900 border border-slate-300">{cust.accountNumber}</td>
@@ -835,6 +910,19 @@ export const ReportManager: React.FC = () => {
                             {int > 0 && <div className="text-blue-700 font-bold">{language === 'EN' ? 'Interest: ' : 'व्याज: '}{formatCurrency(int, language)}</div>}
                             {pen > 0 && <div className="text-amber-800 font-bold">{language === 'EN' ? 'Penalty: ' : 'दंड: '}{formatCurrency(pen, language)}</div>}
                             {int === 0 && pen === 0 && '-'}
+                          </td>
+                          <td className="p-3 text-right font-bold text-blue-900 border border-slate-300 bg-blue-50/20">
+                            {totalPayable > 0 ? formatCurrency(totalPayable, language) : '-'}
+                          </td>
+                          <td className="p-3 text-right font-bold text-purple-900 border border-slate-300 bg-purple-50/20">
+                            {extraSubmitted > 0 ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-purple-100 text-purple-900 font-black">
+                                +{formatCurrency(extraSubmitted, language)}
+                              </span>
+                            ) : '-'}
+                          </td>
+                          <td className="p-3 text-right font-black text-emerald-800 border border-slate-300 bg-emerald-50/30">
+                            {totalWithExtra > 0 ? formatCurrency(totalWithExtra, language) : '-'}
                           </td>
                           <td className="p-3 text-center border border-slate-300">
                             <span
@@ -867,6 +955,15 @@ export const ReportManager: React.FC = () => {
                           {grandPenalty > 0 && <div>{language === 'EN' ? 'Penalty: ' : 'दंड: '}{formatCurrency(grandPenalty, language)}</div>}
                           {grandInterest === 0 && grandPenalty === 0 && '-'}
                         </td>
+                        <td className="p-3 text-right border border-emerald-800 text-blue-200 font-black">
+                          {formatCurrency(grandPayable, language)}
+                        </td>
+                        <td className="p-3 text-right border border-emerald-800 text-purple-200 font-black">
+                          {formatCurrency(grandExtraSubmitted, language)}
+                        </td>
+                        <td className="p-3 text-right border border-emerald-800 text-emerald-300 font-black">
+                          {formatCurrency(grandFinalReturn, language)}
+                        </td>
                         <td className="p-3 text-center border border-emerald-800">-</td>
                       </tr>
                     </tfoot>
@@ -893,6 +990,125 @@ export const ReportManager: React.FC = () => {
           </div>
         </>
       )}
+
+      {/* ══ VIEW 3: THAKBAKI REPORT ══════════════════════════════════════════ */}
+      {viewMode === 'THAKBAKI' && (() => {
+        const totalCustomers = thakbakiList.length;
+        const totalInitial = thakbakiList.reduce((s, e) => s + (e.initialAmount || 0), 0);
+        const totalPaid = thakbakiList.reduce((s, e) => s + (e.paidAmount || 0), 0);
+        const totalRemaining = thakbakiList.reduce((s, e) => s + (e.remainingAmount || 0), 0);
+        const pendingCount = thakbakiList.filter((e) => e.status === 'PENDING').length;
+        const clearedCount = thakbakiList.filter((e) => e.status === 'CLEARED').length;
+
+        return (
+          <div className="space-y-4 print-container">
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 no-print">
+              <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs text-center">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{t.thakbakiTotalCustomers}</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">{totalCustomers}</p>
+              </div>
+              <div className="bg-rose-50 rounded-2xl p-4 border border-rose-200 shadow-xs text-center">
+                <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wide">{t.thakbakiTotalInitial}</p>
+                <p className="text-lg font-black text-rose-700 mt-1">{formatCurrency(totalInitial, language)}</p>
+              </div>
+              <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-200 shadow-xs text-center">
+                <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">{t.thakbakiTotalPaid}</p>
+                <p className="text-lg font-black text-emerald-700 mt-1">{formatCurrency(totalPaid, language)}</p>
+              </div>
+              <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200 shadow-xs text-center">
+                <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">{t.thakbakiTotalRemaining}</p>
+                <p className="text-lg font-black text-amber-700 mt-1">{formatCurrency(totalRemaining, language)}</p>
+              </div>
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 shadow-xs text-center">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                  {language === 'EN' ? 'Pending / Cleared' : 'बाकी / पूर्ण'}
+                </p>
+                <p className="text-lg font-black text-slate-900 mt-1">
+                  <span className="text-amber-700">{pendingCount}</span>
+                  <span className="text-slate-400 font-medium mx-1">/</span>
+                  <span className="text-emerald-700">{clearedCount}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden print:rounded-none print:border-none print:shadow-none">
+              <div className="bg-amber-700 px-5 py-3 print:py-4">
+                <h3 className="text-white font-extrabold text-sm">{language === 'EN' ? 'Sushant Bishi - ' : 'सुषांत भिशी - '}{t.thakbakiReportTitle}</h3>
+                <p className="text-amber-200 text-[10px] font-medium">
+                  {formatDateMarathi(new Date().toISOString().split('T')[0], language)} | {language === 'EN' ? 'Records: ' : 'एकूण नोंदी: '}{totalCustomers}
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-amber-900 text-white">
+                      <th className="px-3 py-2.5 text-center font-bold whitespace-nowrap">अ.क्र.</th>
+                      <th className="px-3 py-2.5 text-left font-bold whitespace-nowrap">{t.thakbakiAccountNo}</th>
+                      <th className="px-3 py-2.5 text-left font-bold whitespace-nowrap">{t.thakbakiCustomerName}</th>
+                      <th className="px-3 py-2.5 text-left font-bold whitespace-nowrap">{t.thakbakiMobile}</th>
+                      <th className="px-3 py-2.5 text-left font-bold whitespace-nowrap">{language === 'EN' ? 'Office' : 'कार्यालय'}</th>
+                      <th className="px-3 py-2.5 text-right font-bold whitespace-nowrap">{t.thakbakiInitialAmount}</th>
+                      <th className="px-3 py-2.5 text-right font-bold whitespace-nowrap">{t.thakbakiPaidAmount}</th>
+                      <th className="px-3 py-2.5 text-right font-bold whitespace-nowrap">{t.thakbakiRemainingAmount}</th>
+                      <th className="px-3 py-2.5 text-center font-bold whitespace-nowrap">{t.thakbakiStatus}</th>
+                      <th className="px-3 py-2.5 text-center font-bold whitespace-nowrap">{t.thakbakiLastPayment}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {thakbakiList.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="px-4 py-10 text-center text-slate-400 font-bold">
+                          {t.thakbakiNoRecords}
+                        </td>
+                      </tr>
+                    ) : (
+                      thakbakiList.map((entry, idx) => (
+                        <tr key={entry.id} className="hover:bg-slate-50 odd:bg-white even:bg-slate-50/50">
+                          <td className="px-3 py-3 text-center text-slate-500 font-bold">{idx + 1}</td>
+                          <td className="px-3 py-3 font-extrabold text-slate-700">{entry.accountNumber}</td>
+                          <td className="px-3 py-3 font-extrabold text-slate-900 whitespace-nowrap">{entry.name}</td>
+                          <td className="px-3 py-3 text-slate-600">{entry.mobile || '-'}</td>
+                          <td className="px-3 py-3 text-slate-600">{getOfficeNameMarathi(entry.officeId, language)}</td>
+                          <td className="px-3 py-3 text-right font-bold text-slate-700">{formatCurrency(entry.initialAmount, language)}</td>
+                          <td className="px-3 py-3 text-right font-bold text-emerald-700">{formatCurrency(entry.paidAmount, language)}</td>
+                          <td className="px-3 py-3 text-right font-black text-rose-700">{formatCurrency(entry.remainingAmount, language)}</td>
+                          <td className="px-3 py-3 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                              entry.status === 'CLEARED'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            }`}>
+                              {entry.status === 'CLEARED' ? `✅ ${t.thakbakiCleared}` : `⏳ ${t.thakbakiPending}`}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-center text-slate-500 text-[10px] font-medium">
+                            {entry.lastPaymentDate ? formatDateMarathi(entry.lastPaymentDate, language) : '-'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  {thakbakiList.length > 0 && (
+                    <tfoot className="bg-amber-800 text-white font-black text-xs">
+                      <tr>
+                        <td className="px-3 py-3 text-center" colSpan={5}>
+                          {language === 'EN' ? 'TOTAL' : 'एकूण'} ({totalCustomers} {language === 'EN' ? 'Records' : 'नोंदी'})
+                        </td>
+                        <td className="px-3 py-3 text-right">{formatCurrency(totalInitial, language)}</td>
+                        <td className="px-3 py-3 text-right text-amber-200">{formatCurrency(totalPaid, language)}</td>
+                        <td className="px-3 py-3 text-right text-rose-200">{formatCurrency(totalRemaining, language)}</td>
+                        <td colSpan={2} className="px-3 py-3 text-center">-</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Custom Report Note Display Banner */}
       {customReportNote && (

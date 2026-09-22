@@ -84,18 +84,16 @@ export const LoanManager: React.FC = () => {
 
   const officeCustomerIds = new Set(
     customers
-      .filter((c) => (activeOffice === 'ALL' || c.officeId === activeOffice) && (c.hasLoan || c.bishiType === 'LOAN_ONLY' || loans.some((l) => l.customerId === c.id)))
+      .filter((c) => (activeOffice === 'ALL' || c.officeId === activeOffice) && (c.hasLoan || c.bishiType === 'LOAN_ONLY' || loans.some((l) => l.customerId === c.id || (c.accountNumber && l.accountNumber === c.accountNumber))))
       .map((c) => c.id)
   );
-
-  const activeLoans = loans.filter((l) => officeCustomerIds.has(l.customerId));
 
   const isSearching = Boolean(searchTerm.trim());
 
   const filteredLoans = loans.filter((l) => {
-    if (!isSearching && !officeCustomerIds.has(l.customerId)) return false;
-    const cust = customers.find((c) => c.id === l.customerId);
+    const cust = customers.find((c) => c.id === l.customerId || (l.accountNumber && c.accountNumber === l.accountNumber));
     if (!cust) return false;
+    if (!isSearching && !officeCustomerIds.has(cust.id)) return false;
     if (isSearching) {
       const purposeMatch = Boolean(l.purposeNote && l.purposeNote.toLowerCase().includes(searchTerm.trim().toLowerCase()));
       return matchesCustomerSearch(cust, searchTerm, l.accountNumber) || purposeMatch;
@@ -233,11 +231,12 @@ export const LoanManager: React.FC = () => {
             {/* Mobile Cards View (< md screens) */}
             <div className="block md:hidden space-y-3 p-3 bg-slate-50/50">
               {filteredLoans.map((loan) => {
-                const cust = customers.find((c) => c.id === loan.customerId);
+                const cust = customers.find((c) => c.id === loan.customerId || (loan.accountNumber && c.accountNumber === loan.accountNumber));
                 if (!cust) return null;
-                const loanInterestPaid = (loanPayments || [])
-                  .filter((lp) => lp.loanId === loan.id || lp.customerId === loan.customerId)
+                const recordedInterest = (loanPayments || [])
+                  .filter((lp) => lp.loanId === loan.id || lp.customerId === loan.customerId || (loan.accountNumber && lp.accountNumber === loan.accountNumber))
                   .reduce((sum, lp) => sum + (Number(lp.interestPaid) || 0), 0);
+                const loanInterestPaid = recordedInterest > 0 ? recordedInterest : (Number(loan.totalInterestPaid) || 0);
 
                 return (
                   <div
@@ -371,11 +370,12 @@ export const LoanManager: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {filteredLoans.map((loan) => {
-                    const cust = customers.find((c) => c.id === loan.customerId);
+                    const cust = customers.find((c) => c.id === loan.customerId || (loan.accountNumber && c.accountNumber === loan.accountNumber));
                     if (!cust) return null;
-                    const loanInterestPaid = (loanPayments || [])
-                      .filter((lp) => lp.loanId === loan.id || lp.customerId === loan.customerId)
+                    const recordedInterest = (loanPayments || [])
+                      .filter((lp) => lp.loanId === loan.id || lp.customerId === loan.customerId || (loan.accountNumber && lp.accountNumber === loan.accountNumber))
                       .reduce((sum, lp) => sum + (Number(lp.interestPaid) || 0), 0);
+                    const loanInterestPaid = recordedInterest > 0 ? recordedInterest : (Number(loan.totalInterestPaid) || 0);
 
                     return (
                       <tr key={loan.id} className="hover:bg-slate-50 transition-colors">
