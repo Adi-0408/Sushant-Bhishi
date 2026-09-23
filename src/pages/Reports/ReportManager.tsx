@@ -152,8 +152,6 @@ export const ReportManager: React.FC = () => {
       const collAmt = c.collectedAmount || 0;
       exp += expAmt;
       coll += collAmt;
-      const cInt = c.interestAmount || (collAmt > 0 ? Math.round((collAmt * (cust.interestRate || (cust.modality === 'W' ? 2.5 : 10))) / 100) : 0);
-      int += cInt;
       pen += c.penaltyAmount || 0;
     });
 
@@ -161,6 +159,11 @@ export const ReportManager: React.FC = () => {
     // This correctly reflects overpayments and avoids inflating remaining
     // by counting future unpaid installments that haven't been due yet.
     rem = Math.max(0, exp - coll);
+
+    // Interest is calculated STRICTLY on the regular Bishi collected amount (NEVER on extra amount)
+    const effectiveCustRate = cust.interestRate || (cust.modality === 'W' ? 2.5 : 10);
+    const bishiAmountForInt = exp > 0 ? Math.min(coll, exp) : coll;
+    const bishiInterest = Math.round((bishiAmountForInt * effectiveCustRate) / 100);
 
     const custLoan = loans.find((l) => l.customerId === cust.id);
     const custLoanPayments = loanPayments.filter((lp) => {
@@ -181,7 +184,7 @@ export const ReportManager: React.FC = () => {
     const totalExp = isLoanOnly ? (custLoan ? custLoan.principalAmount : 0) : exp;
     const totalColl = isLoanOnly ? loanPaid : coll;
     const totalRem = isLoanOnly ? (custLoan ? custLoan.remainingAmount : 0) : rem;
-    const totalInt = isLoanOnly ? loanIntPaid : int;
+    const totalInt = isLoanOnly ? loanIntPaid : bishiInterest;
     const totalPen = isLoanOnly ? loanPenPaid : pen;
 
     const isPaid = totalRem === 0 && (totalExp > 0 || totalColl > 0);

@@ -269,8 +269,12 @@ export const generateCustomerPDF = async (
                   <div>${formatCurrency(item.collectedAmount)}</div>
                   ${(item.extraAmount || 0) > 0 ? `<div style="font-size: 8px; color: #1d4ed8; font-weight: 800;">+अतिरिक्त: ₹${item.extraAmount}</div>` : ''}
                 </td>
-                <td style="padding: 4px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #be123c;">${formatCurrency(item.remainingAmount)}</td>
-                <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: right; color: #475569;">${formatCurrency(item.interestAmount || (item.collectedAmount > 0 ? Math.round((item.collectedAmount * (customer.interestRate || (customer.modality === 'W' ? 2.5 : 10))) / 100) : 0))}</td>
+                <td style="padding: 4px 6px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #be123c;">${formatCurrency(Math.max(0, (item.expectedAmount || 0) - (item.collectedAmount || 0)))}</td>
+                <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: right; color: #475569;">${formatCurrency((() => {
+                  const rate = customer.interestRate || (customer.modality === 'W' ? 2.5 : 10);
+                  const bishiColl = Math.min(item.collectedAmount || 0, item.expectedAmount || 0);
+                  return bishiColl > 0 ? Math.round((bishiColl * rate) / 100) : 0;
+                })())}</td>
                 <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: right; font-weight: 700; color: #b45309;">${formatCurrency(item.penaltyAmount)}</td>
                 <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: center; color: #475569;">${
                   item.paymentMode === 'ONLINE' ? 'ऑनलाइन' : item.paymentMode === 'BANK' ? 'बँक' : 'नगद'
@@ -438,10 +442,13 @@ export const generateReportPDF = async (
     custColls.forEach((c) => {
       exp += c.expectedAmount || 0;
       coll += c.collectedAmount || 0;
-      rem += c.remainingAmount || 0;
-      int += c.interestAmount || 0;
       pen += c.penaltyAmount || 0;
     });
+
+    rem = Math.max(0, exp - coll);
+    const rate = cust.interestRate || (cust.modality === 'W' ? 2.5 : 10);
+    const bishiAmountForInt = exp > 0 ? Math.min(coll, exp) : coll;
+    int = Math.round((bishiAmountForInt * rate) / 100);
 
     totalExp += exp;
     totalColl += coll;

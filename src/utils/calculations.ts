@@ -56,7 +56,9 @@ export const calculateCollectionEntry = (
   const remainingAmount = Math.max(0, safeExpected - totalCollected);
 
   // Calculate interest based on bishi collected/paid amount ONLY (interest is NOT applicable for extra amount)
-  const interestAmount = totalCollected > 0 ? Math.round((totalCollected * safeInterestRate) / 100) : 0;
+  // Bishi collected amount eligible for interest is strictly capped at the installment expected amount
+  const bishiCollectedForInterest = safeExpected > 0 ? Math.min(totalCollected, safeExpected) : totalCollected;
+  const interestAmount = bishiCollectedForInterest > 0 ? Math.round((bishiCollectedForInterest * safeInterestRate) / 100) : 0;
 
   const totalPaid = totalCollected + safeExtra;
   const totalPayable = remainingAmount + safePenalty;
@@ -125,7 +127,6 @@ export const calculateCustomerFinancials = (
     totalExpectedBishi += expectedAmt;
     totalCollectedBishi += collectedAmt;
     totalExtraAmount += item.extraAmount || 0;
-    // NOTE: totalRemainingBishi is NOT accumulated here — computed from totals after the loop
     explicitInterestSum += item.interestAmount || 0;
     totalPenalty += item.penaltyAmount || 0;
 
@@ -151,9 +152,17 @@ export const calculateCustomerFinancials = (
       ? customer.interestRate
       : (customer.modality === 'W' ? 2.5 : 10);
 
-  // Interest calculated strictly on the total bishi collected amount (NOT extra amount)
-  const calculatedInterestOnPaid = Math.round((totalCollectedBishi * effectiveRate) / 100);
-  const totalInterest = Math.max(explicitInterestSum, calculatedInterestOnPaid);
+  // Any collected amount beyond the total bishi target is extra submitted amount (no interest)
+  const extraFromOverpayment = totalExpectedBishi > 0 ? Math.max(0, totalCollectedBishi - totalExpectedBishi) : 0;
+  const effectiveExtraAmount = totalExtraAmount + extraFromOverpayment;
+
+  // The actual Bishi collected amount eligible for interest (strictly bishi only, capped at scheme limit)
+  const bishiAmountEligibleForInterest = totalExpectedBishi > 0
+    ? Math.min(totalCollectedBishi, totalExpectedBishi)
+    : totalCollectedBishi;
+
+  // Interest calculated STRICTLY on the bishi collected amount (NEVER on extra amount)
+  const totalInterest = Math.round((bishiAmountEligibleForInterest * effectiveRate) / 100);
 
   // A customer has paid their current due if there are NO remaining balances on or before today
   // AND they have at least 1 collected entry or expected bishi
@@ -176,7 +185,7 @@ export const calculateCustomerFinancials = (
 
   const finalBishiPayoutInterest = totalInterest;
   // Final return: Bishi collected + Interest (on bishi only) + Extra submitted amount (trust/saving)
-  const finalBishiTotalReturn = totalCollectedBishi + totalInterest + totalExtraAmount;
+  const finalBishiTotalReturn = bishiAmountEligibleForInterest + totalInterest + effectiveExtraAmount;
 
   // What the customer owes for bishi is remaining balance + late penalty
   const totalPayableBishi = totalRemainingBishi + totalPenalty;
@@ -198,8 +207,8 @@ export const calculateCustomerFinancials = (
 
   return {
     totalExpectedBishi,
-    totalCollectedBishi,
-    totalExtraAmount,
+    totalCollectedBishi: bishiAmountEligibleForInterest,
+    totalExtraAmount: effectiveExtraAmount,
     totalRemainingBishi,
     currentDueRemaining,
     isCurrentDuePaid,

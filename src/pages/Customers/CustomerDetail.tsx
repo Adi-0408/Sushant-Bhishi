@@ -80,7 +80,6 @@ export const CustomerDetail: React.FC = () => {
   const [paymentMode, setPaymentMode] = useState<'CASH' | 'ONLINE' | 'BANK'>('CASH');
   const [collectedInput, setCollectedInput] = useState<number | ''>('');
   const [extraAmountInput, setExtraAmountInput] = useState<number | ''>('');
-  const [interestInput, setInterestInput] = useState<number | ''>('');
   const [penaltyInput, setPenaltyInput] = useState<number | ''>('');
   const [noteInput, setNoteInput] = useState('');
 
@@ -186,7 +185,6 @@ export const CustomerDetail: React.FC = () => {
         : (entry.collectedAmount !== undefined && entry.collectedAmount > 0 ? entry.collectedAmount : (entry.remainingAmount > 0 ? entry.remainingAmount : entry.expectedAmount))
     );
     setExtraAmountInput(entry.extraAmount || '');
-    setInterestInput(entry.interestAmount || 0);
     setPenaltyInput(entry.penaltyAmount || 0);
     setNoteInput(entry.note || '');
     setIsCollectModalOpen(true);
@@ -198,7 +196,6 @@ export const CustomerDetail: React.FC = () => {
 
     const collected = Math.max(0, Number(collectedInput) || 0);
     const extra = Math.max(0, Number(extraAmountInput) || 0);
-    const interest = Math.max(0, Number(interestInput) || 0);
     const penalty = Math.max(0, Number(penaltyInput) || 0);
 
     const calc = calculateCollectionEntry(
@@ -220,7 +217,7 @@ export const CustomerDetail: React.FC = () => {
       collectedAmount: calc.collectedAmount,
       extraAmount: extra,
       remainingAmount: calc.remainingAmount,
-      interestAmount: calc.collectedAmount > 0 ? (interest || calc.interestAmount) : 0,
+      interestAmount: calc.interestAmount,
       penaltyAmount: penalty,
       totalPaid: totalWithPen,
       totalWithPenalty: totalWithPen,
@@ -821,13 +818,12 @@ export const CustomerDetail: React.FC = () => {
                     })()}
                   </td>
                   <td className="p-3.5 print:p-1.5 text-right text-slate-700 print:text-[10px]">
-                    {formatCurrency(
-                      entry.interestAmount ||
-                        (entry.collectedAmount > 0
-                          ? Math.round((entry.collectedAmount * (customer.interestRate || (customer.modality === 'W' ? 2.5 : 10))) / 100)
-                          : 0),
-                      language
-                    )}
+                    {(() => {
+                      const entryRate = customer.interestRate || (customer.modality === 'W' ? 2.5 : 10);
+                      const bishiCollected = Math.min(entry.collectedAmount || 0, entry.expectedAmount || 0);
+                      const calcInt = bishiCollected > 0 ? Math.round((bishiCollected * entryRate) / 100) : 0;
+                      return formatCurrency(calcInt, language);
+                    })()}
                   </td>
                   <td className="p-3.5 print:p-1.5 text-right font-bold text-rose-600 print:text-[10px]">
                     {(entry.penaltyAmount || 0) > 0 ? (
