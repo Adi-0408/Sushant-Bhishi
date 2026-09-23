@@ -261,13 +261,18 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
       const hasPayment = calc.collectedAmount > 0 || extraVal > 0;
 
       StorageService.updateCollectionEntry(selectedEntry.id, {
+        customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+        accountNumber: selectedCustomer.accountNumber,
+        periodIndex: selectedEntry.periodIndex,
+        bishiType: selectedEntry.bishiType || selectedCustomer.bishiType,
         paymentDate: hasPayment ? effectiveDate : '',
         paymentTime: hasPayment ? effectiveTime : '',
         paymentMode: paymentMode,
         collectedAmount: calc.collectedAmount,
         extraAmount: extraVal,
         remainingAmount: calc.remainingAmount,
-        interestAmount: calc.collectedAmount > 0 ? calc.interestAmount : 0,
+        interestAmount: calc.interestAmount,
         penaltyAmount: bishiPenaltyVal,
         totalPaid: totalWithPen,
         totalWithPenalty: totalWithPen,

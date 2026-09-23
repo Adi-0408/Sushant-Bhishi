@@ -978,13 +978,55 @@ export const StorageService = {
 
   updateCollectionEntry: (id: string, updates: Partial<CollectionEntry>): CollectionEntry => {
     const collections = StorageService.getCollections();
-    const index = collections.findIndex((c) => c.id === id);
-    if (index === -1) throw new Error('जमा नोंद सापडली नाही.');
+    let index = collections.findIndex((c) => c.id === id);
+
+    // If ID not found directly, look up by customerId/accountNumber and periodIndex
+    if (index === -1 && updates.periodIndex !== undefined) {
+      const targetAcc = String(updates.accountNumber || '').trim().toLowerCase();
+      const targetCustId = updates.customerId;
+      index = collections.findIndex((c) => {
+        const cAcc = String(c.accountNumber || '').trim().toLowerCase();
+        const isSameCust = (targetCustId && c.customerId === targetCustId) || (targetAcc && cAcc === targetAcc);
+        return isSameCust && c.periodIndex === updates.periodIndex;
+      });
+    }
+
+    if (index === -1) {
+      console.warn(`[StorageService] Collection entry ${id} not found to update, inserting new.`);
+      const nowIso = new Date().toISOString();
+      const newEntry: CollectionEntry = {
+        id,
+        customerId: updates.customerId || '',
+        customerName: updates.customerName || '',
+        accountNumber: updates.accountNumber || '',
+        officeId: updates.officeId || 'MAIN',
+        bishiType: (updates.bishiType || '15_AUGUST') as any,
+        periodIndex: updates.periodIndex || 1,
+        periodLabel: updates.periodLabel || `हप्ता ${updates.periodIndex || 1}`,
+        dueDate: updates.dueDate || new Date().toISOString().split('T')[0],
+        expectedAmount: updates.expectedAmount || 0,
+        collectedAmount: updates.collectedAmount || 0,
+        remainingAmount: updates.remainingAmount || 0,
+        interestAmount: updates.interestAmount || 0,
+        historicalInterestRate: updates.historicalInterestRate || 0,
+        penaltyAmount: updates.penaltyAmount || 0,
+        historicalPenaltyRate: updates.historicalPenaltyRate || 0,
+        totalPaid: updates.totalPaid || 0,
+        totalWithPenalty: updates.totalWithPenalty || 0,
+        status: updates.status || 'PENDING',
+        ...updates,
+        updatedAt: nowIso,
+      };
+      const combined = deduplicateCollections([...collections, newEntry]);
+      setStoredData(STORAGE_KEYS.COLLECTIONS, combined);
+      syncToFirestore('collections', id, newEntry);
+      return newEntry;
+    }
 
     const target = collections[index];
-    const targetPeriod = target.periodIndex;
-    const targetCustId = target.customerId;
-    const targetAcc = String(target.accountNumber || '').trim().toLowerCase();
+    const targetPeriod = updates.periodIndex ?? target.periodIndex;
+    const targetCustId = updates.customerId || target.customerId;
+    const targetAcc = String(updates.accountNumber || target.accountNumber || '').trim().toLowerCase();
     const nowIso = new Date().toISOString();
 
     const updatedEntry: CollectionEntry = {
@@ -1008,7 +1050,7 @@ export const StorageService = {
     const dedupedList = deduplicateCollections(updatedList);
     setStoredData(STORAGE_KEYS.COLLECTIONS, dedupedList);
 
-    syncToFirestore('collections', id, updatedEntry);
+    syncToFirestore('collections', target.id || id, updatedEntry);
 
     // Re-sync customer document so summary and installments in Firestore update immediately
     const custId = updatedEntry.customerId;

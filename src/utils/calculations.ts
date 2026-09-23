@@ -89,9 +89,13 @@ export const calculateCustomerFinancials = (
   loan?: Loan | null,
   bishiConfigs?: BishiConfig[]
 ): CalculatedFinancials => {
-  const rawCustomerCollections = collections.filter(
-    (c) => c.customerId === customer.id || (customer.accountNumber && String(c.accountNumber) === String(customer.accountNumber))
-  );
+  const custAcc = String(customer.accountNumber || '').trim().toLowerCase();
+  const rawCustomerCollections = collections.filter((c) => {
+    const cAcc = String(c.accountNumber || '').trim().toLowerCase();
+    const isCustomer = c.customerId === customer.id || (custAcc && cAcc === custAcc);
+    const isSameScheme = !customer.bishiType || !c.bishiType || c.bishiType === customer.bishiType;
+    return isCustomer && isSameScheme;
+  });
 
   const seenPeriods = new Map<number, typeof rawCustomerCollections[0]>();
   for (const c of rawCustomerCollections) {
@@ -101,7 +105,7 @@ export const calculateCustomerFinancials = (
       const existing = seenPeriods.get(c.periodIndex)!;
       const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
       const currentTime = c.updatedAt ? new Date(c.updatedAt).getTime() : 0;
-      if (currentTime > existingTime) {
+      if (currentTime >= existingTime) {
         seenPeriods.set(c.periodIndex, c);
       }
     }

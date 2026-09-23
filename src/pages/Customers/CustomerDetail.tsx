@@ -98,8 +98,14 @@ export const CustomerDetail: React.FC = () => {
 
   const customerCollections = useMemo(() => {
     if (!customer) return [];
+    const custAcc = String(customer.accountNumber || '').trim().toLowerCase();
     const raw = collections
-      .filter((c) => c.customerId === customer.id)
+      .filter((c) => {
+        const cAcc = String(c.accountNumber || '').trim().toLowerCase();
+        const isCustomer = c.customerId === customer.id || (custAcc && cAcc === custAcc);
+        const isSameScheme = !customer.bishiType || !c.bishiType || c.bishiType === customer.bishiType;
+        return isCustomer && isSameScheme;
+      })
       .sort((a, b) => a.periodIndex - b.periodIndex);
     const map = new Map<number, typeof raw[0]>();
     for (const c of raw) {
@@ -109,13 +115,13 @@ export const CustomerDetail: React.FC = () => {
         const existing = map.get(c.periodIndex)!;
         const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
         const currentTime = c.updatedAt ? new Date(c.updatedAt).getTime() : 0;
-        if (currentTime > existingTime) {
+        if (currentTime >= existingTime) {
           map.set(c.periodIndex, c);
         }
       }
     }
     return Array.from(map.values()).sort((a, b) => a.periodIndex - b.periodIndex);
-  }, [collections, customer?.id]);
+  }, [collections, customer?.id, customer?.accountNumber, customer?.bishiType]);
 
   if (!customer) {
     return (
@@ -172,7 +178,7 @@ export const CustomerDetail: React.FC = () => {
     return false;
   };
 
-  const financials = calculateCustomerFinancials(customer, collections, loan, bishiConfigs);
+  const financials = calculateCustomerFinancials(customer, customerCollections, loan, bishiConfigs);
 
   const openCollectModal = (entry: CollectionEntry) => {
     setSelectedEntry(entry);
@@ -211,6 +217,11 @@ export const CustomerDetail: React.FC = () => {
     const totalWithPen = calc.collectedAmount + extra + penalty;
     const hasPayment = calc.collectedAmount > 0 || extra > 0;
     const updated = StorageService.updateCollectionEntry(selectedEntry.id, {
+      customerId: customer.id,
+      customerName: customer.name,
+      accountNumber: customer.accountNumber,
+      periodIndex: selectedEntry.periodIndex,
+      bishiType: selectedEntry.bishiType || customer.bishiType,
       paymentDate: hasPayment ? paymentDate : '',
       paymentTime: hasPayment ? paymentTime : '',
       paymentMode: hasPayment ? paymentMode : 'CASH',
