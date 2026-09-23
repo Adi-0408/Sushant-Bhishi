@@ -150,15 +150,17 @@ export const ReportManager: React.FC = () => {
     custColls.forEach((c) => {
       const expAmt = c.expectedAmount || 0;
       const collAmt = c.collectedAmount || 0;
-      // Recalculate remaining on-the-fly — do NOT trust stored remainingAmount (stale after edits)
-      const recalcRem = Math.max(0, expAmt - collAmt);
       exp += expAmt;
       coll += collAmt;
-      rem += recalcRem;
       const cInt = c.interestAmount || (collAmt > 0 ? Math.round((collAmt * (cust.interestRate || (cust.modality === 'W' ? 2.5 : 10))) / 100) : 0);
       int += cInt;
       pen += c.penaltyAmount || 0;
     });
+
+    // Compute overall scheme remaining as (totalExpected − totalCollected).
+    // This correctly reflects overpayments and avoids inflating remaining
+    // by counting future unpaid installments that haven't been due yet.
+    rem = Math.max(0, exp - coll);
 
     const custLoan = loans.find((l) => l.customerId === cust.id);
     const custLoanPayments = loanPayments.filter((lp) => {

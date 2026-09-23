@@ -109,7 +109,6 @@ export const calculateCustomerFinancials = (
   let totalExpectedBishi = 0;
   let totalCollectedBishi = 0;
   let totalExtraAmount = 0;
-  let totalRemainingBishi = 0;
   let explicitInterestSum = 0;
   let totalPenalty = 0;
   let completedInstallmentsCount = 0;
@@ -120,17 +119,17 @@ export const calculateCustomerFinancials = (
   customerCollections.forEach((item) => {
     const expectedAmt = item.expectedAmount || 0;
     const collectedAmt = item.collectedAmount || 0;
-    // Always recalculate remaining on-the-fly from (expected - collected) — do NOT trust the
-    // stored remainingAmount field which can be stale after edits or partial payments.
+    // Per-entry remaining (used only for currentDueRemaining check below)
     const recalcRemaining = Math.max(0, expectedAmt - collectedAmt);
 
     totalExpectedBishi += expectedAmt;
     totalCollectedBishi += collectedAmt;
     totalExtraAmount += item.extraAmount || 0;
-    totalRemainingBishi += recalcRemaining;
+    // NOTE: totalRemainingBishi is NOT accumulated here — computed from totals after the loop
     explicitInterestSum += item.interestAmount || 0;
     totalPenalty += item.penaltyAmount || 0;
 
+    // currentDueRemaining: only count entries whose due date has passed/is today
     if (item.dueDate <= todayStr) {
       currentDueRemaining += recalcRemaining;
     }
@@ -139,6 +138,12 @@ export const calculateCustomerFinancials = (
       completedInstallmentsCount += 1;
     }
   });
+
+  // Overall scheme remaining = total expected − total collected.
+  // This correctly handles overpayments and cross-installment payments,
+  // avoiding the per-installment sum which inflates remaining by counting
+  // future unpaid installments regardless of overpayments on earlier ones.
+  const totalRemainingBishi = Math.max(0, totalExpectedBishi - totalCollectedBishi);
 
   // Effective interest rate for bishi (from customer or default for modality)
   const effectiveRate =
