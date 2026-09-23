@@ -118,18 +118,24 @@ export const calculateCustomerFinancials = (
   let currentDueRemaining = 0;
 
   customerCollections.forEach((item) => {
-    totalExpectedBishi += item.expectedAmount || 0;
-    totalCollectedBishi += item.collectedAmount || 0;
+    const expectedAmt = item.expectedAmount || 0;
+    const collectedAmt = item.collectedAmount || 0;
+    // Always recalculate remaining on-the-fly from (expected - collected) — do NOT trust the
+    // stored remainingAmount field which can be stale after edits or partial payments.
+    const recalcRemaining = Math.max(0, expectedAmt - collectedAmt);
+
+    totalExpectedBishi += expectedAmt;
+    totalCollectedBishi += collectedAmt;
     totalExtraAmount += item.extraAmount || 0;
-    totalRemainingBishi += item.remainingAmount || 0;
+    totalRemainingBishi += recalcRemaining;
     explicitInterestSum += item.interestAmount || 0;
     totalPenalty += item.penaltyAmount || 0;
 
     if (item.dueDate <= todayStr) {
-      currentDueRemaining += item.remainingAmount || 0;
+      currentDueRemaining += recalcRemaining;
     }
 
-    if (item.status === 'PAID' || (item.collectedAmount >= item.expectedAmount && item.expectedAmount > 0)) {
+    if (item.status === 'PAID' || (collectedAmt >= expectedAmt && expectedAmt > 0)) {
       completedInstallmentsCount += 1;
     }
   });

@@ -148,10 +148,14 @@ export const ReportManager: React.FC = () => {
     let pen = 0;
 
     custColls.forEach((c) => {
-      exp += c.expectedAmount || 0;
-      coll += c.collectedAmount || 0;
-      rem += c.remainingAmount || 0;
-      const cInt = c.interestAmount || (c.collectedAmount > 0 ? Math.round((c.collectedAmount * (cust.interestRate || (cust.modality === 'W' ? 2.5 : 10))) / 100) : 0);
+      const expAmt = c.expectedAmount || 0;
+      const collAmt = c.collectedAmount || 0;
+      // Recalculate remaining on-the-fly — do NOT trust stored remainingAmount (stale after edits)
+      const recalcRem = Math.max(0, expAmt - collAmt);
+      exp += expAmt;
+      coll += collAmt;
+      rem += recalcRem;
+      const cInt = c.interestAmount || (collAmt > 0 ? Math.round((collAmt * (cust.interestRate || (cust.modality === 'W' ? 2.5 : 10))) / 100) : 0);
       int += cInt;
       pen += c.penaltyAmount || 0;
     });

@@ -693,13 +693,16 @@ export const CustomerDetail: React.FC = () => {
                   <span className="text-[10px] text-rose-700 font-extrabold block">
                     {language === 'EN' ? 'Due to Pay:' : 'ग्राहकाकडून येणे:'}
                   </span>
-                  {entry.remainingAmount > 0 ? (
-                    <span className="inline-block px-2 py-0.5 rounded-lg bg-rose-100 text-rose-800 border border-rose-300 font-black text-xs shadow-2xs">
-                      {formatCurrency(entry.remainingAmount, language)}
-                    </span>
-                  ) : (
-                    <span className="font-black text-emerald-700">₹0</span>
-                  )}
+                  {(() => {
+                    const entryRemaining = Math.max(0, (entry.expectedAmount || 0) - (entry.collectedAmount || 0));
+                    return entryRemaining > 0 ? (
+                      <span className="inline-block px-2 py-0.5 rounded-lg bg-rose-100 text-rose-800 border border-rose-300 font-black text-xs shadow-2xs">
+                        {formatCurrency(entryRemaining, language)}
+                      </span>
+                    ) : (
+                      <span className="font-black text-emerald-700">₹0</span>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -805,13 +808,17 @@ export const CustomerDetail: React.FC = () => {
                     )}
                   </td>
                   <td className="p-3.5 print:p-1.5 text-right font-extrabold">
-                    {entry.remainingAmount > 0 ? (
-                      <span className="inline-block px-2.5 py-1 print:px-1 print:py-0 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 font-black shadow-2xs print:bg-transparent print:border-none print:shadow-none print:text-rose-700 print:text-[10px]">
-                        {formatCurrency(entry.remainingAmount, language)}
-                      </span>
-                    ) : (
-                      <span className="text-emerald-700 font-extrabold print:text-[10px]">₹0</span>
-                    )}
+                    {(() => {
+                      // Recalculate remaining on-the-fly; stored value may be stale
+                      const entryRemaining = Math.max(0, (entry.expectedAmount || 0) - (entry.collectedAmount || 0));
+                      return entryRemaining > 0 ? (
+                        <span className="inline-block px-2.5 py-1 print:px-1 print:py-0 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 font-black shadow-2xs print:bg-transparent print:border-none print:shadow-none print:text-rose-700 print:text-[10px]">
+                          {formatCurrency(entryRemaining, language)}
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 font-extrabold print:text-[10px]">₹0</span>
+                      );
+                    })()}
                   </td>
                   <td className="p-3.5 print:p-1.5 text-right text-slate-700 print:text-[10px]">
                     {formatCurrency(
