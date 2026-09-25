@@ -812,7 +812,7 @@ export const StorageService = {
     const remainingCustomers = customers.filter((c) => c.id !== id);
     setStoredData(STORAGE_KEYS.CUSTOMERS, remainingCustomers);
 
-    // Delete associated collections and loans locally
+    // Delete associated collections, loans, and loan payments locally
     const collections = StorageService.getCollections();
     const toDeleteColls = collections.filter(
       (c) => c.customerId === id || (customerToDelete && String(c.accountNumber) === String(customerToDelete.accountNumber))
@@ -823,82 +823,92 @@ export const StorageService = {
     setStoredData(STORAGE_KEYS.COLLECTIONS, remainingColls);
 
     const loans = StorageService.getLoans();
-    const toDeleteLoans = loans.filter((l) => l.customerId === id);
-    const remainingLoans = loans.filter((l) => l.customerId !== id);
+    const toDeleteLoans = loans.filter(
+      (l) => l.customerId === id || (customerToDelete?.accountNumber && String(l.accountNumber) === String(customerToDelete.accountNumber))
+    );
+    const remainingLoans = loans.filter(
+      (l) => l.customerId !== id && (!customerToDelete?.accountNumber || String(l.accountNumber) !== String(customerToDelete.accountNumber))
+    );
     setStoredData(STORAGE_KEYS.LOANS, remainingLoans);
 
-    const payments = StorageService.getLoanPayments().filter((p) => p.customerId !== id);
-    setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, payments);
+    const allLoanPayments = StorageService.getLoanPayments();
+    const toDeletePayments = allLoanPayments.filter(
+      (p) => p.customerId === id || (customerToDelete?.accountNumber && String(p.accountNumber) === String(customerToDelete.accountNumber))
+    );
+    const remainingPayments = allLoanPayments.filter(
+      (p) => p.customerId !== id && (!customerToDelete?.accountNumber || String(p.accountNumber) !== String(customerToDelete.accountNumber))
+    );
+    setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, remainingPayments);
 
-    // Completely and immediately purge from Firestore
+    // Completely and immediately purge from Firestore via atomic writeBatch (0 getDocs read queries)
     try {
-      const deletePromises: Promise<any>[] = [];
+      startSyncOp();
+      const uniqueDocPaths = new Set<string>();
+      const docRefsToDelete: any[] = [];
 
-      // 1. Delete customer document by ID and readable doc ID
-      deletePromises.push(deleteDoc(doc(db, 'customers', id)).catch(() => {}));
+      const queueDelete = (collectionName: string, docId: string) => {
+        if (!docId) return;
+        const path = `${collectionName}/${docId}`;
+        if (!uniqueDocPaths.has(path)) {
+          uniqueDocPaths.add(path);
+          docRefsToDelete.push(doc(db, collectionName, docId));
+        }
+      };
+
+      // 1. Customer document refs
+      queueDelete('customers', id);
       if (customerToDelete) {
         const readableDocId = getFirestoreDocId('customers', id, customerToDelete);
-        if (readableDocId !== id) {
-          deletePromises.push(deleteDoc(doc(db, 'customers', readableDocId)).catch(() => {}));
-        }
-        if (customerToDelete.accountNumber) {
-          const qAcc = query(collection(db, 'customers'), where('accountNumber', '==', String(customerToDelete.accountNumber)));
-          const snapAcc = await getDocs(qAcc);
-          snapAcc.forEach((d: any) => deletePromises.push(deleteDoc(d.ref).catch(() => {})));
-        }
+        queueDelete('customers', readableDocId);
       }
-      const qCustId = query(collection(db, 'customers'), where('id', '==', id));
-      const snapCustId = await getDocs(qCustId);
-      snapCustId.forEach((d: any) => deletePromises.push(deleteDoc(d.ref).catch(() => {})));
 
-      // 2. Delete all collections for this customer from Firestore
+      // 2. Collection document refs
       for (const c of toDeleteColls) {
+        queueDelete('collections', c.id);
         const enriched = {
           ...c,
           customerName: c.customerName || customerToDelete?.name,
           accountNumber: c.accountNumber || customerToDelete?.accountNumber,
         };
         const readableCollId = getFirestoreDocId('collections', c.id, enriched);
-        deletePromises.push(deleteDoc(doc(db, 'collections', readableCollId)).catch(() => {}));
-        if (readableCollId !== c.id) {
-          deletePromises.push(deleteDoc(doc(db, 'collections', c.id)).catch(() => {}));
-        }
-      }
-      const qColCust = query(collection(db, 'collections'), where('customerId', '==', id));
-      const snapColCust = await getDocs(qColCust);
-      snapColCust.forEach((d: any) => deletePromises.push(deleteDoc(d.ref).catch(() => {})));
-
-      if (customerToDelete?.accountNumber) {
-        const qColAcc = query(collection(db, 'collections'), where('accountNumber', '==', String(customerToDelete.accountNumber)));
-        const snapColAcc = await getDocs(qColAcc);
-        snapColAcc.forEach((d: any) => deletePromises.push(deleteDoc(d.ref).catch(() => {})));
+        queueDelete('collections', readableCollId);
       }
 
-      // 3. Delete loans and loan payments from Firestore
+      // 3. Loan document refs
       for (const l of toDeleteLoans) {
+        queueDelete('loans', l.id);
         const enriched = {
           ...l,
           customerName: l.customerName || customerToDelete?.name,
           accountNumber: l.accountNumber || customerToDelete?.accountNumber,
         };
         const readableLoanId = getFirestoreDocId('loans', l.id, enriched);
-        deletePromises.push(deleteDoc(doc(db, 'loans', readableLoanId)).catch(() => {}));
-        if (readableLoanId !== l.id) {
-          deletePromises.push(deleteDoc(doc(db, 'loans', l.id)).catch(() => {}));
-        }
+        queueDelete('loans', readableLoanId);
       }
-      const qLoan = query(collection(db, 'loans'), where('customerId', '==', id));
-      const snapLoan = await getDocs(qLoan);
-      snapLoan.forEach((d: any) => deletePromises.push(deleteDoc(d.ref).catch(() => {})));
 
-      const qPay = query(collection(db, 'loanPayments'), where('customerId', '==', id));
-      const snapPay = await getDocs(qPay);
-      snapPay.forEach((d: any) => deletePromises.push(deleteDoc(d.ref).catch(() => {})));
+      // 4. Loan payment document refs
+      for (const p of toDeletePayments) {
+        queueDelete('loanPayments', p.id);
+        const readablePayId = getFirestoreDocId('loanPayments', p.id, p);
+        queueDelete('loanPayments', readablePayId);
+      }
 
-      await Promise.all(deletePromises);
-      console.log(`[Firestore] Successfully purged customer ${id} and all related records from cloud database.`);
+      // Commit in atomic chunks of 400 with writeBatch (strictly 0 getDocs reads)
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < docRefsToDelete.length; i += CHUNK_SIZE) {
+        const chunk = docRefsToDelete.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        for (const ref of chunk) {
+          batch.delete(ref);
+        }
+        await batch.commit();
+      }
+
+      console.log(`[Firestore] Purged customer ${id} and ${docRefsToDelete.length} related documents with 0 server reads.`);
+      endSyncOp(true);
     } catch (err) {
       console.warn('Firestore customer purge note:', err);
+      endSyncOp(false);
     }
   },
 
@@ -1878,6 +1888,7 @@ export const StorageService = {
       const unsubCust = onSnapshot(
         collection(db, 'customers'),
         (snapshot: any) => {
+          if (snapshot.metadata?.hasPendingWrites) return;
           const remoteList: Customer[] = [];
           snapshot.forEach((d: any) => {
             const raw = d.data();
@@ -1902,6 +1913,7 @@ export const StorageService = {
       const unsubLoans = onSnapshot(
         collection(db, 'loans'),
         (snapshot: any) => {
+          if (snapshot.metadata?.hasPendingWrites) return;
           const remoteList: Loan[] = [];
           snapshot.forEach((d: any) => {
             const raw = d.data();
@@ -1925,6 +1937,7 @@ export const StorageService = {
       const unsubColls = onSnapshot(
         collection(db, 'collections'),
         (snapshot: any) => {
+          if (snapshot.metadata?.hasPendingWrites) return;
           const remoteList: CollectionEntry[] = [];
           snapshot.forEach((d: any) => {
             const raw = d.data();
@@ -1948,6 +1961,7 @@ export const StorageService = {
       const unsubLoanPay = onSnapshot(
         collection(db, 'loanPayments'),
         (snapshot: any) => {
+          if (snapshot.metadata?.hasPendingWrites) return;
           const remoteList: LoanPayment[] = [];
           snapshot.forEach((d: any) => {
             const raw = d.data();
@@ -1969,6 +1983,7 @@ export const StorageService = {
       const unsubBishi = onSnapshot(
         collection(db, 'bishi'),
         (snapshot: any) => {
+          if (snapshot.metadata?.hasPendingWrites) return;
           if (!snapshot.empty) {
             const remoteList: BishiConfig[] = [];
             snapshot.forEach((d: any) => {
@@ -1992,6 +2007,7 @@ export const StorageService = {
       const unsubRates = onSnapshot(
         collection(db, 'interestRates'),
         (snapshot: any) => {
+          if (snapshot.metadata?.hasPendingWrites) return;
           if (!snapshot.empty) {
             const remoteList: InterestRateConfig[] = [];
             snapshot.forEach((d: any) => {
@@ -2015,6 +2031,7 @@ export const StorageService = {
       const unsubPenalty = onSnapshot(
         collection(db, 'penaltySettings'),
         (snapshot: any) => {
+          if (snapshot.metadata?.hasPendingWrites) return;
           if (!snapshot.empty) {
             let remotePenalty: PenaltySetting | null = null;
             snapshot.forEach((d: any) => {
@@ -2036,6 +2053,7 @@ export const StorageService = {
       const unsubAdmins = onSnapshot(
         collection(db, 'admins'),
         (snapshot: any) => {
+          if (snapshot.metadata?.hasPendingWrites) return;
           if (!snapshot.empty) {
             const remoteList: Admin[] = [];
             snapshot.forEach((d: any) => {
@@ -2062,6 +2080,7 @@ export const StorageService = {
       const unsubThakbaki = onSnapshot(
         collection(db, 'thakbaki'),
         (snapshot: any) => {
+          if (snapshot.metadata?.hasPendingWrites) return;
           if (!snapshot.empty) {
             const remoteList: ThakbakiEntry[] = [];
             snapshot.forEach((d: any) => {
