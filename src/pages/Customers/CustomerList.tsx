@@ -34,10 +34,12 @@ import {
 } from 'lucide-react';
 
 export const CustomerList: React.FC = () => {
-  const { collections, loans, bishiConfigs, activeOffice, setActiveOffice, refreshData, showToast, t, language } = useApp();
+  const { customers, collections, loans, bishiConfigs, activeOffice, setActiveOffice, refreshData, showToast, t, language } = useApp();
 
   // ── Step 4: Paginated list state (cost capped at 20 reads per page) ──
-  const [paginatedCustomers, setPaginatedCustomers] = useState<Customer[]>([]);
+  const [paginatedCustomers, setPaginatedCustomers] = useState<Customer[]>(() => {
+    return customers.slice(0, 20);
+  });
   const [lastDocSnapshot, setLastDocSnapshot] = useState<any>(null);
   const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -68,19 +70,32 @@ export const CustomerList: React.FC = () => {
     setIsLoading(true);
     try {
       const res = await fetchCustomersPaginated(20, null);
-      setPaginatedCustomers(res.customers);
-      setLastDocSnapshot(res.lastDoc);
-      setHasMore(res.hasMore);
+      if (res.customers.length > 0) {
+        setPaginatedCustomers(res.customers);
+        setLastDocSnapshot(res.lastDoc);
+        setHasMore(res.hasMore);
+      } else if (customers.length > 0) {
+        setPaginatedCustomers(customers.slice(0, 20));
+      }
     } catch (err) {
       console.warn('[CustomerList] Initial load note:', err);
+      if (customers.length > 0) {
+        setPaginatedCustomers(customers.slice(0, 20));
+      }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [customers]);
 
   useEffect(() => {
     loadInitialCustomers();
   }, [loadInitialCustomers]);
+
+  useEffect(() => {
+    if (paginatedCustomers.length === 0 && customers.length > 0) {
+      setPaginatedCustomers(customers.slice(0, 20));
+    }
+  }, [customers]);
 
   // Load more via cursor pagination (startAfter)
   const handleLoadMore = async () => {
@@ -216,7 +231,9 @@ export const CustomerList: React.FC = () => {
         <div>
           <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
             <Users className="w-6 h-6 text-brand-700" />
-            <span>{t.customerListTitle} ({filteredCustomers.length})</span>
+            <span>
+              {t.customerListTitle} ({searchResults !== null ? filteredCustomers.length : Math.max(customers.length, filteredCustomers.length)})
+            </span>
           </h2>
           <p className="text-xs text-slate-500 font-medium">
             {t.customerListSub}

@@ -125,6 +125,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSyncStatus(status);
     });
 
+    // 2. One-time initial pull per session on startup if local storage is missing existing cloud data
+    if (currentAdmin) {
+      const syncKey = 'sb_initial_sync_done';
+      const hasSynced = sessionStorage.getItem(syncKey);
+      const localCustCount = StorageService.getCustomers().length;
+
+      if (!hasSynced || localCustCount < 2) {
+        StorageService.fetchAndSyncFromFirestore()
+          .then(() => {
+            sessionStorage.setItem(syncKey, 'true');
+            refreshData();
+          })
+          .catch((err) => {
+            console.warn('[AppContext] Startup sync note:', err);
+          });
+      }
+    }
+
     return () => {
       if (unsubStatus) unsubStatus();
     };
