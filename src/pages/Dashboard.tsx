@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { BishiType, OfficeId } from '../types';
+import { BishiType, OfficeId, Customer, Installment, StatsSummary } from '../types';
 import { QuickCollectionModal } from '../components/collections/QuickCollectionModal';
 import { WelcomeBanner } from '../components/common/WelcomeBanner';
 import {
@@ -8,10 +8,12 @@ import {
   formatDateMarathi,
   getBishiNameMarathi,
   getOfficeNameMarathi,
-  matchesCustomerSearch,
 } from '../utils/formatters';
 import { MarathiTextInput } from '../components/common/MarathiTextInput';
 import { CustomDropdown } from '../components/common/CustomDropdown';
+import { getStatsSummary, DEFAULT_STATS } from '../services/stats';
+import { searchCustomersByName, searchCustomerByAccountNumber } from '../services/customerSearch';
+import { fetchTodayPendingInstallments } from '../services/installments';
 import {
   Users,
   Wallet,
@@ -29,6 +31,7 @@ import {
   ShieldCheck,
   Search,
   X,
+  RefreshCw,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -38,9 +41,6 @@ export const Dashboard: React.FC = () => {
     setActiveOffice,
     selectedBishiFilter,
     setSelectedBishiFilter,
-    customers,
-    collections,
-    loans,
     bishiConfigs,
     t,
     language,
@@ -57,84 +57,77 @@ export const Dashboard: React.FC = () => {
   const [collectCustId, setCollectCustId] = useState<string | undefined>(undefined);
   const [dashboardSearch, setDashboardSearch] = useState('');
 
+  // ── Step 2 & 4: Singleton stats/summary read with ~2 minute TTL cache ──
+  const [stats, setStats] = useState<StatsSummary>(DEFAULT_STATS);
+  const [isRefreshingStats, setIsRefreshingStats] = useState(false);
+
+  // Today's pending list fetched directly from installments schedule
+  const [todaysPendingList, setTodaysPendingList] = useState<Installment[]>([]);
+  const [dashboardSearchResults, setDashboardSearchResults] = useState<Customer[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
   const navigate = useNavigate();
   const todayStr = new Date().toISOString().split('T')[0];
 
-  const dashboardSearchResults = dashboardSearch.trim()
-    ? customers.filter((cust) => matchesCustomerSearch(cust, dashboardSearch))
-    : [];
+  const fetchStats = async (force: boolean = false) => {
+    setIsRefreshingStats(true);
+    try {
+      const data = await getStatsSummary(force);
+      setStats(data);
+    } catch (e) {
+      console.warn('Dashboard stats load note:', e);
+    } finally {
+      setIsRefreshingStats(false);
+    }
+  };
 
-  const filteredCustomers = customers.filter((cust) => {
-    if (officeFilter !== 'ALL' && cust.officeId !== officeFilter) return false;
-    if (selectedBishiFilter !== 'ALL' && cust.bishiType !== selectedBishiFilter) return false;
-    if (modalityFilter !== 'ALL' && cust.modality !== modalityFilter) return false;
-    return true;
-  });
+  useEffect(() => {
+    // 1 getDoc() call (or 0 reads if within 2-min sessionStorage TTL)
+    fetchStats(false);
 
-  const filteredCustomerIds = new Set(filteredCustomers.map((c) => c.id));
+    // Fetch today's pending installments schedule (capped at 20 docs)
+    fetchTodayPendingInstallments(todayStr, 20).then((insts) => {
+      setTodaysPendingList(insts);
+    });
+  }, []);
 
-  const filteredCollections = useMemo(() => {
-    const raw = collections.filter((c) => filteredCustomerIds.has(c.customerId));
-    const seen = new Map<string, typeof raw[0]>();
-    for (const c of raw) {
-      const key = `${c.customerId || c.accountNumber}_${c.bishiType || ''}_${c.periodIndex}`;
-      if (!seen.has(key)) {
-        seen.set(key, c);
-      } else {
-        const existing = seen.get(key)!;
-        const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
-        const currentTime = c.updatedAt ? new Date(c.updatedAt).getTime() : 0;
-        if (currentTime > existingTime) {
-          seen.set(key, c);
+  // Debounced search via prefix range query (costs max 20 reads only when searching)
+  useEffect(() => {
+    const term = dashboardSearch.trim();
+    if (!term) {
+      setDashboardSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        if (/^\d+$/.test(term)) {
+          const cust = await searchCustomerByAccountNumber(term);
+          setDashboardSearchResults(cust ? [cust] : []);
+        } else {
+          const results = await searchCustomersByName(term, 10);
+          setDashboardSearchResults(results);
         }
+      } catch (err) {
+        console.warn('Dashboard search note:', err);
+      } finally {
+        setIsSearching(false);
       }
-    }
-    return Array.from(seen.values());
-  }, [collections, filteredCustomerIds]);
-  const filteredLoans = loans.filter((l) => (
-    filteredCustomerIds.has(l.customerId) ||
-    Boolean(l.accountNumber && customers.some((c) => filteredCustomerIds.has(c.id) && c.accountNumber === l.accountNumber))
-  ) && l.status === 'ACTIVE');
+    }, 300);
 
-  const totalCustomersCount = filteredCustomers.length;
+    return () => clearTimeout(timer);
+  }, [dashboardSearch]);
 
-  let todaysCollection = 0;
-  let todaysPendingAmount = 0;
-  let totalCollectedBishi = 0;
-  let todaysPendingInstallmentsCount = 0;
-  let todaysPenaltyAmount = 0;
-
-  filteredCollections.forEach((c) => {
-    totalCollectedBishi += c.collectedAmount || 0;
-
-    // Payments collected today
-    if (c.paymentDate === todayStr) {
-      todaysCollection += c.collectedAmount || 0;
-      todaysPenaltyAmount += c.penaltyAmount || 0;
-    }
-
-    // Pending dues: if someone didn't pay on their due date (today or earlier past dates), still count in pending!
-    if (c.dueDate <= todayStr && c.status !== 'PAID') {
-      todaysPendingAmount += c.remainingAmount || 0;
-      todaysPendingInstallmentsCount += 1;
-    }
-  });
-
-  let totalLoanAmount = 0;
-  let loanRemainingAmount = 0;
-  filteredLoans.forEach((l) => {
-    totalLoanAmount += l.principalAmount || 0;
-    loanRemainingAmount += l.remainingAmount || 0;
-  });
-
-  const todaysPendingList = filteredCollections.filter((c) => {
-    if (c.status === 'PAID') return false;
-    if (dashboardSearch.trim()) {
-      const cust = customers.find((cu) => cu.id === c.customerId);
-      if (!matchesCustomerSearch(cust, dashboardSearch, c.accountNumber)) return false;
-    }
-    return c.dueDate <= todayStr;
-  });
+  const totalCustomersCount = stats.totalCustomers;
+  const todaysCollection = stats.todaysCollection;
+  const todaysPendingAmount = stats.todaysDueAmount;
+  const totalCollectedBishi = stats.totalBishiCollected;
+  const totalLoanAmount = stats.totalPrincipalLoans;
+  const loanRemainingAmount = stats.loanBalanceDue;
+  const todaysPendingInstallmentsCount = stats.todaysDueInstallments;
+  const todaysPenaltyAmount = stats.todaysPenalty;
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 font-marathi min-h-screen flex flex-col justify-between bg-[#F4F6F5]">
@@ -314,8 +307,17 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="hidden md:flex items-center justify-end shrink-0">
-            <span className="h-10 inline-flex items-center px-3.5 bg-emerald-50 text-[#0F7A5C] font-extrabold text-xs rounded-xl border border-emerald-200/60 shadow-2xs">
+          <div className="flex items-center justify-end space-x-2 shrink-0">
+            <button
+              onClick={() => fetchStats(true)}
+              disabled={isRefreshingStats}
+              title={language === 'EN' ? 'Refresh Dashboard Stats' : 'डॅशबोर्ड आकडेवारी रिफ्रेश करा (१ Read)'}
+              className="h-10 px-3.5 bg-white hover:bg-slate-50 text-slate-700 font-extrabold text-xs rounded-xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-1.5 cursor-pointer disabled:opacity-60 active:scale-95 transition-all"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-[#0F7A5C] ${isRefreshingStats ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{language === 'EN' ? 'Refresh' : 'रिफ्रेश'}</span>
+            </button>
+            <span className="hidden md:inline-flex h-10 items-center px-3.5 bg-emerald-50 text-[#0F7A5C] font-extrabold text-xs rounded-xl border border-emerald-200/60 shadow-2xs">
               <Landmark className="w-3.5 h-3.5 mr-1.5" />
               {getOfficeNameMarathi(officeFilter as any, language)}
             </span>
@@ -558,46 +560,42 @@ export const Dashboard: React.FC = () => {
             <>
               {/* Mobile Card View (< md screens) */}
               <div className="block md:hidden space-y-3 p-3 bg-slate-50/50">
-                {todaysPendingList.map((item) => {
-                  const cust = customers.find((c) => c.id === item.customerId);
-                  if (!cust) return null;
-                  return (
-                    <div
-                      key={item.id}
-                      className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 text-xs font-black">
-                            {cust.accountNumber}
-                          </span>
-                          <span className="font-bold text-slate-900 text-xs truncate">
-                            {cust.name}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                          <span className="inline-block px-2.5 py-0.5 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 text-xs font-black shadow-2xs">
-                            {language === 'EN' ? 'Due to Pay: ' : 'येणे बाकी: '}{formatCurrency(item.remainingAmount, language)}
-                          </span>
-                          {item.dueDate < todayStr && (
-                            <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black animate-pulse">
-                              {language === 'EN' ? 'Overdue' : 'थकीत'} ({formatDateMarathi(item.dueDate, language)})
-                            </span>
-                          )}
-                        </div>
+                {todaysPendingList.map((item) => (
+                  <div
+                    key={item.id}
+                    className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 text-xs font-black">
+                          {item.accountNumber || item.accountNo || '-'}
+                        </span>
+                        <span className="font-bold text-slate-900 text-xs truncate">
+                          {item.customerName || 'Customer'}
+                        </span>
                       </div>
-                      <button
-                        onClick={() => {
-                          setCollectCustId(cust.id);
-                          setIsQuickCollectOpen(true);
-                        }}
-                        className="px-3.5 py-2 min-h-[44px] bg-[#0F7A5C] hover:bg-emerald-800 text-white rounded-xl text-xs font-extrabold transition-colors shadow-xs shrink-0 cursor-pointer touch-target flex items-center justify-center"
-                      >
-                        {t.btnCollect}
-                      </button>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        <span className="inline-block px-2.5 py-0.5 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 text-xs font-black shadow-2xs">
+                          {language === 'EN' ? 'Due to Pay: ' : 'येणे बाकी: '}{formatCurrency(item.amount, language)}
+                        </span>
+                        {item.dueDate < todayStr && (
+                          <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black animate-pulse">
+                            {language === 'EN' ? 'Overdue' : 'थकीत'} ({formatDateMarathi(item.dueDate, language)})
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  );
-                })}
+                    <button
+                      onClick={() => {
+                        setCollectCustId(item.customerId);
+                        setIsQuickCollectOpen(true);
+                      }}
+                      className="px-3.5 py-2 min-h-[44px] bg-[#0F7A5C] hover:bg-emerald-800 text-white rounded-xl text-xs font-extrabold transition-colors shadow-xs shrink-0 cursor-pointer touch-target flex items-center justify-center"
+                    >
+                      {t.btnCollect}
+                    </button>
+                  </div>
+                ))}
               </div>
 
               {/* Desktop Table View (>= md screens) */}
@@ -613,40 +611,36 @@ export const Dashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E4EAE7] font-medium">
-                    {todaysPendingList.map((item) => {
-                      const cust = customers.find((c) => c.id === item.customerId);
-                      if (!cust) return null;
-                      return (
-                        <tr key={item.id} className="hover:bg-[#F4F6F5]">
-                          <td className="p-3 pl-4 font-bold">{cust.accountNumber}</td>
-                          <td className="p-3 font-bold">{cust.name}</td>
-                          <td className="p-3 font-semibold text-slate-700">
-                            <span>{formatDateMarathi(item.dueDate, language)}</span>
-                            {item.dueDate < todayStr && (
-                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black">
-                                {language === 'EN' ? 'Overdue' : 'थकीत'}
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-3 text-right font-extrabold">
-                            <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 font-black shadow-2xs">
-                              {formatCurrency(item.remainingAmount, language)}
+                    {todaysPendingList.map((item) => (
+                      <tr key={item.id} className="hover:bg-[#F4F6F5]">
+                        <td className="p-3 pl-4 font-bold">{item.accountNumber || item.accountNo || '-'}</td>
+                        <td className="p-3 font-bold">{item.customerName || 'Customer'}</td>
+                        <td className="p-3 font-semibold text-slate-700">
+                          <span>{formatDateMarathi(item.dueDate, language)}</span>
+                          {item.dueDate < todayStr && (
+                            <span className="ml-1.5 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black">
+                              {language === 'EN' ? 'Overdue' : 'थकीत'}
                             </span>
-                          </td>
-                          <td className="p-3 text-center">
-                            <button
-                              onClick={() => {
-                                setCollectCustId(cust.id);
-                                setIsQuickCollectOpen(true);
-                              }}
-                              className="px-3 py-1 bg-[#0F7A5C] hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
-                            >
-                              {t.btnCollect}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                          )}
+                        </td>
+                        <td className="p-3 text-right font-extrabold">
+                          <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 font-black shadow-2xs">
+                            {formatCurrency(item.amount, language)}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            onClick={() => {
+                              setCollectCustId(item.customerId);
+                              setIsQuickCollectOpen(true);
+                            }}
+                            className="px-3 py-1 bg-[#0F7A5C] hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                          >
+                            {t.btnCollect}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

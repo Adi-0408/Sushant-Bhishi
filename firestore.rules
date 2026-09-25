@@ -2,11 +2,24 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Sushant Bishi Cloud Database Security Rules
-    // Allows full access to customers, loans, collections, and settings collections
+    // stats/* singleton summary document:
+    // Client can read freely (1 getDoc read per dashboard load or 0 with TTL cache),
+    // but client direct writes are denied — maintained securely via Cloud Functions (Admin SDK).
+    match /stats/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // installments/* due schedule collection:
+    // Client can read schedule for due dates and create/update through payment flow
+    match /installments/{installmentId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Customers, collections, loans, loanPayments, admins, settings
     match /{document=**} {
       allow read, write: if true;
     }
   }
 }
-

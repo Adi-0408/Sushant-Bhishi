@@ -125,23 +125,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSyncStatus(status);
     });
 
-    // 2. Only attach real-time Firestore listeners if an admin is authenticated
-    // This completely prevents unauthenticated or login-page cloud reads
-    if (!currentAdmin) {
-      return () => {
-        if (unsubStatus) unsubStatus();
-      };
-    }
-
-    // 3. Attach real-time listeners for updates from Firebase Firestore across collections.
-    // With persistent local cache enabled, onSnapshot serves instantly from IndexedDB (0 server reads)
-    // and only streams changed documents when actual updates occur.
-    const unsubscribe = StorageService.setupFirestoreListeners(() => {
-      refreshData();
-    });
-
     return () => {
-      if (unsubscribe) unsubscribe();
       if (unsubStatus) unsubStatus();
     };
   }, [currentAdmin]);

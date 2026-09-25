@@ -27,6 +27,8 @@ import {
   ThakbakiPayment,
 } from '../types';
 import { calculateLoanTotalAccruedInterest } from '../utils/calculations';
+import { invalidateStatsCache } from './stats';
+import { markInstallmentAsPaid } from './installments';
 
 const STORAGE_KEYS = {
   ADMINS: 'sb_admins',
@@ -693,21 +695,29 @@ export const StorageService = {
   addCustomer: (customerData: Omit<Customer, 'id' | 'createdAt'>): Customer => {
     const customers = StorageService.getCustomers();
 
+    const cleanAcc = customerData.accountNumber.trim();
     const exists = customers.some(
-      (c) => c.accountNumber.trim().toLowerCase() === customerData.accountNumber.trim().toLowerCase()
+      (c) => c.accountNumber.trim().toLowerCase() === cleanAcc.toLowerCase()
     );
     if (exists) {
       throw new Error('हा खाते क्रमांक आधीपासून वापरामध्ये आहे. कृपया वेगळा खाते क्रमांक वापरा.');
     }
 
+    const cleanName = (customerData.name || customerData.customerName || '').trim();
     const newCustomer: Customer = {
       ...customerData,
       id: 'cust_' + Date.now(),
+      name: cleanName,
+      customerName: cleanName,
+      nameLower: cleanName.toLowerCase(),
+      accountNumber: cleanAcc,
+      accountNo: cleanAcc,
       createdAt: new Date().toISOString(),
     };
 
     setStoredData(STORAGE_KEYS.CUSTOMERS, [newCustomer, ...customers]);
     syncToFirestore('customers', newCustomer.id, newCustomer);
+    invalidateStatsCache();
     return newCustomer;
   },
 
@@ -727,10 +737,19 @@ export const StorageService = {
 
     const oldCustomer = { ...customers[index] };
     customers[index] = { ...customers[index], ...updates };
-    if (updates.name && !updates.customerName) {
-      customers[index].customerName = updates.name;
+    if (updates.name) {
+      const trimmed = updates.name.trim();
+      customers[index].name = trimmed;
+      customers[index].nameLower = trimmed.toLowerCase();
+      if (!updates.customerName) {
+        customers[index].customerName = trimmed;
+      }
+    }
+    if (updates.accountNumber) {
+      customers[index].accountNo = updates.accountNumber.trim();
     }
     setStoredData(STORAGE_KEYS.CUSTOMERS, customers);
+    invalidateStatsCache();
 
     // Clean up old Firestore doc ID if account number or name changed
     const oldDocId = getFirestoreDocId('customers', id, oldCustomer);
@@ -893,6 +912,14 @@ export const StorageService = {
         queueDelete('loanPayments', readablePayId);
       }
 
+      // 5. Installments document refs
+      for (const c of toDeleteColls) {
+        queueDelete('installments', `inst_bishi_${id}_${c.periodIndex}`);
+      }
+      for (const l of toDeleteLoans) {
+        queueDelete('installments', `inst_loan_${l.id}_1`);
+      }
+
       // Commit in atomic chunks of 400 with writeBatch (strictly 0 getDocs reads)
       const CHUNK_SIZE = 400;
       for (let i = 0; i < docRefsToDelete.length; i += CHUNK_SIZE) {
@@ -905,6 +932,7 @@ export const StorageService = {
       }
 
       console.log(`[Firestore] Purged customer ${id} and ${docRefsToDelete.length} related documents with 0 server reads.`);
+      invalidateStatsCache();
       endSyncOp(true);
     } catch (err) {
       console.warn('Firestore customer purge note:', err);
@@ -1042,6 +1070,10 @@ export const StorageService = {
     setStoredData(STORAGE_KEYS.COLLECTIONS, dedupedList);
 
     syncToFirestore('collections', target.id || id, updatedEntry);
+    if (updatedEntry.status === 'PAID' || Number(updatedEntry.collectedAmount) >= Number(updatedEntry.expectedAmount)) {
+      markInstallmentAsPaid(updatedEntry.customerId, updatedEntry.periodIndex, 'bishi', updatedEntry.paymentDate || nowIso);
+    }
+    invalidateStatsCache();
     return updatedEntry;
   },
 
@@ -1392,6 +1424,9 @@ export const StorageService = {
         status: isClosed ? 'COMPLETED' : 'ACTIVE',
       });
     }
+
+    markInstallmentAsPaid(newPayment.customerId, 1, 'loan', newPayment.paymentDate);
+    invalidateStatsCache();
 
     return newPayment;
   },

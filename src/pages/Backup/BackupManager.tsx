@@ -18,9 +18,11 @@ import {
   Trash2,
   RotateCcw,
   Sparkles,
+  Zap,
 } from 'lucide-react';
 import { formatDateMarathi } from '../../utils/formatters';
 import { ModalPortal } from '../../components/common/ModalPortal';
+import { runClientV2Migration } from '../../services/migration';
 
 export const BackupManager: React.FC = () => {
   const { refreshData, showToast, syncStatus, syncWithFirebase, clearAllData, language } = useApp();
@@ -32,6 +34,11 @@ export const BackupManager: React.FC = () => {
   const [selectedSnapshotForRestore, setSelectedSnapshotForRestore] = useState<LocalBackupSnapshot | null>(null);
   const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+
+  // v2 Schema Migration & Read-Count Optimization State
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrationLogs, setMigrationLogs] = useState<string[]>([]);
+  const [migrationFinished, setMigrationFinished] = useState(false);
 
   useEffect(() => {
     setAutoConfig(AutoBackupService.getConfig());
@@ -142,6 +149,35 @@ export const BackupManager: React.FC = () => {
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleRunMigration = async () => {
+    setIsMigrating(true);
+    setMigrationFinished(false);
+    setMigrationLogs([]);
+    try {
+      const res = await runClientV2Migration((msg) => {
+        setMigrationLogs((prev) => [...prev, msg]);
+      });
+      if (res.success) {
+        setMigrationFinished(true);
+        showToast(
+          language === 'EN'
+            ? 'v2 Schema Optimization & Stats migration completed successfully!'
+            : 'v2 डेटाबेस ऑप्टिमायझेशन व आकडेवारी स्थलांतर यशस्वी झाले!',
+          'success'
+        );
+        refreshData();
+      }
+    } catch (err: any) {
+      setMigrationLogs((prev) => [...prev, `त्रुटी: ${err?.message || err}`]);
+      showToast(
+        language === 'EN' ? 'Migration failed: ' + (err?.message || 'Error') : 'स्थलांतर अयशस्वी झाले.',
+        'error'
+      );
+    } finally {
+      setIsMigrating(false);
+    }
   };
 
   const nextBackupDate = AutoBackupService.getNextBackupDate(autoConfig);
@@ -522,6 +558,72 @@ export const BackupManager: React.FC = () => {
             )}
           </button>
         </div>
+      </div>
+
+      {/* V2 Schema Optimization & Migration Card */}
+      <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-emerald-950 p-6 sm:p-8 rounded-3xl border border-indigo-500/30 shadow-lg text-white">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div className="flex items-start space-x-4">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-400 border border-indigo-400/30 flex items-center justify-center shrink-0">
+              <Zap className="w-6 h-6 text-amber-300" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2 mb-1.5">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Firebase Spark Saver
+                </span>
+                <span className="text-xs text-indigo-200 font-bold">
+                  v2 High-Performance Schema
+                </span>
+              </div>
+              <h3 className="text-lg font-black text-white">
+                {language === 'EN'
+                  ? 'Firestore Read Optimizer & v2 Migration'
+                  : 'फायरस्टोअर रीड ऑप्टिमायझर व v2 स्थलांतर (1-Click Run)'}
+              </h3>
+              <p className="text-xs text-slate-300 font-medium leading-relaxed max-w-2xl mt-1">
+                {language === 'EN'
+                  ? 'Generates the stats/summary singleton document, indexes customer names for instant prefix search, and creates the installments collection to slash Firestore read counts to ~1 on dashboard loads.'
+                  : 'stats/summary डॉक्युमेंट तयार करते, ग्राहकांच्या नावांचे सर्च इंडेक्सिंग करते, आणि हप्त्यांचे वेळापत्रक तयार करून डॅशबोर्ड लोड रीड्स १०,००० वरून थेट १ वर आणते.'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleRunMigration}
+            disabled={isMigrating}
+            className="py-3 px-6 rounded-xl bg-gradient-to-r from-amber-400 to-emerald-400 hover:from-amber-500 hover:to-emerald-500 active:scale-95 text-slate-950 font-black text-sm transition-all shadow-lg flex items-center justify-center space-x-2 shrink-0 disabled:opacity-50 cursor-pointer min-h-[44px]"
+          >
+            {isMigrating ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                <span>{language === 'EN' ? 'Optimizing...' : 'स्थलांतर होत आहे...'}</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-slate-950" />
+                <span>{language === 'EN' ? 'Run v2 Migration Now' : 'v2 ऑप्टिमायझेशन सुरू करा'}</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Live Migration Logs */}
+        {migrationLogs.length > 0 && (
+          <div className="mt-4 p-4 rounded-2xl bg-black/50 border border-white/10 font-mono text-xs text-emerald-300 max-h-48 overflow-y-auto space-y-1">
+            {migrationLogs.map((log, idx) => (
+              <div key={idx} className="flex items-center space-x-2">
+                <span className="text-slate-500">[{idx + 1}]</span>
+                <span>{log}</span>
+              </div>
+            ))}
+            {migrationFinished && (
+              <div className="text-amber-300 font-bold pt-1">
+                ✓ {language === 'EN' ? 'Migration finished successfully! 100% optimized.' : 'स्थलांतर यशस्वीरित्या पूर्ण झाले! १००% ऑप्टिमाइझ झाले.'}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Danger Zone: Wipe All Data */}

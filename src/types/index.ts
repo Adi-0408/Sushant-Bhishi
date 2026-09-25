@@ -30,8 +30,10 @@ export interface BishiConfig {
 export interface Customer {
   id: string;
   accountNumber: string; // Unique
+  accountNo?: string; // Denormalized alias for fast prefix / equality queries
   name: string;
   customerName?: string;
+  nameLower?: string; // Denormalized lowercase name for efficient prefix range queries
   mobile: string;
   bishiType: BishiType;
   bishiName?: string;
@@ -58,6 +60,39 @@ export interface Customer {
   };
   installments?: any[];
   loanDetails?: any;
+}
+
+// ── Installments (Due-Schedule) Schema ──────────────────────────────────────
+export interface Installment {
+  id: string; // e.g. inst_bishi_${customerId}_${periodIndex} or inst_loan_${loanId}_${periodIndex}
+  customerId: string;
+  customerName: string; // Denormalized to avoid re-fetching customer doc
+  accountNumber: string;
+  accountNo?: string;
+  type: 'bishi' | 'loan';
+  sourceId: string; // bishiType or loanId this belongs to
+  dueDate: string; // YYYY-MM-DD (start of day)
+  amount: number;
+  status: 'pending' | 'paid' | 'overdue';
+  paidAt: string | null;
+  periodIndex?: number;
+  periodLabel?: string;
+  officeId?: OfficeId;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// ── Stats Summary Singleton Schema (stats/summary) ─────────────────────────
+export interface StatsSummary {
+  totalCustomers: number;
+  todaysCollection: number;
+  totalBishiCollected: number;
+  totalPrincipalLoans: number;
+  loanBalanceDue: number;
+  todaysPenalty: number;
+  todaysDueAmount: number;
+  todaysDueInstallments: number;
+  lastUpdated: string;
 }
 
 export interface CollectionEntry {

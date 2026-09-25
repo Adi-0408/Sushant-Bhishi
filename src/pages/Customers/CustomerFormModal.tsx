@@ -8,6 +8,9 @@ import { MarathiTextInput, convertTextToMarathi } from '../../components/common/
 import { CustomDropdown } from '../../components/common/CustomDropdown';
 import { ModalPortal } from '../../components/common/ModalPortal';
 import { X, UserPlus, Save, AlertCircle, CheckCircle2, Landmark, Calendar, Clock, DollarSign } from 'lucide-react';
+import { checkAccountNumberExists } from '../../services/customerSearch';
+import { generateBishiInstallmentSchedule, generateLoanInstallmentSchedule, saveInstallmentsBatchToFirestore } from '../../services/installments';
+import { invalidateStatsCache } from '../../services/stats';
 
 interface CustomerFormModalProps {
   isOpen: boolean;
@@ -286,6 +289,19 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           : address.trim()
         : '';
 
+      if (!editingCustomer) {
+        const isDup = await checkAccountNumberExists(accountNumber.trim());
+        if (isDup) {
+          setError(
+            language === 'EN'
+              ? 'This account number already exists. Please use a unique number.'
+              : 'हा खाते क्रमांक आधीपासून वापरामध्ये आहे. कृपया वेगळा खाते क्रमांक वापरा.'
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+
       if (editingCustomer) {
         // Update customer
         const updated = StorageService.updateCustomer(editingCustomer.id, {
@@ -528,6 +544,25 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           });
 
           StorageService.saveCollectionsBatch(preparedCollections);
+
+          // Step 1: Generate and save bishi installments schedule upfront
+          const bishiInstallments = generateBishiInstallmentSchedule(
+            newCustomer,
+            bishiDate,
+            targetInstallments,
+            modality
+          );
+          if (Number(alreadyPaidAmount) > 0) {
+            let budget = Number(alreadyPaidAmount);
+            bishiInstallments.forEach((inst) => {
+              if (budget >= inst.amount && inst.amount > 0) {
+                inst.status = 'paid';
+                inst.paidAt = inst.dueDate;
+                budget -= inst.amount;
+              }
+            });
+          }
+          saveInstallmentsBatchToFirestore(bishiInstallments);
         }
 
         // Save Loan if applicable
@@ -563,6 +598,10 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             status: isCompleted ? 'COMPLETED' : 'ACTIVE',
           });
 
+          // Step 1: Generate and save loan installment schedule upfront
+          const loanInstallments = generateLoanInstallmentSchedule(savedLoan);
+          saveInstallmentsBatchToFirestore(loanInstallments);
+
           if (paidPrin > 0 || paidInt > 0) {
             StorageService.addLoanPayment({
               loanId: savedLoan.id,
@@ -583,6 +622,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           }
         }
 
+        invalidateStatsCache();
         showToast(language === 'EN' ? 'New customer added successfully.' : 'नवीन खातेदार यशस्वीपणे जोडला गेला.', 'success');
         setSuccessCustomer({
           id: newCustomer.id,

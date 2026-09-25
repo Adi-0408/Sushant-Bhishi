@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Customer, BishiType, Modality, OfficeId, CollectionEntry, Loan } from '../../types';
 import {
@@ -7,12 +7,16 @@ import {
   getModalityShort,
   getOfficeNameMarathi,
   getStatusBadgeClass,
-  matchesCustomerSearch,
 } from '../../utils/formatters';
 import { calculateCustomerFinancials } from '../../utils/calculations';
 import { CustomerFormModal } from './CustomerFormModal';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { StorageService } from '../../services/db';
+import {
+  fetchCustomersPaginated,
+  searchCustomersByName,
+  searchCustomerByAccountNumber,
+} from '../../services/customerSearch';
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 import { CustomDropdown } from '../../components/common/CustomDropdown';
 import { QuickCollectionModal } from '../../components/collections/QuickCollectionModal';
@@ -24,15 +28,26 @@ import {
   Edit,
   Trash2,
   Wallet,
-  Filter,
   Users,
   X,
+  RefreshCw,
 } from 'lucide-react';
 
 export const CustomerList: React.FC = () => {
-  const { customers, collections, loans, bishiConfigs, activeOffice, setActiveOffice, refreshData, showToast, t, language } = useApp();
+  const { collections, loans, bishiConfigs, activeOffice, setActiveOffice, refreshData, showToast, t, language } = useApp();
 
+  // ── Step 4: Paginated list state (cost capped at 20 reads per page) ──
+  const [paginatedCustomers, setPaginatedCustomers] = useState<Customer[]>([]);
+  const [lastDocSnapshot, setLastDocSnapshot] = useState<any>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Search state (0 reads when empty; prefix search capped at 20 reads; accNo capped at 1 read)
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<Customer[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+
   const [bishiFilter, setBishiFilter] = useState<'ALL' | BishiType>('ALL');
   const [modalityFilter, setModalityFilter] = useState<'ALL' | Modality>('ALL');
   const [officeFilter, setOfficeFilter] = useState<'ALL' | OfficeId>(activeOffice);
@@ -48,81 +63,145 @@ export const CustomerList: React.FC = () => {
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
   const [collectCustomer, setCollectCustomer] = useState<Customer | null>(null);
 
-  // High-performance memoized financials map: indexed in O(C + N) single pass!
+  // Initial load of first 20 customers
+  const loadInitialCustomers = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetchCustomersPaginated(20, null);
+      setPaginatedCustomers(res.customers);
+      setLastDocSnapshot(res.lastDoc);
+      setHasMore(res.hasMore);
+    } catch (err) {
+      console.warn('[CustomerList] Initial load note:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadInitialCustomers();
+  }, [loadInitialCustomers]);
+
+  // Load more via cursor pagination (startAfter)
+  const handleLoadMore = async () => {
+    if (!lastDocSnapshot || isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    try {
+      const res = await fetchCustomersPaginated(20, lastDocSnapshot);
+      setPaginatedCustomers((prev) => [...prev, ...res.customers]);
+      setLastDocSnapshot(res.lastDoc);
+      setHasMore(res.hasMore);
+    } catch (err) {
+      console.warn('[CustomerList] Load more note:', err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  // Debounced search query
+  useEffect(() => {
+    const term = searchTerm.trim();
+    if (!term) {
+      setSearchResults(null);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        if (/^\d+$/.test(term)) {
+          // Account number lookup — strictly 1 read!
+          const cust = await searchCustomerByAccountNumber(term);
+          setSearchResults(cust ? [cust] : []);
+        } else {
+          // Name prefix range query — strictly max 20 reads!
+          const results = await searchCustomersByName(term, 20);
+          setSearchResults(results);
+        }
+      } catch (err) {
+        console.warn('[CustomerList] Search note:', err);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  const activeList = searchResults !== null ? searchResults : paginatedCustomers;
+
+  // O(N) financials for visible items only (never whole collection scan)
   const customerFinancialsMap = useMemo(() => {
-    const collsByCust = new Map<string, CollectionEntry[]>();
-    for (let i = 0; i < collections.length; i++) {
-      const c = collections[i];
-      const list = collsByCust.get(c.customerId);
-      if (list) {
-        list.push(c);
-      } else {
-        collsByCust.set(c.customerId, [c]);
-      }
-    }
-
-    const loansByCust = new Map<string, Loan>();
-    const loansByAcc = new Map<string, Loan>();
-    for (let i = 0; i < loans.length; i++) {
-      const l = loans[i];
-      if (!loansByCust.has(l.customerId) || l.status === 'ACTIVE') {
-        loansByCust.set(l.customerId, l);
-      }
-      if (l.accountNumber && (!loansByAcc.has(l.accountNumber) || l.status === 'ACTIVE')) {
-        loansByAcc.set(l.accountNumber, l);
-      }
-    }
-
     const map = new Map<string, ReturnType<typeof calculateCustomerFinancials>>();
-    for (let i = 0; i < customers.length; i++) {
-      const cust = customers[i];
-      const custColls = collsByCust.get(cust.id) || [];
-      const custLoan = loansByCust.get(cust.id) || (cust.accountNumber ? loansByAcc.get(cust.accountNumber) : null) || null;
-      map.set(cust.id, calculateCustomerFinancials(cust, custColls, custLoan, bishiConfigs));
+    for (let i = 0; i < activeList.length; i++) {
+      const cust = activeList[i];
+      if (cust.summary) {
+        map.set(cust.id, {
+          isCurrentDuePaid: cust.summary.pendingInstallments === 0,
+          totalCollectedBishi: cust.summary.totalCollected,
+          totalExtraAmount: cust.summary.totalExtraAmount || 0,
+          totalRemainingBishi: cust.summary.totalRemaining,
+          loanPrincipal: cust.loanDetails?.principal || 0,
+          loanRemaining: cust.loanDetails?.remaining || 0,
+          totalPayableWithInterest: cust.summary.totalExpected || 0,
+        } as any);
+      } else {
+        const custColls = collections.filter(
+          (c) => c.customerId === cust.id || (cust.accountNumber && c.accountNumber === cust.accountNumber)
+        );
+        const custLoan =
+          loans.find(
+            (l) =>
+              (l.customerId === cust.id || (cust.accountNumber && l.accountNumber === cust.accountNumber)) &&
+              l.status === 'ACTIVE'
+          ) || null;
+        map.set(cust.id, calculateCustomerFinancials(cust, custColls, custLoan, bishiConfigs));
+      }
     }
     return map;
-  }, [customers, collections, loans, bishiConfigs]);
+  }, [activeList, collections, loans, bishiConfigs]);
 
   // Filtered List Computation
-  const filteredCustomers = customers.filter((cust) => {
-    const isSearching = Boolean(searchTerm.trim());
+  const filteredCustomers = useMemo(() => {
+    return activeList.filter((cust) => {
+      // Office filter
+      if (officeFilter !== 'ALL' && cust.officeId !== officeFilter) {
+        return false;
+      }
 
-    // When actively searching, match query (account number, name, mobile) across all customers
-    if (isSearching) {
-      return matchesCustomerSearch(cust, searchTerm);
-    }
+      // Bishi filter
+      if (bishiFilter !== 'ALL' && cust.bishiType !== bishiFilter) {
+        return false;
+      }
 
-    // Office filter
-    if (officeFilter !== 'ALL' && cust.officeId !== officeFilter) {
-      return false;
-    }
+      // Modality filter
+      if (modalityFilter !== 'ALL' && cust.modality !== modalityFilter) {
+        return false;
+      }
 
-    // Bishi filter
-    if (bishiFilter !== 'ALL' && cust.bishiType !== bishiFilter) {
-      return false;
-    }
+      // Status filter
+      if (statusFilter !== 'ALL') {
+        const financials = customerFinancialsMap.get(cust.id);
+        if (statusFilter === 'BORROWER' && !cust.hasLoan && cust.bishiType !== 'LOAN_ONLY' && (!financials || financials.loanPrincipal <= 0)) return false;
+        if (statusFilter === 'PAID' && !financials?.isCurrentDuePaid) return false;
+        if (statusFilter === 'PENDING' && financials?.isCurrentDuePaid) return false;
+      }
 
-    // Modality filter
-    if (modalityFilter !== 'ALL' && cust.modality !== modalityFilter) {
-      return false;
-    }
-
-    // Status filter
-    if (statusFilter !== 'ALL') {
-      const financials = customerFinancialsMap.get(cust.id);
-      if (statusFilter === 'BORROWER' && !cust.hasLoan && cust.bishiType !== 'LOAN_ONLY' && (!financials || financials.loanPrincipal <= 0)) return false;
-      if (statusFilter === 'PAID' && !financials?.isCurrentDuePaid) return false;
-      if (statusFilter === 'PENDING' && financials?.isCurrentDuePaid) return false;
-    }
-
-    return true;
-  });
+      return true;
+    });
+  }, [activeList, officeFilter, bishiFilter, modalityFilter, statusFilter, customerFinancialsMap]);
 
   const handleDeleteConfirm = async () => {
     if (!customerToDelete) return;
     try {
       await StorageService.deleteCustomer(customerToDelete.id);
       showToast(language === 'EN' ? 'Customer deleted successfully.' : 'खातेदाराची माहिती यशस्वीपणे हटवली.', 'success');
+      setPaginatedCustomers((prev) => prev.filter((c) => c.id !== customerToDelete.id));
+      if (searchResults) {
+        setSearchResults((prev) => (prev ? prev.filter((c) => c.id !== customerToDelete.id) : null));
+      }
       refreshData();
       setCustomerToDelete(null);
     } catch {
@@ -551,6 +630,26 @@ export const CustomerList: React.FC = () => {
             </div>
           </>
         )}
+
+        {/* Cursor pagination: Load More Button */}
+        {searchResults === null && hasMore && (
+          <div className="p-4 flex justify-center bg-slate-50 border-t border-slate-200">
+            <button
+              onClick={handleLoadMore}
+              disabled={isLoadingMore}
+              className="px-6 py-2.5 rounded-xl bg-white border border-[#E4EAE7] hover:border-[#0F7A5C] text-[#0F7A5C] font-extrabold text-sm shadow-xs transition-all flex items-center space-x-2 cursor-pointer disabled:opacity-50"
+            >
+              {isLoadingMore ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin text-[#0F7A5C]" />
+                  <span>{language === 'EN' ? 'Loading...' : 'लोड होत आहे...'}</span>
+                </>
+              ) : (
+                <span>{language === 'EN' ? 'Load More Customers (20)' : 'अधिक खातेदार दाखवा (२०)'}</span>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Form Modal */}
@@ -558,7 +657,10 @@ export const CustomerList: React.FC = () => {
         isOpen={isFormOpen}
         editingCustomer={editingCustomer}
         onClose={() => setIsFormOpen(false)}
-        onSuccess={refreshData}
+        onSuccess={() => {
+          refreshData();
+          loadInitialCustomers();
+        }}
       />
 
       {/* Delete Confirmation Modal */}
