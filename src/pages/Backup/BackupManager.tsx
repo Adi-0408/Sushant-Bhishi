@@ -459,19 +459,47 @@ export const BackupManager: React.FC = () => {
 
       {/* Cloud Database Sync Card */}
       <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#E4EAE7] shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
           <div className="flex items-start space-x-4">
             <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
               <Cloud className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-lg font-black text-[#10241E] mb-1">
-                {language === 'EN' ? 'Firebase Live Cloud Database Sync' : 'Firebase क्लाउड डेटाबेस थेट सिंक (Live Cloud Sync)'}
-              </h3>
+              <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                <h3 className="text-lg font-black text-[#10241E]">
+                  {language === 'EN' ? 'Firebase Live Cloud Database Sync' : 'Firebase क्लाउड डेटाबेस थेट सिंक (Live Cloud Sync)'}
+                </h3>
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border ${
+                  syncStatus === 'syncing'
+                    ? 'bg-amber-50 border-amber-300 text-amber-800'
+                    : syncStatus === 'synced'
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                    : syncStatus === 'error'
+                    ? 'bg-rose-50 border-rose-300 text-rose-800'
+                    : 'bg-slate-50 border-slate-200 text-slate-700'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${
+                    syncStatus === 'syncing'
+                      ? 'bg-amber-500 animate-ping'
+                      : syncStatus === 'synced'
+                      ? 'bg-emerald-500'
+                      : syncStatus === 'error'
+                      ? 'bg-rose-500'
+                      : 'bg-[#0F7A5C]'
+                  }`} />
+                  {syncStatus === 'syncing'
+                    ? (language === 'EN' ? 'Syncing...' : 'सिंक होत आहे...')
+                    : syncStatus === 'synced'
+                    ? (language === 'EN' ? 'Connected & Synced' : 'क्लाउड सिंक पूर्ण')
+                    : syncStatus === 'error'
+                    ? (language === 'EN' ? 'Sync Error' : 'सिंक त्रुटी')
+                    : (language === 'EN' ? 'Live Cloud Connected' : 'क्लाउड कनेक्टेड')}
+                </span>
+              </div>
               <p className="text-xs text-[#5F6E68] font-bold leading-relaxed max-w-2xl">
                 {language === 'EN'
-                  ? 'Sync all customers, bishi entries, collections, and loan records directly to your connected Google Firebase cloud database.'
-                  : 'सर्व खातेदार, त्यांचे तपशील, कर्ज, हप्ते जमा नोंदी आणि सर्व भिशी डेटा तुमच्या जोडलेल्या Firebase क्लाउड डेटाबेसमध्ये सुरक्षित जतन करा.'}
+                  ? 'Sync all customers, bishi accounts, weekly/monthly installments, loans, payments, and configs directly to your Google Firebase cloud database.'
+                  : 'सर्व खातेदार, त्यांचे तपशील, कर्ज, हप्ते जमा नोंदी आणि सर्व भिशी डेटा तुमच्या जोडलेल्या Firebase क्लाउड डेटाबेसमध्ये थेट आणि सुरक्षित जतन करा.'}
               </p>
             </div>
           </div>
@@ -479,12 +507,12 @@ export const BackupManager: React.FC = () => {
           <button
             onClick={syncWithFirebase}
             disabled={syncStatus === 'syncing'}
-            className="py-3 px-6 rounded-xl bg-[#0F7A5C] hover:bg-[#0B5C45] text-white font-black text-sm transition-all shadow-md flex items-center justify-center space-x-2 shrink-0 disabled:opacity-50 cursor-pointer"
+            className="py-3 px-6 rounded-xl bg-[#0F7A5C] hover:bg-[#0B5C45] active:scale-[0.98] text-white font-black text-sm transition-all shadow-md hover:shadow-lg flex items-center justify-center space-x-2 shrink-0 disabled:opacity-50 cursor-pointer min-h-[44px] touch-target"
           >
             {syncStatus === 'syncing' ? (
               <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>{language === 'EN' ? 'Syncing...' : 'सिंक होत आहे...'}</span>
+                <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                <span>{language === 'EN' ? 'Syncing to Cloud...' : 'क्लाउडवर सिंक होत आहे...'}</span>
               </>
             ) : (
               <>

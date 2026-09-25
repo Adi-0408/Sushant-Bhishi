@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, Calendar as CalendarIcon, User, Landmark, Globe, Plus, Cloud, RefreshCw, ChevronDown } from 'lucide-react';
+import { Menu, Calendar as CalendarIcon, User, Landmark, Globe, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { formatDateMarathi } from '../../utils/formatters';
@@ -15,7 +15,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
   const { currentAdmin, logout } = useAuth();
-  const { activeOffice, setActiveOffice, language, setLanguage, t, syncStatus, syncWithFirebase } = useApp();
+  const { activeOffice, setActiveOffice, language, setLanguage, t } = useApp();
   const navigate = useNavigate();
 
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -84,34 +84,6 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
             triggerClassName="h-9 sm:h-10 bg-[#F4F6F5]"
           />
         </div>
-
-        {/* Cloud Sync Button */}
-        <button
-          onClick={syncWithFirebase}
-          title={language === 'EN' ? 'Sync with Cloud Database' : 'Firebase डेटाबेस सिंक (Sync with Cloud Database)'}
-          className={`h-9 sm:h-10 min-h-[44px] min-w-[44px] flex items-center justify-center space-x-1.5 px-3 py-1 rounded-xl border transition-all text-xs font-extrabold cursor-pointer shadow-2xs hover:scale-[1.02] active:scale-[0.98] touch-target ${
-            syncStatus === 'syncing'
-              ? 'bg-amber-50 border-amber-300 text-amber-700'
-              : syncStatus === 'synced'
-              ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-              : syncStatus === 'error'
-              ? 'bg-rose-50 border-rose-300 text-rose-700'
-              : 'bg-white border-[#E4EAE7] text-[#5F6E68] hover:border-[#0F7A5C] hover:text-[#0F7A5C] hover:shadow-xs'
-          }`}
-        >
-          {syncStatus === 'syncing' ? (
-            <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
-          ) : (
-            <Cloud className={`w-3.5 h-3.5 ${syncStatus === 'synced' ? 'text-emerald-600' : 'text-[#0F7A5C]'}`} />
-          )}
-          <span className="hidden xl:inline">
-            {syncStatus === 'syncing'
-              ? (language === 'EN' ? 'Syncing...' : 'सिंक...')
-              : syncStatus === 'synced'
-              ? (language === 'EN' ? 'Synced' : 'सिंक झाले')
-              : (language === 'EN' ? 'Cloud Sync' : 'क्लाउड सिंक')}
-          </span>
-        </button>
 
         {/* User Profile Avatar Dropdown */}
         <div className="relative">
