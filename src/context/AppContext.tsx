@@ -13,7 +13,7 @@ import {
   ThakbakiEntry,
 } from '../types';
 import { StorageService } from '../services/db';
-
+import { useAuth } from './AuthContext';
 import { Language, translations } from '../utils/translations';
 
 interface Toast {
@@ -51,6 +51,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentAdmin } = useAuth();
   const [language, setLanguageState] = useState<Language>(() => {
     const saved = localStorage.getItem('sushant_bishi_language');
     return saved === 'EN' ? 'EN' : 'MR';
@@ -124,13 +125,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSyncStatus(status);
     });
 
-    // 2. Attach real-time listeners for updates from Firebase Firestore across all 8 collections
-    const unsubscribe = StorageService.setupFirestoreListeners(() => {
-      refreshData();
-    });
+    // 2. Only attach real-time Firestore listeners if an admin is authenticated
+    // This completely prevents unauthenticated or login-page cloud reads
+    if (!currentAdmin) {
+      return () => {
+        if (unsubStatus) unsubStatus();
+      };
+    }
 
-    // 3. Proactive initial cloud pull to ensure multi-device sync immediately upon app open
-    StorageService.fetchAndSyncFromFirestore().then(() => {
+    // 3. Attach real-time listeners for updates from Firebase Firestore across collections.
+    // With persistent local cache enabled, onSnapshot serves instantly from IndexedDB (0 server reads)
+    // and only streams changed documents when actual updates occur.
+    const unsubscribe = StorageService.setupFirestoreListeners(() => {
       refreshData();
     });
 
@@ -138,7 +144,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (unsubscribe) unsubscribe();
       if (unsubStatus) unsubStatus();
     };
-  }, []);
+  }, [currentAdmin]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     const id = 'toast_' + Date.now() + Math.random();

@@ -322,9 +322,6 @@ const syncToFirestore = async (collectionName: string, docId: string, data: any)
     const cleanData = sanitizeForFirestore(enrichedData);
     const ref = doc(db, collectionName, readableDocId);
     await setDoc(ref, cleanData);
-    if (readableDocId !== docId) {
-      deleteDoc(doc(db, collectionName, docId)).catch(() => {});
-    }
     console.log(`[Firestore Sync] Saved to ${collectionName}/${readableDocId}`);
     endSyncOp(true);
   } catch (e: any) {
@@ -541,7 +538,6 @@ const initializeDefaultConfigs = () => {
       },
     ];
     setStoredData(STORAGE_KEYS.BISHI_CONFIGS, defaults);
-    defaults.forEach((d) => syncToFirestore('bishi', d.id, d));
   }
 
   const penalty = getStoredData<PenaltySetting | null>(STORAGE_KEYS.PENALTY_SETTINGS, null);
@@ -553,7 +549,6 @@ const initializeDefaultConfigs = () => {
       graceDays: 2,
     };
     setStoredData<PenaltySetting>(STORAGE_KEYS.PENALTY_SETTINGS, defaultPenalty);
-    syncToFirestore('penaltySettings', 'default', defaultPenalty);
   }
 
   const interest = getStoredData<InterestRateConfig[]>(STORAGE_KEYS.INTEREST_RATES, []);
@@ -575,10 +570,9 @@ const initializeDefaultConfigs = () => {
       },
     ];
     setStoredData<InterestRateConfig[]>(STORAGE_KEYS.INTEREST_RATES, defaultInterest);
-    defaultInterest.forEach((d) => syncToFirestore('interestRates', d.id, d));
   }
 
-  // Delete all previous admin records and create single new admin (9876543210 / 123456)
+  // Set up primary admin credentials locally if uninitialized
   const PRIMARY_ADMIN: Admin = {
     id: 'admin_primary',
     name: 'सुषांत भिशी व्यवस्थापक',
@@ -597,25 +591,12 @@ const initializeDefaultConfigs = () => {
       admins[0].id === 'admin_primary';
 
     if (!hasOnlyPrimaryAdmin) {
-      // Delete any previous admin records locally and in Firestore
-      if (Array.isArray(admins)) {
-        admins.forEach((oldAdmin) => {
-          if (oldAdmin?.id && oldAdmin.id !== 'admin_primary') {
-            deleteFromFirestore('admins', oldAdmin.id);
-          }
-        });
-      }
-      deleteFromFirestore('admins', 'admin_default');
-
       const currentPass = localStorage.getItem('sb_admin_pass') || '123456';
       const adminWithPass = { ...PRIMARY_ADMIN, password: currentPass };
       setStoredData(STORAGE_KEYS.ADMINS, [adminWithPass]);
       localStorage.setItem('sb_admin_pass', currentPass);
-      localStorage.removeItem('sb_active_session'); // Clear old session so user logs in with new credentials
-      syncToFirestore('admins', PRIMARY_ADMIN.id, adminWithPass);
     } else if (!localStorage.getItem('sb_admin_pass')) {
       localStorage.setItem('sb_admin_pass', '123456');
-      syncToFirestore('admins', PRIMARY_ADMIN.id, { ...PRIMARY_ADMIN, password: '123456' });
     }
   } catch (err) {
     console.warn('initializeDefaultConfigs admin setup note:', err);
@@ -1051,16 +1032,6 @@ export const StorageService = {
     setStoredData(STORAGE_KEYS.COLLECTIONS, dedupedList);
 
     syncToFirestore('collections', target.id || id, updatedEntry);
-
-    // Re-sync customer document so summary and installments in Firestore update immediately
-    const custId = updatedEntry.customerId;
-    if (custId) {
-      const cust = StorageService.getCustomerById(custId);
-      if (cust) {
-        syncToFirestore('customers', cust.id, cust);
-      }
-    }
-
     return updatedEntry;
   },
 
@@ -1070,13 +1041,6 @@ export const StorageService = {
     const filtered = collections.filter((c) => c.id !== id);
     setStoredData(STORAGE_KEYS.COLLECTIONS, filtered);
     await deleteFromFirestore('collections', id, entryToDelete);
-
-    if (entryToDelete?.customerId) {
-      const cust = StorageService.getCustomerById(entryToDelete.customerId);
-      if (cust) {
-        await syncToFirestore('customers', cust.id, cust);
-      }
-    }
   },
 
   // Loan Operations
@@ -1654,42 +1618,63 @@ export const StorageService = {
     }
   },
 
-  // Complete Cloud Database Sync: Uploads all local data to Firebase Firestore
+  // Complete Cloud Database Sync: Uploads all local data to Firebase Firestore using fast atomic batches
   syncAllToFirestore: async (): Promise<void> => {
     try {
       const customers = StorageService.getCustomers();
-      for (const c of customers) {
-        await syncToFirestore('customers', c.id, c);
+      if (customers.length > 0) {
+        await syncBatchToFirestore(
+          'customers',
+          customers.map((c) => ({ docId: c.id, data: c }))
+        );
       }
       const loans = StorageService.getLoans();
-      for (const l of loans) {
-        await syncToFirestore('loans', l.id, l);
+      if (loans.length > 0) {
+        await syncBatchToFirestore(
+          'loans',
+          loans.map((l) => ({ docId: l.id, data: l }))
+        );
       }
       const loanPayments = StorageService.getLoanPayments();
-      for (const p of loanPayments) {
-        await syncToFirestore('loanPayments', p.id, p);
+      if (loanPayments.length > 0) {
+        await syncBatchToFirestore(
+          'loanPayments',
+          loanPayments.map((p) => ({ docId: p.id, data: p }))
+        );
       }
       const collections = StorageService.getCollections();
-      for (const col of collections) {
-        await syncToFirestore('collections', col.id, col);
+      if (collections.length > 0) {
+        await syncBatchToFirestore(
+          'collections',
+          collections.map((col) => ({ docId: col.id, data: col }))
+        );
       }
       const bishi = StorageService.getBishiConfigs();
-      for (const b of bishi) {
-        await syncToFirestore('bishi', b.id, b);
+      if (bishi.length > 0) {
+        await syncBatchToFirestore(
+          'bishi',
+          bishi.map((b) => ({ docId: b.id, data: b }))
+        );
       }
       const interest = StorageService.getInterestRates();
-      for (const i of interest) {
-        await syncToFirestore('interestRates', i.id, i);
+      if (interest.length > 0) {
+        await syncBatchToFirestore(
+          'interestRates',
+          interest.map((i) => ({ docId: i.id, data: i }))
+        );
       }
       const penalty = StorageService.getPenaltySettings();
       if (penalty) {
         await syncToFirestore('penaltySettings', penalty.id || 'default', penalty);
       }
       const thakbakiList = StorageService.getThakbakiList();
-      for (const tb of thakbakiList) {
-        await syncToFirestore('thakbaki', tb.id, tb);
+      if (thakbakiList.length > 0) {
+        await syncBatchToFirestore(
+          'thakbaki',
+          thakbakiList.map((tb) => ({ docId: tb.id, data: tb }))
+        );
       }
-      console.log('[Firestore] Complete synchronization finished.');
+      console.log('[Firestore] Complete batch synchronization finished.');
     } catch (err) {
       console.warn('[Firestore] Sync all error:', err);
     }
@@ -1730,10 +1715,7 @@ export const StorageService = {
           const acc = String(raw.accountNumber || '').trim().toLowerCase();
           const key = acc || raw.id || d.id;
           if (seenCustDocs.has(key)) {
-            const oldDoc = seenCustDocs.get(key);
             const readableId = getFirestoreDocId('customers', d.id, raw);
-            const toDeleteId = d.id === readableId ? oldDoc.id : d.id;
-            deleteDoc(doc(db, 'customers', toDeleteId)).catch(() => {});
             if (d.id === readableId) seenCustDocs.set(key, d);
           } else {
             seenCustDocs.set(key, d);
@@ -1762,10 +1744,7 @@ export const StorageService = {
           const key = bishi ? `${primaryKey}_${bishi}` : primaryKey;
 
           if (seenCollDocs.has(key)) {
-            const oldDoc = seenCollDocs.get(key);
             const readableId = getFirestoreDocId('collections', d.id, raw);
-            const toDeleteId = d.id === readableId ? oldDoc.id : d.id;
-            deleteDoc(doc(db, 'collections', toDeleteId)).catch(() => {});
             if (d.id === readableId) seenCollDocs.set(key, d);
           } else {
             seenCollDocs.set(key, d);
@@ -1789,10 +1768,7 @@ export const StorageService = {
           const acc = String(raw.accountNumber || '').trim().toLowerCase();
           const key = raw.id || d.id || (acc ? `${acc}_${raw.issueDate || ''}_${raw.principalAmount || 0}` : (raw.customerId || Math.random().toString()));
           if (seenLoanDocs.has(key)) {
-            const oldDoc = seenLoanDocs.get(key);
             const readableId = getFirestoreDocId('loans', d.id, raw);
-            const toDeleteId = d.id === readableId ? oldDoc.id : d.id;
-            deleteDoc(doc(db, 'loans', toDeleteId)).catch(() => {});
             if (d.id === readableId) seenLoanDocs.set(key, d);
           } else {
             seenLoanDocs.set(key, d);

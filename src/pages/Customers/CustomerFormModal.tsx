@@ -450,7 +450,10 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
               }
               return c;
             });
-            StorageService.saveCollectionsBatch(updatedCustomerColls);
+            const onlyEditedCustomerColls = updatedCustomerColls.filter(
+              (c) => c.customerId === editingCustomer.id || (editingCustomer.accountNumber && c.accountNumber === editingCustomer.accountNumber)
+            );
+            StorageService.saveCollectionsBatch(onlyEditedCustomerColls);
           }
         }
 
