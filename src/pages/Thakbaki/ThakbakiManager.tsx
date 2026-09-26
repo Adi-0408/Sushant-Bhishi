@@ -21,6 +21,7 @@ import {
   TrendingUp,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
 } from 'lucide-react';
 
 // ── Helper: Office Name ───────────────────────────────────────────────────────
@@ -39,7 +40,7 @@ const PAYMENT_MODE_OPTIONS = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const ThakbakiManager: React.FC = () => {
-  const { thakbakiList, customers, refreshData, showToast, language, t } = useApp();
+  const { thakbakiList, customers, refreshData, showToast, language, t, isRefreshing, refreshAllData } = useApp();
 
   // ── Filters ────────────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -318,13 +319,25 @@ export const ThakbakiManager: React.FC = () => {
             </h2>
             <p className="text-xs text-slate-500 font-medium mt-0.5">{t.thakbakiSub}</p>
           </div>
-          <button
-            onClick={handleOpenAddModal}
-            className="flex items-center space-x-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs transition-colors shadow-md touch-target cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{t.addThakbaki}</span>
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => refreshAllData()}
+              disabled={isRefreshing}
+              title={language === 'EN' ? 'Refresh Thak Baki (0 reads if unchanged)' : 'थकबाकी डेटा रिफ्रेश करा (बदल नसल्यास ० रीड्स)'}
+              className="h-10 px-3.5 bg-white hover:bg-emerald-50 text-[#0F7A5C] font-extrabold text-xs rounded-xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-1.5 cursor-pointer disabled:opacity-60 active:scale-95 transition-all"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-[#0F7A5C] ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{language === 'EN' ? 'Refresh' : 'रिफ्रेश'}</span>
+            </button>
+
+            <button
+              onClick={handleOpenAddModal}
+              className="flex items-center space-x-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs transition-colors shadow-md touch-target cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{t.addThakbaki}</span>
+            </button>
+          </div>
         </div>
       </div>
 

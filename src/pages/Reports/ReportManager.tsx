@@ -27,10 +27,11 @@ import {
   BookOpen,
   User,
   ClipboardList,
+  RefreshCw,
 } from 'lucide-react';
 
 export const ReportManager: React.FC = () => {
-  const { customers, collections, loans, bishiConfigs, activeOffice, selectedBishiFilter, t, language, thakbakiList } = useApp();
+  const { customers, collections, loans, bishiConfigs, activeOffice, selectedBishiFilter, t, language, thakbakiList, isRefreshing, refreshAllData } = useApp();
 
   const [viewMode, setViewMode] = useState<'LEDGER_CARD' | 'SUMMARY' | 'THAKBAKI'>('LEDGER_CARD');
   const [timePeriodFilter, setTimePeriodFilter] = useState<'ALL' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'>('ALL');
@@ -345,6 +346,17 @@ export const ReportManager: React.FC = () => {
 
         {/* Export & Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Refresh Button */}
+          <button
+            onClick={() => refreshAllData()}
+            disabled={isRefreshing}
+            title={language === 'EN' ? 'Refresh Reports (0 reads if unchanged)' : 'अहवाल डेटा रिफ्रेश करा (बदल नसल्यास ० रीड्स)'}
+            className="px-3.5 py-2.5 min-h-[44px] rounded-xl bg-white hover:bg-emerald-50 text-[#0F7A5C] border border-[#E4EAE7] font-extrabold text-xs shadow-2xs flex items-center space-x-1.5 touch-target cursor-pointer disabled:opacity-60 active:scale-95 transition-all"
+          >
+            <RefreshCw className={`w-4 h-4 text-[#0F7A5C] ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{language === 'EN' ? 'Refresh' : 'रिफ्रेश'}</span>
+          </button>
+
           <button
             onClick={() => setIsNoteModalOpen(true)}
             className="px-3.5 py-2.5 min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition-colors flex items-center space-x-1.5 touch-target cursor-pointer"

@@ -3,13 +3,13 @@ import { useApp } from '../../context/AppContext';
 import { BishiConfig, BishiType, Modality } from '../../types';
 import { StorageService } from '../../services/db';
 import { formatDateMarathi, getOfficeNameMarathi } from '../../utils/formatters';
-import { Calendar, Save, Edit3, Plus, X, Trash2 } from 'lucide-react';
+import { Calendar, Save, Edit3, Plus, X, Trash2, RefreshCw } from 'lucide-react';
 import { ModalPortal } from '../../components/common/ModalPortal';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { MarathiTextInput, convertTextToMarathi } from '../../components/common/MarathiTextInput';
 
 export const BishiManager: React.FC = () => {
-  const { bishiConfigs, customers, activeOffice, refreshData, showToast, language } = useApp();
+  const { bishiConfigs, customers, activeOffice, refreshData, showToast, language, isRefreshing, refreshAllData } = useApp();
 
   const [editingId, setEditingId] = useState<BishiType | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -372,13 +372,25 @@ export const BishiManager: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] rounded-xl bg-emerald-700 text-white font-extrabold text-sm hover:bg-emerald-800 transition-colors shadow-md flex items-center justify-center space-x-2 touch-target cursor-pointer"
-        >
-          <Plus className="w-5 h-5" />
-          <span>{language === 'EN' ? 'Add Bishi Scheme' : 'नवीन भिशी योजना जोडा'}</span>
-        </button>
+        <div className="flex items-center space-x-2 w-full sm:w-auto">
+          <button
+            onClick={() => refreshAllData()}
+            disabled={isRefreshing}
+            title={language === 'EN' ? 'Refresh Bishi Schemes (0 reads if unchanged)' : 'भिशी योजना डेटा रिफ्रेश करा (बदल नसल्यास ० रीड्स)'}
+            className="w-full sm:w-auto min-h-[44px] px-3.5 py-2.5 bg-white hover:bg-emerald-50 text-[#0F7A5C] font-extrabold text-xs rounded-xl border border-[#E4EAE7] shadow-2xs flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-60 active:scale-95 transition-all"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[#0F7A5C] ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{language === 'EN' ? 'Refresh' : 'रिफ्रेश'}</span>
+          </button>
+
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] rounded-xl bg-emerald-700 text-white font-extrabold text-sm hover:bg-emerald-800 transition-colors shadow-md flex items-center justify-center space-x-2 touch-target cursor-pointer"
+          >
+            <Plus className="w-5 h-5" />
+            <span>{language === 'EN' ? 'Add Bishi Scheme' : 'नवीन भिशी योजना जोडा'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Dynamic Cards Grid */}

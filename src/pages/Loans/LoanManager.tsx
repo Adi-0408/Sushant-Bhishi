@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, formatDateMarathi, getBishiNameMarathi, matchesCustomerSearch } from '../../utils/formatters';
 import { StorageService } from '../../services/db';
-import { Landmark, Search, Plus, Wallet, ArrowUpRight, X, UserPlus, Edit3, Save, Calendar, Clock } from 'lucide-react';
+import { Landmark, Search, Plus, Wallet, ArrowUpRight, X, UserPlus, Edit3, Save, Calendar, Clock, RefreshCw } from 'lucide-react';
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 import { CustomDropdown } from '../../components/common/CustomDropdown';
 import { Link } from 'react-router-dom';
@@ -12,7 +12,7 @@ import { Loan } from '../../types';
 import { calculateElapsedMonths } from '../../utils/calculations';
 
 export const LoanManager: React.FC = () => {
-  const { loans, loanPayments, customers, activeOffice, refreshData, showToast, t, language } = useApp();
+  const { loans, loanPayments, customers, activeOffice, refreshData, showToast, t, language, isRefreshing, refreshAllData } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -190,13 +190,25 @@ export const LoanManager: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsAddLoanModalOpen(true)}
-          className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-xl bg-amber-700 text-white font-extrabold text-sm hover:bg-amber-800 transition-colors shadow-md flex items-center justify-center space-x-2 cursor-pointer"
-        >
-          <Plus className="w-5 h-5" />
-          <span>{t.btnAddLoan}</span>
-        </button>
+        <div className="flex items-center space-x-2 w-full sm:w-auto">
+          <button
+            onClick={() => refreshAllData()}
+            disabled={isRefreshing}
+            title={language === 'EN' ? 'Refresh Loans (0 reads if unchanged)' : 'कर्ज डेटा रिफ्रेश करा (बदल नसल्यास ० रीड्स)'}
+            className="w-full sm:w-auto min-h-[44px] px-3.5 py-2.5 bg-white hover:bg-emerald-50 text-[#0F7A5C] font-extrabold text-xs rounded-xl border border-[#E4EAE7] shadow-2xs flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-60 active:scale-95 transition-all"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[#0F7A5C] ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{language === 'EN' ? 'Refresh' : 'रिफ्रेश'}</span>
+          </button>
+
+          <button
+            onClick={() => setIsAddLoanModalOpen(true)}
+            className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-xl bg-amber-700 text-white font-extrabold text-sm hover:bg-amber-800 transition-colors shadow-md flex items-center justify-center space-x-2 cursor-pointer"
+          >
+            <Plus className="w-5 h-5" />
+            <span>{t.btnAddLoan}</span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E4EAE7] shadow-xs">

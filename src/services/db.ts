@@ -148,17 +148,32 @@ const enrichFirestoreData = (collectionName: string, rawData: any): any => {
           pendingInstallments: custColls.filter((c) => c.status !== 'PAID').length,
         };
         data.installments = custColls.map((c) => ({
+          id: c.id,
+          customerId: c.customerId || data.id,
+          customerName: c.customerName || data.name || data.customerName || '',
+          accountNumber: c.accountNumber || data.accountNumber || '',
+          officeId: c.officeId || data.officeId || 'MAIN',
+          bishiType: c.bishiType || data.bishiType,
+          bishiName: c.bishiName || data.bishiName,
           periodIndex: c.periodIndex,
           periodLabel: c.periodLabel,
           dueDate: c.dueDate,
           paymentDate: c.paymentDate || null,
-          expectedAmount: c.expectedAmount,
-          collectedAmount: c.collectedAmount,
-          extraAmount: c.extraAmount || 0,
-          remainingAmount: c.remainingAmount,
-          penaltyAmount: c.penaltyAmount || 0,
-          totalWithPenalty: (c.collectedAmount || 0) + (c.extraAmount || 0) + (c.penaltyAmount || 0),
+          paymentTime: c.paymentTime || null,
+          paymentMode: c.paymentMode || null,
+          expectedAmount: Number(c.expectedAmount) || 0,
+          collectedAmount: Number(c.collectedAmount) || 0,
+          extraAmount: Number(c.extraAmount) || 0,
+          remainingAmount: Number(c.remainingAmount) || 0,
+          interestAmount: Number(c.interestAmount) || 0,
+          historicalInterestRate: Number(c.historicalInterestRate) || 0,
+          penaltyAmount: Number(c.penaltyAmount) || 0,
+          historicalPenaltyRate: Number(c.historicalPenaltyRate) || 0,
+          totalPaid: Number(c.totalPaid) || 0,
+          totalWithPenalty: (Number(c.collectedAmount) || 0) + (Number(c.extraAmount) || 0) + (Number(c.penaltyAmount) || 0),
           status: c.status,
+          note: c.note || '',
+          updatedAt: c.updatedAt || new Date().toISOString(),
         }));
       }
 
@@ -1009,6 +1024,25 @@ export const StorageService = {
       'collections',
       newEntries.map((entry) => ({ docId: entry.id, data: entry }))
     );
+
+    // Strategy 2: Sync owning customer doc(s) with embedded installments to Firestore
+    const affectedCustIds = new Set<string>();
+    newEntries.forEach((e) => {
+      if (e.customerId) affectedCustIds.add(e.customerId);
+      if (e.accountNumber) {
+        const cust = StorageService.getCustomers().find(
+          (c) => String(c.accountNumber).trim().toLowerCase() === String(e.accountNumber).trim().toLowerCase()
+        );
+        if (cust) affectedCustIds.add(cust.id);
+      }
+    });
+
+    affectedCustIds.forEach((cId) => {
+      const cust = StorageService.getCustomerById(cId);
+      if (cust) {
+        syncToFirestore('customers', cust.id, cust);
+      }
+    });
   },
 
   updateCollectionEntry: (id: string, updates: Partial<CollectionEntry>): CollectionEntry => {
@@ -1086,6 +1120,17 @@ export const StorageService = {
     setStoredData(STORAGE_KEYS.COLLECTIONS, dedupedList);
 
     syncToFirestore('collections', target.id || id, updatedEntry);
+
+    // Strategy 2: Sync owning customer doc with updated embedded installments
+    const cust = targetCustId
+      ? StorageService.getCustomerById(targetCustId)
+      : StorageService.getCustomers().find(
+          (c) => String(c.accountNumber || '').trim().toLowerCase() === targetAcc
+        );
+    if (cust) {
+      syncToFirestore('customers', cust.id, cust);
+    }
+
     if (updatedEntry.status === 'PAID' || Number(updatedEntry.collectedAmount) >= Number(updatedEntry.expectedAmount)) {
       markInstallmentAsPaid(updatedEntry.customerId, updatedEntry.periodIndex, 'bishi', updatedEntry.paymentDate || nowIso);
     }
@@ -1100,6 +1145,19 @@ export const StorageService = {
     const filtered = collections.filter((c) => c.id !== id);
     setStoredData(STORAGE_KEYS.COLLECTIONS, filtered);
     await deleteFromFirestore('collections', id, entryToDelete);
+
+    // Strategy 2: Sync customer doc so deleted installment is pruned from embedded array
+    if (entryToDelete) {
+      const cust = entryToDelete.customerId
+        ? StorageService.getCustomerById(entryToDelete.customerId)
+        : StorageService.getCustomers().find(
+            (c) => String(c.accountNumber || '').trim().toLowerCase() === String(entryToDelete.accountNumber || '').trim().toLowerCase()
+          );
+      if (cust) {
+        syncToFirestore('customers', cust.id, cust);
+      }
+    }
+
     recordDeletion('collections', id);
     invalidateStatsCache();
     touchSyncTimestamp();
@@ -1942,13 +2000,15 @@ export const StorageService = {
       }, 150);
     };
 
-    // 1. Listen for customers in Firestore
+    // 1. Listen for customers in Firestore (Strategy 2: Customers doc embeds full installment schedule)
     try {
       const unsubCust = onSnapshot(
         collection(db, 'customers'),
         (snapshot: any) => {
           if (snapshot.metadata?.hasPendingWrites) return;
           const remoteList: Customer[] = [];
+          const extractedColls: CollectionEntry[] = [];
+
           snapshot.forEach((d: any) => {
             const raw = d.data();
             const fullCustomer: Customer = {
@@ -1958,8 +2018,50 @@ export const StorageService = {
               customerName: raw.customerName || raw.name || '',
             };
             remoteList.push(fullCustomer);
+
+            // Unpack embedded installments from customer document
+            if (Array.isArray(raw.installments) && raw.installments.length > 0) {
+              raw.installments.forEach((inst: any) => {
+                extractedColls.push({
+                  id: inst.id || `coll_${fullCustomer.id}_${inst.periodIndex}`,
+                  customerId: fullCustomer.id,
+                  customerName: fullCustomer.name,
+                  accountNumber: fullCustomer.accountNumber,
+                  officeId: inst.officeId || fullCustomer.officeId || 'MAIN',
+                  bishiType: inst.bishiType || fullCustomer.bishiType,
+                  bishiName: inst.bishiName || fullCustomer.bishiName,
+                  periodIndex: inst.periodIndex,
+                  periodLabel: inst.periodLabel || `हप्ता ${inst.periodIndex}`,
+                  dueDate: inst.dueDate,
+                  paymentDate: inst.paymentDate || undefined,
+                  paymentTime: inst.paymentTime || undefined,
+                  paymentMode: inst.paymentMode || undefined,
+                  expectedAmount: Number(inst.expectedAmount) || 0,
+                  collectedAmount: Number(inst.collectedAmount) || 0,
+                  extraAmount: Number(inst.extraAmount) || 0,
+                  remainingAmount: Number(inst.remainingAmount) || 0,
+                  interestAmount: Number(inst.interestAmount) || 0,
+                  historicalInterestRate: Number(inst.historicalInterestRate) || 0,
+                  penaltyAmount: Number(inst.penaltyAmount) || 0,
+                  historicalPenaltyRate: Number(inst.historicalPenaltyRate) || 0,
+                  totalPaid: Number(inst.totalPaid) || 0,
+                  totalWithPenalty: Number(inst.totalWithPenalty) || 0,
+                  status: inst.status || 'PENDING',
+                  note: inst.note || undefined,
+                  updatedAt: inst.updatedAt || undefined,
+                });
+              });
+            }
           });
+
           setStoredData(STORAGE_KEYS.CUSTOMERS, deduplicateCustomers(remoteList));
+
+          if (extractedColls.length > 0) {
+            const localColls = getStoredData<CollectionEntry[]>(STORAGE_KEYS.COLLECTIONS, []);
+            const merged = deduplicateCollections([...extractedColls, ...localColls]);
+            setStoredData(STORAGE_KEYS.COLLECTIONS, merged);
+          }
+
           debouncedUpdate();
         },
         (err: any) => console.warn('Firestore customers listener error:', err?.message || err)
@@ -1989,30 +2091,6 @@ export const StorageService = {
         (err: any) => console.warn('Firestore loans listener error:', err?.message || err)
       );
       unsubscribes.push(unsubLoans);
-    } catch (e) {}
-
-    // 3. Listen for collections in Firestore (all entries saved without filtering)
-    try {
-      const unsubColls = onSnapshot(
-        collection(db, 'collections'),
-        (snapshot: any) => {
-          if (snapshot.metadata?.hasPendingWrites) return;
-          const remoteList: CollectionEntry[] = [];
-          snapshot.forEach((d: any) => {
-            const raw = d.data();
-            const fullColl: CollectionEntry = {
-              ...raw,
-              id: raw.id || d.id,
-              customerName: raw.customerName || '',
-            };
-            remoteList.push(fullColl);
-          });
-          setStoredData(STORAGE_KEYS.COLLECTIONS, deduplicateCollections(remoteList));
-          debouncedUpdate();
-        },
-        (err: any) => console.warn('Firestore collections listener error:', err?.message || err)
-      );
-      unsubscribes.push(unsubColls);
     } catch (e) {}
 
     // 4. Listen for loanPayments in Firestore

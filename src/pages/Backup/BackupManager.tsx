@@ -25,7 +25,7 @@ import { ModalPortal } from '../../components/common/ModalPortal';
 import { runClientV2Migration } from '../../services/migration';
 
 export const BackupManager: React.FC = () => {
-  const { refreshData, showToast, syncStatus, syncWithFirebase, clearAllData, language } = useApp();
+  const { refreshData, showToast, syncStatus, syncWithFirebase, clearAllData, language, isRefreshing, refreshAllData } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [restoreError, setRestoreError] = useState('');
@@ -198,13 +198,25 @@ export const BackupManager: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleInstantAutoBackup}
-          className="h-11 px-5 rounded-xl bg-[#0F7A5C] hover:bg-[#0B5C45] text-white font-black text-xs sm:text-sm flex items-center justify-center space-x-2 shadow-sm transition-all cursor-pointer"
-        >
-          <Download className="w-4 h-4" />
-          <span>{language === 'EN' ? 'Backup & Save to Device Now' : 'आताच डिव्हाइसवर बॅकअप सेव्ह करा'}</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => refreshAllData()}
+            disabled={isRefreshing}
+            title={language === 'EN' ? 'Refresh Backup Data (0 reads if unchanged)' : 'डेटा रिफ्रेश करा (बदल नसल्यास ० रीड्स)'}
+            className="h-11 px-3.5 bg-white hover:bg-emerald-50 text-[#0F7A5C] font-extrabold text-xs rounded-xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-1.5 cursor-pointer disabled:opacity-60 active:scale-95 transition-all"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[#0F7A5C] ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{language === 'EN' ? 'Refresh' : 'रिफ्रेश'}</span>
+          </button>
+
+          <button
+            onClick={handleInstantAutoBackup}
+            className="h-11 px-5 rounded-xl bg-[#0F7A5C] hover:bg-[#0B5C45] text-white font-black text-xs sm:text-sm flex items-center justify-center space-x-2 shadow-sm transition-all cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>{language === 'EN' ? 'Backup & Save to Device Now' : 'आताच डिव्हाइसवर बॅकअप सेव्ह करा'}</span>
+          </button>
+        </div>
       </div>
 
       {restoreError && (

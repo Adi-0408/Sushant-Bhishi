@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { StorageService } from '../../services/db';
 import { formatDateMarathi } from '../../utils/formatters';
-import { TrendingUp, Plus, ShieldAlert, Calendar, Trash2 } from 'lucide-react';
+import { TrendingUp, Plus, ShieldAlert, Calendar, Trash2, RefreshCw } from 'lucide-react';
 import { MarathiTextInput, convertTextToMarathi } from '../../components/common/MarathiTextInput';
 
 export const InterestManager: React.FC = () => {
-  const { interestRates, refreshData, showToast, language } = useApp();
+  const { interestRates, refreshData, showToast, language, isRefreshing, refreshAllData } = useApp();
 
   const [rateInput, setRateInput] = useState<number | ''>(10);
   const [rateTypeInput, setRateTypeInput] = useState<'MONTHLY' | 'WEEKLY'>('MONTHLY');
@@ -65,14 +65,26 @@ export const InterestManager: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-        <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
-          <TrendingUp className="w-6 h-6 text-brand-700" />
-          <span>{language === 'EN' ? 'Interest Rate Management' : 'व्याज व्यवस्थापन (Interest Management)'}</span>
-        </h2>
-        <p className="text-xs text-slate-500 font-medium mt-1">
-          {language === 'EN' ? 'Set weekly and monthly interest rates & view history' : 'सिस्टीमचे साप्ताहिक व मासिक व्याजदर ठरवा व इतिहास पहा'}
-        </p>
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
+            <TrendingUp className="w-6 h-6 text-brand-700" />
+            <span>{language === 'EN' ? 'Interest Rate Management' : 'व्याज व्यवस्थापन (Interest Management)'}</span>
+          </h2>
+          <p className="text-xs text-slate-500 font-medium mt-1">
+            {language === 'EN' ? 'Set weekly and monthly interest rates & view history' : 'सिस्टीमचे साप्ताहिक व मासिक व्याजदर ठरवा व इतिहास पहा'}
+          </p>
+        </div>
+
+        <button
+          onClick={() => refreshAllData()}
+          disabled={isRefreshing}
+          title={language === 'EN' ? 'Refresh Interest Rates (0 reads if unchanged)' : 'व्याजदर डेटा रिफ्रेश करा (बदल नसल्यास ० रीड्स)'}
+          className="h-10 px-3.5 bg-white hover:bg-emerald-50 text-[#0F7A5C] font-extrabold text-xs rounded-xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-1.5 cursor-pointer disabled:opacity-60 active:scale-95 transition-all self-start sm:self-auto"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 text-[#0F7A5C] ${isRefreshing ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">{language === 'EN' ? 'Refresh' : 'रिफ्रेश'}</span>
+        </button>
       </div>
 
       {/* Active Rate Summary Cards */}

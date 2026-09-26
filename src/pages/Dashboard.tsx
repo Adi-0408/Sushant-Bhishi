@@ -45,6 +45,8 @@ export const Dashboard: React.FC = () => {
     customers,
     t,
     language,
+    isRefreshing,
+    refreshAllData,
   } = useApp();
 
   const [modalityFilter, setModalityFilter] = React.useState<'ALL' | 'W' | 'M'>('ALL');
@@ -315,12 +317,14 @@ export const Dashboard: React.FC = () => {
 
           <div className="flex items-center justify-end space-x-2 shrink-0">
             <button
-              onClick={() => fetchStats(true)}
-              disabled={isRefreshingStats}
-              title={language === 'EN' ? 'Refresh Dashboard Stats' : 'डॅशबोर्ड आकडेवारी रिफ्रेश करा (१ Read)'}
-              className="h-10 px-3.5 bg-white hover:bg-slate-50 text-slate-700 font-extrabold text-xs rounded-xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-1.5 cursor-pointer disabled:opacity-60 active:scale-95 transition-all"
+              onClick={async () => {
+                await Promise.all([fetchStats(true), refreshAllData()]);
+              }}
+              disabled={isRefreshingStats || isRefreshing}
+              title={language === 'EN' ? 'Refresh Dashboard (0 reads if unchanged)' : 'डॅशबोर्ड डेटा रिफ्रेश करा (बदल नसल्यास ० रीड्स)'}
+              className="h-10 px-3.5 bg-white hover:bg-emerald-50 text-[#0F7A5C] font-extrabold text-xs rounded-xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-1.5 cursor-pointer disabled:opacity-60 active:scale-95 transition-all"
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-[#0F7A5C] ${isRefreshingStats ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-[#0F7A5C] ${isRefreshingStats || isRefreshing ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">{language === 'EN' ? 'Refresh' : 'रिफ्रेश'}</span>
             </button>
             <span className="hidden md:inline-flex h-10 items-center px-3.5 bg-emerald-50 text-[#0F7A5C] font-extrabold text-xs rounded-xl border border-emerald-200/60 shadow-2xs">

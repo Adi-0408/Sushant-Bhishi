@@ -7,13 +7,13 @@ import {
   getStatusTextMarathi,
   matchesCustomerSearch,
 } from '../../utils/formatters';
-import { Wallet, Search, Plus, Eye, CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { Wallet, Search, Plus, Eye, CheckCircle2, AlertCircle, X, RefreshCw } from 'lucide-react';
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 import { Link, useSearchParams } from 'react-router-dom';
 import { QuickCollectionModal } from '../../components/collections/QuickCollectionModal';
 
 export const CollectionManager: React.FC = () => {
-  const { collections, customers, activeOffice, t, language } = useApp();
+  const { collections, customers, activeOffice, t, language, isRefreshing, refreshAllData } = useApp();
   const [searchParams] = useSearchParams();
 
   const [activeTab, setActiveTab] = useState<'TODAY' | 'WEEKLY' | 'MONTHLY'>('TODAY');
@@ -108,6 +108,17 @@ export const CollectionManager: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          {/* Refresh Button */}
+          <button
+            onClick={() => refreshAllData()}
+            disabled={isRefreshing}
+            title={language === 'EN' ? 'Refresh Collections (0 reads if unchanged)' : 'जमा डेटा रिफ्रेश करा (बदल नसल्यास ० रीड्स)'}
+            className="w-full sm:w-auto px-3.5 py-2.5 min-h-[44px] bg-white hover:bg-emerald-50 text-[#0F7A5C] font-extrabold text-xs rounded-xl border border-[#E4EAE7] shadow-2xs flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-60 active:scale-95 transition-all touch-target"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[#0F7A5C] ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{language === 'EN' ? 'Refresh' : 'रिफ्रेश'}</span>
+          </button>
+
           {/* Main Collection Action Button requested by user */}
           <button
             onClick={() => handleOpenQuickCollect()}

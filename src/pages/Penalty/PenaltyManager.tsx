@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { StorageService } from '../../services/db';
 import { formatCurrency } from '../../utils/formatters';
-import { AlertTriangle, Save, Clock } from 'lucide-react';
+import { AlertTriangle, Save, Clock, RefreshCw } from 'lucide-react';
 
 export const PenaltyManager: React.FC = () => {
-  const { penaltySettings, refreshData, showToast, language } = useApp();
+  const { penaltySettings, refreshData, showToast, language, isRefreshing, refreshAllData } = useApp();
 
   const [weeklyPenalty, setWeeklyPenalty] = useState<number | ''>(
     penaltySettings?.weeklyPenalty || 50
@@ -35,16 +35,28 @@ export const PenaltyManager: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-        <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
-          <AlertTriangle className="w-6 h-6 text-rose-600" />
-          <span>{language === 'EN' ? 'Penalty Management' : 'दंड व्यवस्थापन'}</span>
-        </h2>
-        <p className="text-xs text-slate-500 font-medium mt-1">
-          {language === 'EN'
-            ? 'Late penalty amounts and grace period rules'
-            : 'विलंब दंडाची रक्कम व मुदतीचे नियम'}
-        </p>
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
+            <AlertTriangle className="w-6 h-6 text-rose-600" />
+            <span>{language === 'EN' ? 'Penalty Management' : 'दंड व्यवस्थापन'}</span>
+          </h2>
+          <p className="text-xs text-slate-500 font-medium mt-1">
+            {language === 'EN'
+              ? 'Late penalty amounts and grace period rules'
+              : 'विलंब दंडाची रक्कम व मुदतीचे नियम'}
+          </p>
+        </div>
+
+        <button
+          onClick={() => refreshAllData()}
+          disabled={isRefreshing}
+          title={language === 'EN' ? 'Refresh Penalty Settings (0 reads if unchanged)' : 'दंड नियम डेटा रिफ्रेश करा (बदल नसल्यास ० रीड्स)'}
+          className="h-10 px-3.5 bg-white hover:bg-emerald-50 text-[#0F7A5C] font-extrabold text-xs rounded-xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-1.5 cursor-pointer disabled:opacity-60 active:scale-95 transition-all self-start sm:self-auto"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 text-[#0F7A5C] ${isRefreshing ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">{language === 'EN' ? 'Refresh' : 'रिफ्रेश'}</span>
+        </button>
       </div>
 
       <div className="max-w-xl bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
