@@ -6,10 +6,16 @@ const BACKUP_STORAGE_KEYS = {
   SNAPSHOTS: 'sb_local_backup_snapshots',
 };
 
+export const DEFAULT_DRIVE_WEBHOOK_URL =
+  'https://script.google.com/macros/s/AKfycbzzOpsGVm-NuTwdQapw0OcOx9O64mALEAEzX3z1_wZ_rb12zmtDd98-IO97wE2PMSCK/exec';
+
 const DEFAULT_CONFIG: AutoBackupConfig = {
   enabled: true,
   intervalDays: 2, // Automatically backup every 2 days
   lastBackupTimestamp: 0,
+  driveBackupEnabled: true,
+  driveWebhookUrl: DEFAULT_DRIVE_WEBHOOK_URL,
+  lastDriveBackupTimestamp: 0,
 };
 
 export const AutoBackupService = {
@@ -146,6 +152,68 @@ export const AutoBackupService = {
     return { snapshot, filename };
   },
 
+  // Upload complete system backup directly to Google Drive via Google Apps Script (Zero Firestore Reads)
+  uploadToGoogleDrive: async (
+    customUrl?: string,
+    providedData?: SystemBackupData
+  ): Promise<{ success: boolean; message: string; filename?: string; fileId?: string }> => {
+    const config = AutoBackupService.getConfig();
+    const webhookUrl = (customUrl || config.driveWebhookUrl || DEFAULT_DRIVE_WEBHOOK_URL).trim();
+
+    if (!webhookUrl) {
+      return { success: false, message: 'Google Drive Webhook URL is missing.' };
+    }
+
+    try {
+      const data = providedData || StorageService.exportBackup();
+      const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_CloudDriveBackup');
+
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({
+          filename,
+          data,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.status === 'success' || result.success) {
+        const now = Date.now();
+        config.lastDriveBackupTimestamp = now;
+        config.lastDriveBackupDate = new Date().toISOString();
+        config.lastDriveBackupFilename = result.fileName || filename;
+        config.lastDriveBackupStatus = 'success';
+        if (customUrl) config.driveWebhookUrl = customUrl;
+        AutoBackupService.saveConfig(config);
+
+        return {
+          success: true,
+          message: result.message || 'Backup saved to Google Drive successfully!',
+          filename: result.fileName || filename,
+          fileId: result.fileId,
+        };
+      } else {
+        throw new Error(result.message || 'Google Drive webhook returned an error');
+      }
+    } catch (err: any) {
+      console.error('Google Drive backup upload failed:', err);
+      config.lastDriveBackupStatus = 'error';
+      AutoBackupService.saveConfig(config);
+      return {
+        success: false,
+        message: err?.message || 'Failed to upload backup to Google Drive.',
+      };
+    }
+  },
+
   // Checks if 2 days have passed since last backup and runs auto-backup
   checkAndRunAutoBackup: (
     onSuccess?: (snapshot: LocalBackupSnapshot, filename: string) => void
@@ -183,6 +251,13 @@ export const AutoBackupService = {
         config.lastBackupDate = new Date().toISOString();
         config.lastBackupFilename = filename;
         AutoBackupService.saveConfig(config);
+
+        // 4. Automatically push to Google Drive in background if enabled (0 reads)
+        if (config.driveBackupEnabled !== false) {
+          AutoBackupService.uploadToGoogleDrive(config.driveWebhookUrl, data).catch((err) => {
+            console.warn('Auto drive backup background upload notice:', err);
+          });
+        }
 
         if (onSuccess) {
           onSuccess(snapshot, filename);

@@ -258,5 +258,11 @@ export interface AutoBackupConfig {
   lastBackupTimestamp: number;
   lastBackupDate?: string;
   lastBackupFilename?: string;
+  driveWebhookUrl?: string;
+  driveBackupEnabled?: boolean;
+  lastDriveBackupTimestamp?: number;
+  lastDriveBackupDate?: string;
+  lastDriveBackupFilename?: string;
+  lastDriveBackupStatus?: 'success' | 'error';
 }
 

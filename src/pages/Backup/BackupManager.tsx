@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { StorageService } from '../../services/db';
-import { AutoBackupService } from '../../services/backup';
+import { AutoBackupService, DEFAULT_DRIVE_WEBHOOK_URL } from '../../services/backup';
 import { AutoBackupConfig, LocalBackupSnapshot } from '../../types';
 import {
   HardDrive,
@@ -19,6 +19,8 @@ import {
   RotateCcw,
   Sparkles,
   Zap,
+  FolderSync,
+  Settings,
 } from 'lucide-react';
 import { formatDateMarathi } from '../../utils/formatters';
 import { ModalPortal } from '../../components/common/ModalPortal';
@@ -34,6 +36,13 @@ export const BackupManager: React.FC = () => {
   const [selectedSnapshotForRestore, setSelectedSnapshotForRestore] = useState<LocalBackupSnapshot | null>(null);
   const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+
+  // Google Drive Cloud Backup State
+  const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
+  const [showDriveSettings, setShowDriveSettings] = useState(false);
+  const [customWebhookUrl, setCustomWebhookUrl] = useState(
+    () => AutoBackupService.getConfig().driveWebhookUrl || DEFAULT_DRIVE_WEBHOOK_URL
+  );
 
   // v2 Schema Migration & Read-Count Optimization State
   const [isMigrating, setIsMigrating] = useState(false);
@@ -87,6 +96,60 @@ export const BackupManager: React.FC = () => {
       enabled
         ? (language === 'EN' ? 'Auto-backup enabled (every 2 days).' : 'स्वयंचलित बॅकअप सुरू केला (प्रत्येक २ दिवसांनी).')
         : (language === 'EN' ? 'Auto-backup disabled.' : 'स्वयंचलित बॅकअप बंद केला.'),
+      'info'
+    );
+  };
+
+  const handleUploadToDrive = async () => {
+    setIsUploadingToDrive(true);
+    try {
+      const res = await AutoBackupService.uploadToGoogleDrive(customWebhookUrl);
+      setAutoConfig(AutoBackupService.getConfig());
+      if (res.success) {
+        showToast(
+          language === 'EN'
+            ? `Google Drive backup successful: ${res.filename}`
+            : `गुगल ड्राईव्हवर बॅकअप यशस्वीपणे सेव्ह झाला: ${res.filename}`,
+          'success'
+        );
+      } else {
+        showToast(
+          language === 'EN'
+            ? `Google Drive backup failed: ${res.message}`
+            : `गुगल ड्राईव्ह बॅकअप अयशस्वी: ${res.message}`,
+          'error'
+        );
+      }
+    } catch (err: any) {
+      showToast(
+        language === 'EN' ? 'Google Drive backup error' : 'गुगल ड्राईव्ह बॅकअप घेताना त्रुटी आली.',
+        'error'
+      );
+    } finally {
+      setIsUploadingToDrive(false);
+    }
+  };
+
+  const handleSaveWebhookUrl = () => {
+    const updated = { ...autoConfig, driveWebhookUrl: customWebhookUrl.trim() };
+    AutoBackupService.saveConfig(updated);
+    setAutoConfig(updated);
+    showToast(
+      language === 'EN'
+        ? 'Google Drive Webhook URL updated successfully.'
+        : 'गुगल ड्राईव्ह Webhook URL यशस्वीपणे सेव्ह झाली.',
+      'success'
+    );
+  };
+
+  const handleToggleDriveAutoBackup = (driveBackupEnabled: boolean) => {
+    const updated = { ...autoConfig, driveBackupEnabled };
+    AutoBackupService.saveConfig(updated);
+    setAutoConfig(updated);
+    showToast(
+      driveBackupEnabled
+        ? (language === 'EN' ? 'Google Drive auto-backup enabled.' : 'गुगल ड्राईव्ह ऑटो-बॅकअप सुरू केला.')
+        : (language === 'EN' ? 'Google Drive auto-backup disabled.' : 'गुगल ड्राईव्ह ऑटो-बॅकअप बंद केला.'),
       'info'
     );
   };
@@ -333,6 +396,178 @@ export const BackupManager: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* GOOGLE DRIVE CLOUD BACKUP CARD (ZERO FIRESTORE READS) */}
+      <div className="bg-gradient-to-br from-white via-emerald-50/20 to-teal-50/30 p-6 sm:p-7 rounded-3xl border-2 border-emerald-400 shadow-sm relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-52 h-52 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-900 border border-emerald-300">
+                <Cloud className="w-3.5 h-3.5 text-emerald-700" />
+                <span>
+                  {autoConfig.driveBackupEnabled !== false
+                    ? (language === 'EN' ? 'Google Drive: Auto-Sync On' : 'गुगल ड्राईव्ह: ऑटो-सिंक सुरू')
+                    : (language === 'EN' ? 'Google Drive: Manual Only' : 'गुगल ड्राईव्ह: केवळ मॅन्युअल')}
+                </span>
+              </span>
+              <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-black bg-amber-100 text-amber-900 border border-amber-300">
+                <Sparkles className="w-3 h-3 text-amber-700" />
+                <span>0 Firestore Reads (100% Free)</span>
+              </span>
+            </div>
+
+            <h3 className="text-lg sm:text-xl font-black text-[#10241E] flex items-center space-x-2">
+              <FolderSync className="w-6 h-6 text-[#0F7A5C]" />
+              <span>
+                {language === 'EN'
+                  ? 'Google Drive Cloud Backup (Automated)'
+                  : 'गुगल ड्राईव्ह ऑटोमॅटिक क्लाउड बॅकअप (Google Drive Cloud)'}
+              </span>
+            </h3>
+
+            <p className="text-xs sm:text-sm text-[#5F6E68] font-bold max-w-2xl leading-relaxed">
+              {language === 'EN'
+                ? 'Directly uploads your full JSON database to your personal/client Google Drive folder "Sushant_Bishi_Backups" via Google Apps Script without using a single Firestore read. Keeps the latest 10 backups automatically.'
+                : 'तुमच्या गुगल ड्राईव्हमधील "Sushant_Bishi_Backups" फोल्डरमध्ये शून्य (०) फायरस्टोअर रीड्ससह थेट बॅकअप सेव्ह होतो. दरवेळी आपोआप नवीन बॅकअप सेव्ह होऊन सर्वात जुन्या १० फाईल्सचे रोलिंग व्यवस्थापन होते.'}
+            </p>
+
+            {/* Status Details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <div className="p-3 bg-white rounded-2xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold text-[#5F6E68]">
+                    {language === 'EN' ? 'Last Google Drive Backup' : 'शेवटचा गुगल ड्राईव्ह बॅकअप'}
+                  </div>
+                  <div className="text-xs font-black text-[#10241E] truncate">
+                    {autoConfig.lastDriveBackupTimestamp
+                      ? new Date(autoConfig.lastDriveBackupTimestamp).toLocaleString('mr-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : (language === 'EN' ? 'Not uploaded yet' : 'अद्याप अपलोड केलेला नाही')}
+                  </div>
+                  {autoConfig.lastDriveBackupFilename && (
+                    <div className="text-[10px] text-slate-500 font-mono truncate max-w-[220px]" title={autoConfig.lastDriveBackupFilename}>
+                      {autoConfig.lastDriveBackupFilename}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-3 bg-white rounded-2xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#0F7A5C] flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold text-[#5F6E68]">
+                    {language === 'EN' ? 'Folder & Retention Limit' : 'ड्राईव्ह फोल्डर व मर्यादा'}
+                  </div>
+                  <div className="text-xs font-black text-[#10241E] truncate">
+                    Sushant_Bishi_Backups
+                  </div>
+                  <div className="text-[10px] text-emerald-700 font-bold">
+                    {language === 'EN' ? 'Keeps newest 10 backups' : 'फक्त नवीनतम १० फायली सुरक्षित (Auto-Delete 11th)'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action & Toggle Controls */}
+          <div className="flex flex-col sm:flex-row lg:flex-col gap-3 shrink-0 lg:w-72">
+            <button
+              type="button"
+              disabled={isUploadingToDrive}
+              onClick={handleUploadToDrive}
+              className="w-full py-3.5 px-4 rounded-2xl bg-[#0F7A5C] hover:bg-[#0B5C45] active:scale-[0.98] text-white font-black text-xs sm:text-sm flex items-center justify-center space-x-2 shadow-md hover:shadow-lg transition-all cursor-pointer disabled:opacity-50"
+            >
+              {isUploadingToDrive ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                  <span>{language === 'EN' ? 'Uploading to Drive...' : 'ड्राईव्हवर सेव्ह होत आहे...'}</span>
+                </>
+              ) : (
+                <>
+                  <Cloud className="w-4 h-4" />
+                  <span>{language === 'EN' ? 'Backup to Google Drive Now' : 'Google Drive वर आताच सेव्ह करा'}</span>
+                </>
+              )}
+            </button>
+
+            <div className="flex items-center justify-between p-3 bg-white rounded-2xl border border-[#E4EAE7] shadow-2xs">
+              <span className="text-xs font-black text-[#10241E]">
+                {language === 'EN' ? 'Auto-upload to Drive' : '२ दिवसांनी ड्राईव्हवर सिंक'}
+              </span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoConfig.driveBackupEnabled !== false}
+                  onChange={(e) => handleToggleDriveAutoBackup(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0F7A5C]"></div>
+              </label>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowDriveSettings(!showDriveSettings)}
+              className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-50 border border-[#E4EAE7] text-slate-700 text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+            >
+              <Settings className="w-3.5 h-3.5 text-slate-500" />
+              <span>{showDriveSettings ? (language === 'EN' ? 'Hide Settings' : 'सेटिंग्ज लपवा') : (language === 'EN' ? 'Drive Script Settings' : 'गुगल स्क्रिप्ट सेटिंग्ज')}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Collapsible Webhook URL Configuration */}
+        {showDriveSettings && (
+          <div className="mt-5 pt-4 border-t border-emerald-200/60 space-y-3 relative z-10">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <label className="text-xs font-black text-[#10241E]">
+                Google Apps Script Webhook URL:
+              </label>
+              <button
+                type="button"
+                onClick={() => setCustomWebhookUrl(DEFAULT_DRIVE_WEBHOOK_URL)}
+                className="text-[11px] font-bold text-[#0F7A5C] hover:underline self-start sm:self-auto cursor-pointer"
+              >
+                {language === 'EN' ? 'Reset to Default URL' : 'मूळ URL वर पूर्ववत करा'}
+              </button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="url"
+                value={customWebhookUrl}
+                onChange={(e) => setCustomWebhookUrl(e.target.value)}
+                placeholder="https://script.google.com/macros/s/.../exec"
+                className="flex-1 px-3 py-2 text-xs font-mono bg-white border border-[#E4EAE7] rounded-xl focus:outline-none focus:border-[#0F7A5C]"
+              />
+              <button
+                type="button"
+                onClick={handleSaveWebhookUrl}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black rounded-xl transition-colors cursor-pointer shrink-0"
+              >
+                {language === 'EN' ? 'Save URL' : 'URL सेव्ह करा'}
+              </button>
+            </div>
+            <p className="text-[11px] text-[#5F6E68] font-medium leading-relaxed">
+              {language === 'EN'
+                ? 'To switch this backup to your client\'s Google account later: open client\'s Google Drive -> create Apps Script -> deploy Web App -> paste the new Webhook URL above.'
+                : 'भविष्यात क्लायंटच्या गुगल खात्यावर बॅकअप स्विच करण्यासाठी: क्लायंटच्या Google Drive वर जाऊन Apps Script डिप्लॉय करा व नवीन Webhook URL वरील बॉक्समध्ये पेस्ट करून सेव्ह करा.'}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* LOCAL SNAPSHOTS SAVED ON THIS DEVICE */}
