@@ -430,6 +430,9 @@ export const generateReportPDF = async (
   let totalRem = 0;
   let totalInt = 0;
   let totalPen = 0;
+  let totalPayableSum = 0;
+  let totalExtraSum = 0;
+  let totalReturnSum = 0;
 
   const rows = customers.map((cust) => {
     const custColls = collections.filter((c) => c.customerId === cust.id);
@@ -450,11 +453,18 @@ export const generateReportPDF = async (
     const bishiAmountForInt = exp > 0 ? Math.min(coll, exp) : coll;
     int = Math.round((bishiAmountForInt * rate) / 100);
 
+    const extraSubmitted = Math.max(0, coll - exp);
+    const totalWithExtra = coll > 0 ? coll + int : 0;
+    const totalPayable = Math.max(0, totalWithExtra - extraSubmitted);
+
     totalExp += exp;
     totalColl += coll;
     totalRem += rem;
     totalInt += int;
     totalPen += pen;
+    totalPayableSum += totalPayable;
+    totalExtraSum += extraSubmitted;
+    totalReturnSum += totalWithExtra;
 
     const statusText = rem === 0 && exp > 0 ? 'पूर्ण जमा' : coll > 0 ? 'अंशतः जमा' : 'बाकी';
     const statusBg = rem === 0 && exp > 0 ? '#dcfce7' : coll > 0 ? '#fef9c3' : '#ffe4e6';
@@ -467,6 +477,9 @@ export const generateReportPDF = async (
       rem,
       int,
       pen,
+      extraSubmitted,
+      totalWithExtra,
+      totalPayable,
       statusText,
       statusBg,
       statusColor,
@@ -476,34 +489,37 @@ export const generateReportPDF = async (
   const todayStr = formatDateMarathi(new Date().toISOString().split('T')[0]);
 
   container.innerHTML = `
-    <div style="border: 3px double #8B4513; padding: 20px; background: #fffdfa; border-radius: 8px;">
+    <div style="border: 3px double #8B4513; padding: 15px; background: #fffdfa; border-radius: 8px;">
       <!-- Title Header Bar -->
-      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #8B4513; padding-bottom: 10px; margin-bottom: 14px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #8B4513; padding-bottom: 8px; margin-bottom: 10px;">
         <div>
-          <h2 style="margin: 0; font-size: 14px; font-weight: 900; color: #8B4513;">सुषांत भिशी</h2>
-          <h1 style="margin: 2px 0 0 0; font-size: 19px; font-weight: 900; color: #5c3a21;">${title}</h1>
+          <h2 style="margin: 0; font-size: 13px; font-weight: 900; color: #8B4513;">सुषांत भिशी</h2>
+          <h1 style="margin: 2px 0 0 0; font-size: 17px; font-weight: 900; color: #5c3a21;">${title}</h1>
         </div>
-        <div style="text-align: right; font-size: 11px; font-weight: 800; color: #5c3a21; line-height: 1.5;">
+        <div style="text-align: right; font-size: 10px; font-weight: 800; color: #5c3a21; line-height: 1.4;">
           <div>कार्यालय: <strong>${officeName}</strong> | भिशी योजना: <strong>${bishiName}</strong></div>
           <div>दिनांक: <strong>${todayStr}</strong> | एकूण खातेदार: <strong>${customers.length}</strong></div>
         </div>
       </div>
 
-      <!-- Summary Report Data Table -->
-      <table style="width: 100%; border-collapse: collapse; font-size: 11px; font-weight: 700; border: 1px solid #8B4513;">
+      <!-- Summary Report Data Table (13 Columns, perfectly fitting landscape layout) -->
+      <table style="width: 100%; border-collapse: collapse; font-size: 9.5px; font-weight: 700; border: 1px solid #8B4513;">
         <thead>
           <tr style="background: #f5e6d3; color: #333333; font-weight: 900;">
-            <th style="padding: 7px 4px; border: 1px solid #8B4513; text-align: center; width: 35px;">अ.क्र.</th>
-            <th style="padding: 7px 6px; border: 1px solid #8B4513; text-align: center; width: 75px;">खाते क्र.</th>
-            <th style="padding: 7px 8px; border: 1px solid #8B4513; text-align: left;">खातेदाराचे नाव</th>
-            <th style="padding: 7px 6px; border: 1px solid #8B4513; text-align: center; width: 95px;">मोबाईल</th>
-            <th style="padding: 7px 6px; border: 1px solid #8B4513; text-align: center; width: 80px;">प्रकार</th>
-            <th style="padding: 7px 6px; border: 1px solid #8B4513; text-align: center; width: 65px;">पद्धत</th>
-            <th style="padding: 7px 8px; border: 1px solid #8B4513; text-align: right; width: 95px;">अपेक्षित (₹)</th>
-            <th style="padding: 7px 8px; border: 1px solid #8B4513; text-align: right; width: 95px;">जमा (₹)</th>
-            <th style="padding: 7px 8px; border: 1px solid #8B4513; text-align: right; width: 95px;">बाकी (₹)</th>
-            <th style="padding: 7px 8px; border: 1px solid #8B4513; text-align: right; width: 100px;">व्याज/दंड (₹)</th>
-            <th style="padding: 7px 6px; border: 1px solid #8B4513; text-align: center; width: 85px;">स्थिती</th>
+            <th style="padding: 5px 3px; border: 1px solid #8B4513; text-align: center; width: 28px;">#</th>
+            <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: center; width: 55px;">खाते क्र.</th>
+            <th style="padding: 5px 6px; border: 1px solid #8B4513; text-align: left; width: 120px;">खातेदाराचे नाव</th>
+            <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: center; width: 75px;">मोबाईल</th>
+            <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: center; width: 75px;">योजना</th>
+            <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: center; width: 50px;">पद्धत</th>
+            <th style="padding: 5px 5px; border: 1px solid #8B4513; text-align: right; width: 75px;">अपेक्षित (₹)</th>
+            <th style="padding: 5px 5px; border: 1px solid #8B4513; text-align: right; width: 75px;">जमा (₹)</th>
+            <th style="padding: 5px 5px; border: 1px solid #8B4513; text-align: right; width: 75px;">बाकी (₹)</th>
+            <th style="padding: 5px 5px; border: 1px solid #8B4513; text-align: right; width: 80px;">व्याज/दंड (₹)</th>
+            <th style="padding: 5px 5px; border: 1px solid #8B4513; text-align: right; width: 80px; background: #faecd8;">एकूण देय (₹)</th>
+            <th style="padding: 5px 5px; border: 1px solid #8B4513; text-align: right; width: 75px; background: #faecd8;">जादा जमा (₹)</th>
+            <th style="padding: 5px 5px; border: 1px solid #8B4513; text-align: right; width: 80px; background: #faecd8;">एकूण परतावा (₹)</th>
+            <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: center; width: 65px;">स्थिती</th>
           </tr>
         </thead>
         <tbody>
@@ -511,22 +527,25 @@ export const generateReportPDF = async (
             .map(
               (r, idx) => `
             <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#fcf8f2'};">
-              <td style="padding: 6px 4px; border: 1px solid #b8a99a; text-align: center; font-weight: 700;">${idx + 1}</td>
-              <td style="padding: 6px 6px; border: 1px solid #b8a99a; text-align: center; font-weight: 800; color: #0f172a;">${r.cust.accountNumber}</td>
-              <td style="padding: 6px 8px; border: 1px solid #b8a99a; font-weight: 800; color: #1e293b;">${r.cust.name}</td>
-              <td style="padding: 6px 6px; border: 1px solid #b8a99a; text-align: center; color: #475569;">${r.cust.mobile}</td>
-              <td style="padding: 6px 6px; border: 1px solid #b8a99a; text-align: center; color: #475569;">${getBishiNameMarathi(r.cust.bishiType)}</td>
-              <td style="padding: 6px 6px; border: 1px solid #b8a99a; text-align: center; color: #475569;">${r.cust.modality === 'W' ? 'साप्ताहिक' : 'मासिक'}</td>
-              <td style="padding: 6px 8px; border: 1px solid #b8a99a; text-align: right; font-weight: 700; color: #334155;">${formatCurrency(r.exp)}</td>
-              <td style="padding: 6px 8px; border: 1px solid #b8a99a; text-align: right; font-weight: 800; color: #15803d;">${formatCurrency(r.coll)}</td>
-              <td style="padding: 6px 8px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #be123c;">${formatCurrency(r.rem)}</td>
-              <td style="padding: 6px 8px; border: 1px solid #b8a99a; text-align: right; font-weight: 700; color: #64748b;">
+              <td style="padding: 4px 3px; border: 1px solid #b8a99a; text-align: center; font-weight: 700;">${idx + 1}</td>
+              <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: center; font-weight: 800; color: #0f172a;">${r.cust.accountNumber}</td>
+              <td style="padding: 4px 6px; border: 1px solid #b8a99a; font-weight: 800; color: #1e293b;">${r.cust.name}</td>
+              <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: center; color: #475569;">${r.cust.mobile}</td>
+              <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: center; color: #475569;">${getBishiNameMarathi(r.cust.bishiType)}</td>
+              <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: center; color: #475569;">${r.cust.modality === 'W' ? 'साप्ताहिक' : 'मासिक'}</td>
+              <td style="padding: 4px 5px; border: 1px solid #b8a99a; text-align: right; font-weight: 700; color: #334155;">${formatCurrency(r.exp)}</td>
+              <td style="padding: 4px 5px; border: 1px solid #b8a99a; text-align: right; font-weight: 800; color: #15803d;">${formatCurrency(r.coll)}</td>
+              <td style="padding: 4px 5px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #be123c;">${formatCurrency(r.rem)}</td>
+              <td style="padding: 4px 5px; border: 1px solid #b8a99a; text-align: right; font-weight: 700; color: #64748b;">
                 ${r.int > 0 ? `<span style="color: #1d4ed8;">व्याज: ${formatCurrency(r.int)}</span><br>` : ''}
                 ${r.pen > 0 ? `<span style="color: #b45309;">दंड: ${formatCurrency(r.pen)}</span>` : ''}
                 ${r.int === 0 && r.pen === 0 ? '-' : ''}
               </td>
-              <td style="padding: 6px 6px; border: 1px solid #b8a99a; text-align: center;">
-                <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 800; background: ${r.statusBg}; color: ${r.statusColor};">
+              <td style="padding: 4px 5px; border: 1px solid #b8a99a; text-align: right; font-weight: 800; color: #1e3a8a; background: #f0f7ff;">${r.totalPayable > 0 ? formatCurrency(r.totalPayable) : '-'}</td>
+              <td style="padding: 4px 5px; border: 1px solid #b8a99a; text-align: right; font-weight: 800; color: #581c87; background: #faf5ff;">${r.extraSubmitted > 0 ? `+${formatCurrency(r.extraSubmitted)}` : '-'}</td>
+              <td style="padding: 4px 5px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #166534; background: #f0fdf4;">${r.totalWithExtra > 0 ? formatCurrency(r.totalWithExtra) : '-'}</td>
+              <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: center;">
+                <span style="display: inline-block; padding: 1.5px 5px; border-radius: 4px; font-size: 8.5px; font-weight: 800; background: ${r.statusBg}; color: ${r.statusColor};">
                   ${r.statusText}
                 </span>
               </td>
@@ -536,18 +555,21 @@ export const generateReportPDF = async (
             .join('')}
         </tbody>
         <tfoot>
-          <tr style="background: #8B4513; color: #ffffff; font-weight: 900; font-size: 11px;">
-            <td style="padding: 8px 4px; border: 1px solid #5c3a21; text-align: center;">-</td>
-            <td style="padding: 8px 6px; border: 1px solid #5c3a21; text-align: center;">एकूण</td>
-            <td style="padding: 8px 8px; border: 1px solid #5c3a21;">एकूण खातेदार: ${customers.length}</td>
-            <td style="padding: 8px 6px; border: 1px solid #5c3a21;">-</td>
-            <td style="padding: 8px 6px; border: 1px solid #5c3a21;">-</td>
-            <td style="padding: 8px 6px; border: 1px solid #5c3a21;">-</td>
-            <td style="padding: 8px 8px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalExp)}</td>
-            <td style="padding: 8px 8px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalColl)}</td>
-            <td style="padding: 8px 8px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalRem)}</td>
-            <td style="padding: 8px 8px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalInt + totalPen)}</td>
-            <td style="padding: 8px 6px; border: 1px solid #5c3a21; text-align: center;">-</td>
+          <tr style="background: #8B4513; color: #ffffff; font-weight: 900; font-size: 9.5px;">
+            <td style="padding: 6px 3px; border: 1px solid #5c3a21; text-align: center;">-</td>
+            <td style="padding: 6px 4px; border: 1px solid #5c3a21; text-align: center;">एकूण</td>
+            <td style="padding: 6px 6px; border: 1px solid #5c3a21;">खातेदार: ${customers.length}</td>
+            <td style="padding: 6px 4px; border: 1px solid #5c3a21;">-</td>
+            <td style="padding: 6px 4px; border: 1px solid #5c3a21;">-</td>
+            <td style="padding: 6px 4px; border: 1px solid #5c3a21;">-</td>
+            <td style="padding: 6px 5px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalExp)}</td>
+            <td style="padding: 6px 5px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalColl)}</td>
+            <td style="padding: 6px 5px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalRem)}</td>
+            <td style="padding: 6px 5px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalInt + totalPen)}</td>
+            <td style="padding: 6px 5px; border: 1px solid #5c3a21; text-align: right; color: #dbeafe;">${formatCurrency(totalPayableSum)}</td>
+            <td style="padding: 6px 5px; border: 1px solid #5c3a21; text-align: right; color: #f3e8ff;">${formatCurrency(totalExtraSum)}</td>
+            <td style="padding: 6px 5px; border: 1px solid #5c3a21; text-align: right; color: #bbf7d0;">${formatCurrency(totalReturnSum)}</td>
+            <td style="padding: 6px 4px; border: 1px solid #5c3a21; text-align: center;">-</td>
           </tr>
         </tfoot>
       </table>

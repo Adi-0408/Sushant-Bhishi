@@ -325,8 +325,14 @@ table tbody tr:hover {
     background: #ffffff !important;
   }
 
-  /* Table wrapping & overflow fixes */
-  .overflow-x-auto, .table-responsive {
+  /* Table wrapping & overflow fixes - ensure content never gets clipped at page boundaries */
+  .overflow-hidden,
+  [class*="overflow-hidden"],
+  .overflow-x-auto,
+  .overflow-y-auto,
+  [class*="overflow-x-auto"],
+  [class*="overflow-y-auto"],
+  .table-responsive {
     overflow: visible !important;
     display: block !important;
     width: 100% !important;
@@ -340,9 +346,20 @@ table tbody tr:hover {
     page-break-inside: auto;
   }
 
-  tr, .break-inside-avoid {
+  /* Prevent awkward mid-card or mid-row slices across page breaks */
+  tr,
+  .break-inside-avoid,
+  .print\:break-inside-avoid,
+  [class*="break-inside-avoid"],
+  .print-card,
+  .print-avoid-break {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
+  }
+
+  .print-break-before {
+    break-before: page !important;
+    page-break-before: always !important;
   }
 
   thead {
@@ -353,9 +370,41 @@ table tbody tr:hover {
     display: table-footer-group !important;
   }
 
+  /* Compact table typography for multi-column print reports */
+  .print-fit-table {
+    width: 100% !important;
+    table-layout: auto !important;
+  }
+
+  .print-fit-table th,
+  .print-fit-table td {
+    padding: 3px 3px !important;
+    font-size: 8px !important;
+    line-height: 1.15 !important;
+  }
+
+  /* Standard margin setup; allow orientation selection or automatic page fitting */
   @page {
-    margin: 8mm 10mm;
+    margin: 5mm 6mm;
+    size: auto;
+  }
+
+  @page landscape-mode {
+    size: landscape;
+    margin: 5mm 5mm;
+  }
+
+  @page portrait-mode {
     size: portrait;
+    margin: 6mm 8mm;
+  }
+
+  .print-landscape {
+    page: landscape-mode;
+  }
+
+  .print-portrait {
+    page: portrait-mode;
   }
 }
 

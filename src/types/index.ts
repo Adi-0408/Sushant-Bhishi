@@ -255,6 +255,8 @@ export interface LocalBackupSnapshot {
 export interface AutoBackupConfig {
   enabled: boolean;
   intervalDays: number;
+  backupHour: number; // e.g. 23 for 11 PM
+  backupMinute?: number; // e.g. 0 for 11:00 PM
   lastBackupTimestamp: number;
   lastBackupDate?: string;
   lastBackupFilename?: string;

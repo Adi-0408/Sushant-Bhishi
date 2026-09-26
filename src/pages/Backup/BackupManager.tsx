@@ -94,8 +94,8 @@ export const BackupManager: React.FC = () => {
     setAutoConfig(updated);
     showToast(
       enabled
-        ? (language === 'EN' ? 'Auto-backup enabled (every 2 days).' : 'स्वयंचलित बॅकअप सुरू केला (प्रत्येक २ दिवसांनी).')
-        : (language === 'EN' ? 'Auto-backup disabled.' : 'स्वयंचलित बॅकअप बंद केला.'),
+        ? (language === 'EN' ? 'Daily 11:00 PM auto-backup enabled.' : 'दररोज रात्री ११:०० वा. चा स्वयंचलित बॅकअप सुरू केला.')
+        : (language === 'EN' ? 'Daily auto-backup disabled.' : 'स्वयंचलित बॅकअप बंद केला.'),
       'info'
     );
   };
@@ -256,8 +256,8 @@ export const BackupManager: React.FC = () => {
           </h2>
           <p className="text-xs text-[#5F6E68] font-bold mt-1">
             {language === 'EN'
-              ? 'Automatic 2-day local backup, local snapshots, and system restore'
-              : 'स्थानिक डिव्हाइसवर दर २ दिवसांनी स्वयंचलित बॅकअप व रिस्टोर व्यवस्थापन'}
+              ? 'Automatic daily 11:00 PM local backup, Google Drive cloud sync, and system restore'
+              : 'स्थानिक डिव्हाइसवर दररोज रात्री ११:०० वा. स्वयंचलित बॅकअप, गुगल ड्राईव्ह सिंक व रिस्टोर व्यवस्थापन'}
           </p>
         </div>
 
@@ -289,7 +289,7 @@ export const BackupManager: React.FC = () => {
         </div>
       )}
 
-      {/* FEATURED: 2-DAY AUTOMATIC LOCAL BACKUP STATUS CARD */}
+      {/* FEATURED: DAILY 11:00 PM AUTOMATIC LOCAL BACKUP STATUS CARD */}
       <div className="bg-gradient-to-br from-white to-[#F4F6F5] p-6 sm:p-7 rounded-3xl border-2 border-emerald-300 shadow-sm relative overflow-hidden">
         <div className="absolute top-0 right-0 w-48 h-48 bg-[#0F7A5C]/5 rounded-full blur-2xl pointer-events-none" />
 
@@ -300,7 +300,7 @@ export const BackupManager: React.FC = () => {
                 <ShieldCheck className="w-3.5 h-3.5 text-[#0F7A5C]" />
                 <span>
                   {autoConfig.enabled
-                    ? (language === 'EN' ? 'Active: Every 2 Days' : 'सक्रिय: दर २ दिवसांनी स्वयंचलित बॅकअप')
+                    ? (language === 'EN' ? 'Active: Daily at 11:00 PM' : 'सक्रिय: दररोज रात्री ११:०० वाजता')
                     : (language === 'EN' ? 'Paused' : 'स्वयंचलित बॅकअप बंद आहे')}
                 </span>
               </span>
@@ -311,14 +311,14 @@ export const BackupManager: React.FC = () => {
 
             <h3 className="text-lg sm:text-xl font-black text-[#10241E]">
               {language === 'EN'
-                ? 'Automatic 2-Day Local Device Backup'
-                : 'दर २ दिवसांनी स्वयंचलित डेटा बॅकअप (Auto 2-Day Backup)'}
+                ? 'Automatic Daily 11:00 PM Local Device Backup'
+                : 'दररोज रात्री ११:०० वा. स्वयंचलित डेटा बॅकअप (Daily 11 PM Backup)'}
             </h3>
 
             <p className="text-xs sm:text-sm text-[#5F6E68] font-bold max-w-2xl leading-relaxed">
               {language === 'EN'
-                ? 'Your entire database (customers, bishi accounts, weekly/monthly collections, loans, interest, penalties) is automatically compiled and saved directly onto your device every 2 days.'
-                : 'सर्व खातेदार, भिशी खाती, जमा हप्ते, कर्ज, व्याज आणि दंड यांचा सुरक्षित बॅकअप दर २ दिवसांनी आपोआप तयार होऊन तुमच्या स्थानिक डिव्हाइसवर सेव्ह केला जातो.'}
+                ? 'Your entire database (customers, bishi accounts, weekly/monthly collections, loans, interest, penalties) is automatically compiled and saved directly onto your device every day at 11:00 PM.'
+                : 'सर्व खातेदार, भिशी खाती, जमा हप्ते, कर्ज, व्याज आणि दंड यांचा सुरक्षित बॅकअप दररोज रात्री ११:०० वाजता आपोआप तयार होऊन तुमच्या स्थानिक डिव्हाइसवर सेव्ह केला जातो.'}
             </p>
 
             {/* Schedule Timeline Badges */}
@@ -382,7 +382,7 @@ export const BackupManager: React.FC = () => {
 
             <div className="flex items-center justify-between p-3 bg-white rounded-2xl border border-[#E4EAE7] shadow-2xs">
               <span className="text-xs font-black text-[#10241E]">
-                {language === 'EN' ? 'Auto-backup every 2 days' : '२ दिवसांचा स्वयंचलित बॅकअप'}
+                {language === 'EN' ? 'Auto-backup daily at 11 PM' : 'दररोज रात्री ११ वा. बॅकअप'}
               </span>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -505,7 +505,7 @@ export const BackupManager: React.FC = () => {
 
             <div className="flex items-center justify-between p-3 bg-white rounded-2xl border border-[#E4EAE7] shadow-2xs">
               <span className="text-xs font-black text-[#10241E]">
-                {language === 'EN' ? 'Auto-upload to Drive' : '२ दिवसांनी ड्राईव्हवर सिंक'}
+                {language === 'EN' ? 'Auto-upload to Drive at 11 PM' : 'रात्री ११ वा. ड्राईव्हवर सिंक'}
               </span>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input

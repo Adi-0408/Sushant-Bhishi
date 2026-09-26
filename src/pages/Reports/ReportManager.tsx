@@ -329,7 +329,7 @@ export const ReportManager: React.FC = () => {
     : null;
 
   return (
-    <div className="space-y-6 pb-16 print-container">
+    <div className="space-y-6 pb-16 print-container print-landscape">
       {/* Top Header Control Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs no-print">
         <div>
@@ -649,30 +649,30 @@ export const ReportManager: React.FC = () => {
               </div>
 
               {/* Main Ledger Table (Multi-level columns matching photo & excel mockup) */}
-              <div className="overflow-x-auto table-responsive">
-                <table className="w-full text-center text-xs font-bold border-collapse border border-amber-900/40">
-                  <thead>
-                    <tr className="bg-[#f5e6d3] text-slate-900 border-b border-amber-900/40">
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 w-12">{language === 'EN' ? 'Sr.' : 'अ. क्र.'}</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 w-24">{language === 'EN' ? 'Date' : 'तारीख'}</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-emerald-900">{language === 'EN' ? 'Deposit (₹)' : 'खात्यात जमा रुपये'}</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-emerald-950">{language === 'EN' ? 'Total Deposit (₹)' : 'एकूण जमा रुपये'}</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-rose-900">{language === 'EN' ? 'Penalty' : 'दंड'}</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40">{language === 'EN' ? 'Expected' : 'देणे'}</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-amber-900">{language === 'EN' ? 'Loan Given' : 'दिलेले कर्ज'}</th>
-                      <th colSpan={2} className="p-2.5 border border-amber-900/40 text-brand-900">{language === 'EN' ? 'Loan Repayment' : 'कर्ज परत फेड'}</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-rose-900">{language === 'EN' ? 'Penalty' : 'दंड'}</th>
-                      <th rowSpan={2} className="p-2.5 border border-amber-900/40 text-rose-950">{language === 'EN' ? 'Balance Due' : 'देणे बाकी'}</th>
+              <div className="overflow-x-auto table-responsive print:overflow-visible">
+                <table className="w-full text-center text-xs font-bold border-collapse border border-amber-900/40 print:text-[8px] print:leading-tight print-fit-table">
+                  <thead className="print:table-header-group">
+                    <tr className="bg-[#f5e6d3] text-slate-900 border-b border-amber-900/40 break-inside-avoid">
+                      <th rowSpan={2} className="p-2.5 print:p-1 border border-amber-900/40 w-12 print:w-6">{language === 'EN' ? 'Sr.' : 'अ. क्र.'}</th>
+                      <th rowSpan={2} className="p-2.5 print:p-1 border border-amber-900/40 w-24 print:w-16">{language === 'EN' ? 'Date' : 'तारीख'}</th>
+                      <th rowSpan={2} className="p-2.5 print:p-1 border border-amber-900/40 text-emerald-900">{language === 'EN' ? 'Deposit (₹)' : 'खात्यात जमा रुपये'}</th>
+                      <th rowSpan={2} className="p-2.5 print:p-1 border border-amber-900/40 text-emerald-950">{language === 'EN' ? 'Total Deposit (₹)' : 'एकूण जमा रुपये'}</th>
+                      <th rowSpan={2} className="p-2.5 print:p-1 border border-amber-900/40 text-rose-900">{language === 'EN' ? 'Penalty' : 'दंड'}</th>
+                      <th rowSpan={2} className="p-2.5 print:p-1 border border-amber-900/40">{language === 'EN' ? 'Expected' : 'देणे'}</th>
+                      <th rowSpan={2} className="p-2.5 print:p-1 border border-amber-900/40 text-amber-900">{language === 'EN' ? 'Loan Given' : 'दिलेले कर्ज'}</th>
+                      <th colSpan={2} className="p-2.5 print:p-1 border border-amber-900/40 text-brand-900">{language === 'EN' ? 'Loan Repayment' : 'कर्ज परत फेड'}</th>
+                      <th rowSpan={2} className="p-2.5 print:p-1 border border-amber-900/40 text-rose-900">{language === 'EN' ? 'Penalty' : 'दंड'}</th>
+                      <th rowSpan={2} className="p-2.5 print:p-1 border border-amber-900/40 text-rose-950">{language === 'EN' ? 'Balance Due' : 'देणे बाकी'}</th>
                     </tr>
-                    <tr className="bg-[#faebd7] text-slate-900 border-b border-amber-900/40">
-                      <th className="p-2 border border-amber-900/40">{language === 'EN' ? 'Principal' : 'कर्ज'}</th>
-                      <th className="p-2 border border-amber-900/40">{language === 'EN' ? 'Interest' : 'व्याज'}</th>
+                    <tr className="bg-[#faebd7] text-slate-900 border-b border-amber-900/40 break-inside-avoid">
+                      <th className="p-2 print:p-1 border border-amber-900/40">{language === 'EN' ? 'Principal' : 'कर्ज'}</th>
+                      <th className="p-2 print:p-1 border border-amber-900/40">{language === 'EN' ? 'Interest' : 'व्याज'}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {!ledgerCalculation || ledgerCalculation.rows.length === 0 ? (
                       <tr>
-                        <td colSpan={11} className="p-8 text-center text-slate-500 font-bold text-xs bg-slate-50 border border-amber-900/30">
+                        <td colSpan={11} className="p-8 print:p-4 text-center text-slate-500 font-bold text-xs print:text-[9px] bg-slate-50 border border-amber-900/30">
                           {language === 'EN'
                             ? 'No completed payments recorded yet for this customer.'
                             : 'या खातेदाराची अद्याप कोणतीही पूर्ण जमा नोंद झालेली नाही.'}
@@ -682,72 +682,72 @@ export const ReportManager: React.FC = () => {
                       ledgerCalculation.rows.map((row) => (
                         <tr
                           key={row.id}
-                          className="hover:bg-amber-100/40 transition-colors odd:bg-white even:bg-[#fcf8f2] border-b border-amber-900/20"
+                          className="hover:bg-amber-100/40 transition-colors odd:bg-white even:bg-[#fcf8f2] border-b border-amber-900/20 break-inside-avoid"
                         >
-                          <td className="p-2 border border-amber-900/30 font-extrabold text-slate-700">{row.srNo}</td>
-                          <td className="p-2 border border-amber-900/30 font-bold text-slate-800">
+                          <td className="p-2 print:p-1 border border-amber-900/30 font-extrabold text-slate-700">{row.srNo}</td>
+                          <td className="p-2 print:p-1 border border-amber-900/30 font-bold text-slate-800">
                             {formatDateMarathi(row.date, language)}
                           </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-black text-emerald-700">
+                          <td className="p-2 print:p-1 border border-amber-900/30 text-right font-black text-emerald-700">
                             {row.deposit > 0 ? formatCurrency(row.deposit, language) : '-'}
                           </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-black text-emerald-900">
+                          <td className="p-2 print:p-1 border border-amber-900/30 text-right font-black text-emerald-900">
                             {row.cumulativeDeposit > 0 ? formatCurrency(row.cumulativeDeposit, language) : '-'}
                           </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-extrabold text-rose-700">
+                          <td className="p-2 print:p-1 border border-amber-900/30 text-right font-extrabold text-rose-700">
                             {row.bishiPenalty > 0 ? formatCurrency(row.bishiPenalty, language) : '-'}
                           </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-bold text-slate-800">
+                          <td className="p-2 print:p-1 border border-amber-900/30 text-right font-bold text-slate-800">
                             {row.expected > 0 ? formatCurrency(row.expected, language) : '-'}
                           </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-extrabold text-amber-800">
+                          <td className="p-2 print:p-1 border border-amber-900/30 text-right font-extrabold text-amber-800">
                             {row.loanIssued > 0 ? formatCurrency(row.loanIssued, language) : '-'}
                           </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-extrabold text-emerald-800">
+                          <td className="p-2 print:p-1 border border-amber-900/30 text-right font-extrabold text-emerald-800">
                             {row.loanPrincipalPaid > 0 ? formatCurrency(row.loanPrincipalPaid, language) : '-'}
                           </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-extrabold text-emerald-800">
+                          <td className="p-2 print:p-1 border border-amber-900/30 text-right font-extrabold text-emerald-800">
                             {row.loanInterestPaid > 0 ? formatCurrency(row.loanInterestPaid, language) : '-'}
                           </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-extrabold text-rose-700">
+                          <td className="p-2 print:p-1 border border-amber-900/30 text-right font-extrabold text-rose-700">
                             {row.loanPenalty > 0 ? formatCurrency(row.loanPenalty, language) : '-'}
                           </td>
-                          <td className="p-2 border border-amber-900/30 text-right font-black text-rose-600">
+                          <td className="p-2 print:p-1 border border-amber-900/30 text-right font-black text-rose-600">
                             {row.balanceRemaining > 0 ? formatCurrency(row.balanceRemaining, language) : '₹0'}
                           </td>
                         </tr>
                       ))
                     )}
                   </tbody>
-                  <tfoot>
-                    <tr className="bg-[#8B4513] text-white font-extrabold text-xs">
-                      <td className="p-2 border border-amber-900/40 text-center">-</td>
-                      <td className="p-2 border border-amber-900/40 text-center">{language === 'EN' ? 'TOTAL' : 'एकूण'}</td>
-                      <td className="p-2 border border-amber-900/40 text-right text-emerald-200 font-black">
+                  <tfoot className="print:table-footer-group">
+                    <tr className="bg-[#8B4513] text-white font-extrabold text-xs print:text-[8px] break-inside-avoid">
+                      <td className="p-2 print:p-1 border border-amber-900/40 text-center">-</td>
+                      <td className="p-2 print:p-1 border border-amber-900/40 text-center">{language === 'EN' ? 'TOTAL' : 'एकूण'}</td>
+                      <td className="p-2 print:p-1 border border-amber-900/40 text-right text-emerald-200 font-black">
                         {ledgerCalculation && ledgerCalculation.totalDeposit > 0 ? formatCurrency(ledgerCalculation.totalDeposit, language) : '-'}
                       </td>
-                      <td className="p-2 border border-amber-900/40 text-right text-emerald-100 font-black">
+                      <td className="p-2 print:p-1 border border-amber-900/40 text-right text-emerald-100 font-black">
                         {ledgerCalculation && ledgerCalculation.totalCumulativeDeposit > 0 ? formatCurrency(ledgerCalculation.totalCumulativeDeposit, language) : '-'}
                       </td>
-                      <td className="p-2 border border-amber-900/40 text-right text-rose-200">
+                      <td className="p-2 print:p-1 border border-amber-900/40 text-right text-rose-200">
                         {ledgerCalculation && ledgerCalculation.totalBishiPenalty > 0 ? formatCurrency(ledgerCalculation.totalBishiPenalty, language) : '-'}
                       </td>
-                      <td className="p-2 border border-amber-900/40 text-right">
+                      <td className="p-2 print:p-1 border border-amber-900/40 text-right">
                         {ledgerCalculation && ledgerCalculation.totalExpected > 0 ? formatCurrency(ledgerCalculation.totalExpected, language) : '-'}
                       </td>
-                      <td className="p-2 border border-amber-900/40 text-right text-amber-200">
+                      <td className="p-2 print:p-1 border border-amber-900/40 text-right text-amber-200">
                         {ledgerCalculation && ledgerCalculation.totalLoanIssued > 0 ? formatCurrency(ledgerCalculation.totalLoanIssued, language) : '-'}
                       </td>
-                      <td className="p-2 border border-amber-900/40 text-right text-emerald-200 font-black">
+                      <td className="p-2 print:p-1 border border-amber-900/40 text-right text-emerald-200 font-black">
                         {ledgerCalculation && ledgerCalculation.totalLoanPrincipalPaid > 0 ? formatCurrency(ledgerCalculation.totalLoanPrincipalPaid, language) : '-'}
                       </td>
-                      <td className="p-2 border border-amber-900/40 text-right text-emerald-200 font-black">
+                      <td className="p-2 print:p-1 border border-amber-900/40 text-right text-emerald-200 font-black">
                         {ledgerCalculation && ledgerCalculation.totalLoanInterestPaid > 0 ? formatCurrency(ledgerCalculation.totalLoanInterestPaid, language) : '-'}
                       </td>
-                      <td className="p-2 border border-amber-900/40 text-right text-rose-200">
+                      <td className="p-2 print:p-1 border border-amber-900/40 text-right text-rose-200">
                         {ledgerCalculation && ledgerCalculation.totalLoanPenalty > 0 ? formatCurrency(ledgerCalculation.totalLoanPenalty, language) : '-'}
                       </td>
-                      <td className="p-2 border border-amber-900/40 text-right text-rose-200 font-black">
+                      <td className="p-2 print:p-1 border border-amber-900/40 text-right text-rose-200 font-black">
                         {ledgerCalculation && ledgerCalculation.finalRemainingBalance > 0 ? formatCurrency(ledgerCalculation.finalRemainingBalance, language) : '₹0'}
                       </td>
                     </tr>
@@ -897,57 +897,57 @@ export const ReportManager: React.FC = () => {
                 </div>
 
                 {/* Desktop & Print Table View */}
-                <div className="hidden md:block print:block overflow-x-auto">
-                  <table className="w-full text-left text-xs sm:text-sm border-collapse border border-slate-300">
-                    <thead className="bg-emerald-900 text-white font-extrabold print:bg-emerald-900 print:text-white">
+                <div className="hidden md:block print:block overflow-x-auto print:overflow-visible">
+                  <table className="w-full text-left text-xs sm:text-sm border-collapse border border-slate-300 print:text-[8px] print:leading-tight print-fit-table">
+                    <thead className="bg-emerald-900 text-white font-extrabold print:bg-emerald-900 print:text-white print:table-header-group">
                       <tr>
-                        <th className="p-3 text-center border border-emerald-800 w-10">#</th>
-                        <th className="p-3 border border-emerald-800">{t.colAccountNo}</th>
-                        <th className="p-3 border border-emerald-800">{t.colFullName}</th>
-                        <th className="p-3 border border-emerald-800">{t.colMobile}</th>
-                        <th className="p-3 border border-emerald-800">{t.colBishi}</th>
-                        <th className="p-3 text-right border border-emerald-800">{t.colExpectedAmount}</th>
-                        <th className="p-3 text-right border border-emerald-800">{t.colCollectedAmount}</th>
-                        <th className="p-3 text-right border border-emerald-800">{t.colRemainingAmount}</th>
-                        <th className="p-3 text-right border border-emerald-800">{language === 'EN' ? 'Interest/Penalty (₹)' : 'व्याज/दंड (₹)'}</th>
-                        <th className="p-3 text-right border border-emerald-800 bg-emerald-950/40">{language === 'EN' ? 'Total Payable (₹)' : 'एकूण देय (₹)'}</th>
-                        <th className="p-3 text-right border border-emerald-800 bg-emerald-950/40">{language === 'EN' ? 'Extra Submitted (₹)' : 'जादा जमा (₹)'}</th>
-                        <th className="p-3 text-right border border-emerald-800 bg-emerald-950/40">{language === 'EN' ? 'Total Return (₹)' : 'एकूण परतावा (₹)'}</th>
-                        <th className="p-3 text-center border border-emerald-800">{t.colStatus}</th>
+                        <th className="p-3 print:p-1 text-center border border-emerald-800 w-10 print:w-6">#</th>
+                        <th className="p-3 print:p-1 print:px-1 border border-emerald-800 text-center print:w-11">{t.colAccountNo}</th>
+                        <th className="p-3 print:p-1 print:px-1.5 border border-emerald-800 text-left print:w-28">{t.colFullName}</th>
+                        <th className="p-3 print:p-1 print:px-1 border border-emerald-800 text-center print:w-18">{t.colMobile}</th>
+                        <th className="p-3 print:p-1 print:px-1 border border-emerald-800 text-center print:w-20">{t.colBishi}</th>
+                        <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800">{t.colExpectedAmount}</th>
+                        <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800">{t.colCollectedAmount}</th>
+                        <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800">{t.colRemainingAmount}</th>
+                        <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800">{language === 'EN' ? 'Interest/Penalty (₹)' : 'व्याज/दंड (₹)'}</th>
+                        <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 bg-emerald-950/40 print:bg-emerald-950/20">{language === 'EN' ? 'Total Payable (₹)' : 'एकूण देय (₹)'}</th>
+                        <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 bg-emerald-950/40 print:bg-emerald-950/20">{language === 'EN' ? 'Extra Submitted (₹)' : 'जादा जमा (₹)'}</th>
+                        <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 bg-emerald-950/40 print:bg-emerald-950/20">{language === 'EN' ? 'Total Return (₹)' : 'एकूण परतावा (₹)'}</th>
+                        <th className="p-3 print:p-1 print:px-1 text-center border border-emerald-800 print:w-14">{t.colStatus}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 font-medium">
                       {filteredRows.map(({ customer: cust, exp, coll, rem, int, pen, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
-                        <tr key={cust.id} className="hover:bg-slate-50 transition-colors odd:bg-white even:bg-slate-50/50">
-                          <td className="p-3 text-center font-bold text-slate-700 border border-slate-300">{idx + 1}</td>
-                          <td className="p-3 font-extrabold text-slate-900 border border-slate-300">{cust.accountNumber}</td>
-                          <td className="p-3 font-bold text-slate-800 border border-slate-300">{cust.name}</td>
-                          <td className="p-3 text-slate-600 border border-slate-300">{cust.mobile}</td>
-                          <td className="p-3 text-slate-700 border border-slate-300">{getBishiNameMarathi(cust.bishiType, language)}</td>
-                          <td className="p-3 text-right font-bold text-slate-800 border border-slate-300">{formatCurrency(exp, language)}</td>
-                          <td className="p-3 text-right font-extrabold text-emerald-700 border border-slate-300">{formatCurrency(coll, language)}</td>
-                          <td className="p-3 text-right font-black text-rose-600 border border-slate-300">{formatCurrency(rem, language)}</td>
-                          <td className="p-3 text-right text-slate-800 border border-slate-300">
-                            {int > 0 && <div className="text-blue-700 font-bold">{language === 'EN' ? 'Interest: ' : 'व्याज: '}{formatCurrency(int, language)}</div>}
-                            {pen > 0 && <div className="text-amber-800 font-bold">{language === 'EN' ? 'Penalty: ' : 'दंड: '}{formatCurrency(pen, language)}</div>}
+                        <tr key={cust.id} className="hover:bg-slate-50 transition-colors odd:bg-white even:bg-slate-50/50 break-inside-avoid">
+                          <td className="p-3 print:p-1 text-center font-bold text-slate-700 border border-slate-300">{idx + 1}</td>
+                          <td className="p-3 print:p-1 print:px-1 text-center font-extrabold text-slate-900 border border-slate-300">{cust.accountNumber}</td>
+                          <td className="p-3 print:p-1 print:px-1.5 font-bold text-slate-800 border border-slate-300">{cust.name}</td>
+                          <td className="p-3 print:p-1 print:px-1 text-center text-slate-600 border border-slate-300">{cust.mobile}</td>
+                          <td className="p-3 print:p-1 print:px-1 text-center text-slate-700 border border-slate-300">{getBishiNameMarathi(cust.bishiType, language)}</td>
+                          <td className="p-3 print:p-1 print:px-1 text-right font-bold text-slate-800 border border-slate-300">{formatCurrency(exp, language)}</td>
+                          <td className="p-3 print:p-1 print:px-1 text-right font-extrabold text-emerald-700 border border-slate-300">{formatCurrency(coll, language)}</td>
+                          <td className="p-3 print:p-1 print:px-1 text-right font-black text-rose-600 border border-slate-300">{formatCurrency(rem, language)}</td>
+                          <td className="p-3 print:p-1 print:px-1 text-right text-slate-800 border border-slate-300">
+                            {int > 0 && <div className="text-blue-700 font-bold">{language === 'EN' ? 'Int: ' : 'व्याज: '}{formatCurrency(int, language)}</div>}
+                            {pen > 0 && <div className="text-amber-800 font-bold">{language === 'EN' ? 'Pen: ' : 'दंड: '}{formatCurrency(pen, language)}</div>}
                             {int === 0 && pen === 0 && '-'}
                           </td>
-                          <td className="p-3 text-right font-bold text-blue-900 border border-slate-300 bg-blue-50/20">
+                          <td className="p-3 print:p-1 print:px-1 text-right font-bold text-blue-900 border border-slate-300 bg-blue-50/20">
                             {totalPayable > 0 ? formatCurrency(totalPayable, language) : '-'}
                           </td>
-                          <td className="p-3 text-right font-bold text-purple-900 border border-slate-300 bg-purple-50/20">
+                          <td className="p-3 print:p-1 print:px-1 text-right font-bold text-purple-900 border border-slate-300 bg-purple-50/20">
                             {extraSubmitted > 0 ? (
-                              <span className="inline-block px-1.5 py-0.5 rounded bg-purple-100 text-purple-900 font-black">
+                              <span className="inline-block px-1 py-0.5 rounded bg-purple-100 text-purple-900 font-black print:bg-transparent">
                                 +{formatCurrency(extraSubmitted, language)}
                               </span>
                             ) : '-'}
                           </td>
-                          <td className="p-3 text-right font-black text-emerald-800 border border-slate-300 bg-emerald-50/30">
+                          <td className="p-3 print:p-1 print:px-1 text-right font-black text-emerald-800 border border-slate-300 bg-emerald-50/30">
                             {totalWithExtra > 0 ? formatCurrency(totalWithExtra, language) : '-'}
                           </td>
-                          <td className="p-3 text-center border border-slate-300">
+                          <td className="p-3 print:p-1 print:px-1 text-center border border-slate-300">
                             <span
-                              className={`px-2.5 py-1 rounded-md text-xs font-extrabold ${
+                              className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold ${
                                 isPaid
                                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                   : isPartial
@@ -961,31 +961,31 @@ export const ReportManager: React.FC = () => {
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot className="bg-emerald-950 text-white font-black text-xs sm:text-sm print:bg-emerald-950 print:text-white">
-                      <tr>
-                        <td className="p-3 text-center border border-emerald-800">-</td>
-                        <td className="p-3 border border-emerald-800">{language === 'EN' ? 'TOTAL' : 'एकूण (TOTAL)'}</td>
-                        <td className="p-3 border border-emerald-800">{language === 'EN' ? 'Accounts:' : 'खातेदार:'} {filteredRows.length}</td>
-                        <td className="p-3 border border-emerald-800">-</td>
-                        <td className="p-3 border border-emerald-800">-</td>
-                        <td className="p-3 text-right border border-emerald-800">{formatCurrency(grandExpected, language)}</td>
-                        <td className="p-3 text-right border border-emerald-800 text-emerald-300">{formatCurrency(grandCollected, language)}</td>
-                        <td className="p-3 text-right border border-emerald-800 text-rose-300">{formatCurrency(grandRemaining, language)}</td>
-                        <td className="p-3 text-right border border-emerald-800 text-amber-200 font-bold">
-                          {grandInterest > 0 && <div>{language === 'EN' ? 'Interest: ' : 'व्याज: '}{formatCurrency(grandInterest, language)}</div>}
-                          {grandPenalty > 0 && <div>{language === 'EN' ? 'Penalty: ' : 'दंड: '}{formatCurrency(grandPenalty, language)}</div>}
+                    <tfoot className="bg-emerald-950 text-white font-black text-xs print:text-[8px] print:bg-emerald-950 print:text-white print:table-footer-group">
+                      <tr className="break-inside-avoid">
+                        <td className="p-3 print:p-1 text-center border border-emerald-800">-</td>
+                        <td className="p-3 print:p-1 print:px-1 text-center border border-emerald-800">{language === 'EN' ? 'TOTAL' : 'एकूण'}</td>
+                        <td className="p-3 print:p-1 print:px-1.5 border border-emerald-800">{language === 'EN' ? 'Accounts:' : 'खातेदार:'} {filteredRows.length}</td>
+                        <td className="p-3 print:p-1 border border-emerald-800">-</td>
+                        <td className="p-3 print:p-1 border border-emerald-800">-</td>
+                        <td className="p-3 print:p-1 print:px-1 text-right border border-emerald-800">{formatCurrency(grandExpected, language)}</td>
+                        <td className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 text-emerald-300">{formatCurrency(grandCollected, language)}</td>
+                        <td className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 text-rose-300">{formatCurrency(grandRemaining, language)}</td>
+                        <td className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 text-amber-200 font-bold">
+                          {grandInterest > 0 && <div>{language === 'EN' ? 'Int: ' : 'व्याज: '}{formatCurrency(grandInterest, language)}</div>}
+                          {grandPenalty > 0 && <div>{language === 'EN' ? 'Pen: ' : 'दंड: '}{formatCurrency(grandPenalty, language)}</div>}
                           {grandInterest === 0 && grandPenalty === 0 && '-'}
                         </td>
-                        <td className="p-3 text-right border border-emerald-800 text-blue-200 font-black">
+                        <td className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 text-blue-200 font-black">
                           {formatCurrency(grandPayable, language)}
                         </td>
-                        <td className="p-3 text-right border border-emerald-800 text-purple-200 font-black">
+                        <td className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 text-purple-200 font-black">
                           {formatCurrency(grandExtraSubmitted, language)}
                         </td>
-                        <td className="p-3 text-right border border-emerald-800 text-emerald-300 font-black">
+                        <td className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 text-emerald-300 font-black">
                           {formatCurrency(grandFinalReturn, language)}
                         </td>
-                        <td className="p-3 text-center border border-emerald-800">-</td>
+                        <td className="p-3 print:p-1 text-center border border-emerald-800">-</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -1061,42 +1061,42 @@ export const ReportManager: React.FC = () => {
                   {formatDateMarathi(new Date().toISOString().split('T')[0], language)} | {language === 'EN' ? 'Records: ' : 'एकूण नोंदी: '}{totalCustomers}
                 </p>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-amber-900 text-white">
-                      <th className="px-3 py-2.5 text-center font-bold whitespace-nowrap">अ.क्र.</th>
-                      <th className="px-3 py-2.5 text-left font-bold whitespace-nowrap">{t.thakbakiAccountNo}</th>
-                      <th className="px-3 py-2.5 text-left font-bold whitespace-nowrap">{t.thakbakiCustomerName}</th>
-                      <th className="px-3 py-2.5 text-left font-bold whitespace-nowrap">{t.thakbakiMobile}</th>
-                      <th className="px-3 py-2.5 text-left font-bold whitespace-nowrap">{language === 'EN' ? 'Office' : 'कार्यालय'}</th>
-                      <th className="px-3 py-2.5 text-right font-bold whitespace-nowrap">{t.thakbakiInitialAmount}</th>
-                      <th className="px-3 py-2.5 text-right font-bold whitespace-nowrap">{t.thakbakiPaidAmount}</th>
-                      <th className="px-3 py-2.5 text-right font-bold whitespace-nowrap">{t.thakbakiRemainingAmount}</th>
-                      <th className="px-3 py-2.5 text-center font-bold whitespace-nowrap">{t.thakbakiStatus}</th>
-                      <th className="px-3 py-2.5 text-center font-bold whitespace-nowrap">{t.thakbakiLastPayment}</th>
+              <div className="overflow-x-auto print:overflow-visible">
+                <table className="w-full text-xs print:text-[8.5px] print:leading-tight print-fit-table">
+                  <thead className="print:table-header-group">
+                    <tr className="bg-amber-900 text-white break-inside-avoid">
+                      <th className="px-3 py-2.5 print:p-1 text-center font-bold whitespace-nowrap">अ.क्र.</th>
+                      <th className="px-3 py-2.5 print:p-1 text-left font-bold whitespace-nowrap">{t.thakbakiAccountNo}</th>
+                      <th className="px-3 py-2.5 print:p-1 text-left font-bold whitespace-nowrap">{t.thakbakiCustomerName}</th>
+                      <th className="px-3 py-2.5 print:p-1 text-left font-bold whitespace-nowrap">{t.thakbakiMobile}</th>
+                      <th className="px-3 py-2.5 print:p-1 text-left font-bold whitespace-nowrap">{language === 'EN' ? 'Office' : 'कार्यालय'}</th>
+                      <th className="px-3 py-2.5 print:p-1 text-right font-bold whitespace-nowrap">{t.thakbakiInitialAmount}</th>
+                      <th className="px-3 py-2.5 print:p-1 text-right font-bold whitespace-nowrap">{t.thakbakiPaidAmount}</th>
+                      <th className="px-3 py-2.5 print:p-1 text-right font-bold whitespace-nowrap">{t.thakbakiRemainingAmount}</th>
+                      <th className="px-3 py-2.5 print:p-1 text-center font-bold whitespace-nowrap">{t.thakbakiStatus}</th>
+                      <th className="px-3 py-2.5 print:p-1 text-center font-bold whitespace-nowrap">{t.thakbakiLastPayment}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {thakbakiList.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="px-4 py-10 text-center text-slate-400 font-bold">
+                        <td colSpan={10} className="px-4 py-10 print:py-4 text-center text-slate-400 font-bold">
                           {t.thakbakiNoRecords}
                         </td>
                       </tr>
                     ) : (
                       thakbakiList.map((entry, idx) => (
-                        <tr key={entry.id} className="hover:bg-slate-50 odd:bg-white even:bg-slate-50/50">
-                          <td className="px-3 py-3 text-center text-slate-500 font-bold">{idx + 1}</td>
-                          <td className="px-3 py-3 font-extrabold text-slate-700">{entry.accountNumber}</td>
-                          <td className="px-3 py-3 font-extrabold text-slate-900 whitespace-nowrap">{entry.name}</td>
-                          <td className="px-3 py-3 text-slate-600">{entry.mobile || '-'}</td>
-                          <td className="px-3 py-3 text-slate-600">{getOfficeNameMarathi(entry.officeId, language)}</td>
-                          <td className="px-3 py-3 text-right font-bold text-slate-700">{formatCurrency(entry.initialAmount, language)}</td>
-                          <td className="px-3 py-3 text-right font-bold text-emerald-700">{formatCurrency(entry.paidAmount, language)}</td>
-                          <td className="px-3 py-3 text-right font-black text-rose-700">{formatCurrency(entry.remainingAmount, language)}</td>
-                          <td className="px-3 py-3 text-center">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        <tr key={entry.id} className="hover:bg-slate-50 odd:bg-white even:bg-slate-50/50 break-inside-avoid">
+                          <td className="px-3 py-3 print:p-1 text-center text-slate-500 font-bold">{idx + 1}</td>
+                          <td className="px-3 py-3 print:p-1 font-extrabold text-slate-700">{entry.accountNumber}</td>
+                          <td className="px-3 py-3 print:p-1 font-extrabold text-slate-900 whitespace-nowrap">{entry.name}</td>
+                          <td className="px-3 py-3 print:p-1 text-slate-600">{entry.mobile || '-'}</td>
+                          <td className="px-3 py-3 print:p-1 text-slate-600">{getOfficeNameMarathi(entry.officeId, language)}</td>
+                          <td className="px-3 py-3 print:p-1 text-right font-bold text-slate-700">{formatCurrency(entry.initialAmount, language)}</td>
+                          <td className="px-3 py-3 print:p-1 text-right font-bold text-emerald-700">{formatCurrency(entry.paidAmount, language)}</td>
+                          <td className="px-3 py-3 print:p-1 text-right font-black text-rose-700">{formatCurrency(entry.remainingAmount, language)}</td>
+                          <td className="px-3 py-3 print:p-1 text-center">
+                            <span className={`px-2 py-0.5 print:px-1 print:py-0 rounded-full text-[10px] print:text-[8px] font-black ${
                               entry.status === 'CLEARED'
                                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                                 : 'bg-amber-100 text-amber-800 border border-amber-200'
@@ -1104,7 +1104,7 @@ export const ReportManager: React.FC = () => {
                               {entry.status === 'CLEARED' ? `✅ ${t.thakbakiCleared}` : `⏳ ${t.thakbakiPending}`}
                             </span>
                           </td>
-                          <td className="px-3 py-3 text-center text-slate-500 text-[10px] font-medium">
+                          <td className="px-3 py-3 print:p-1 text-center text-slate-500 text-[10px] print:text-[8px] font-medium">
                             {entry.lastPaymentDate ? formatDateMarathi(entry.lastPaymentDate, language) : '-'}
                           </td>
                         </tr>
@@ -1112,15 +1112,15 @@ export const ReportManager: React.FC = () => {
                     )}
                   </tbody>
                   {thakbakiList.length > 0 && (
-                    <tfoot className="bg-amber-800 text-white font-black text-xs">
-                      <tr>
-                        <td className="px-3 py-3 text-center" colSpan={5}>
+                    <tfoot className="bg-amber-800 text-white font-black text-xs print:text-[8.5px] print:table-footer-group">
+                      <tr className="break-inside-avoid">
+                        <td className="px-3 py-3 print:p-1 text-center" colSpan={5}>
                           {language === 'EN' ? 'TOTAL' : 'एकूण'} ({totalCustomers} {language === 'EN' ? 'Records' : 'नोंदी'})
                         </td>
-                        <td className="px-3 py-3 text-right">{formatCurrency(totalInitial, language)}</td>
-                        <td className="px-3 py-3 text-right text-amber-200">{formatCurrency(totalPaid, language)}</td>
-                        <td className="px-3 py-3 text-right text-rose-200">{formatCurrency(totalRemaining, language)}</td>
-                        <td colSpan={2} className="px-3 py-3 text-center">-</td>
+                        <td className="px-3 py-3 print:p-1 text-right">{formatCurrency(totalInitial, language)}</td>
+                        <td className="px-3 py-3 print:p-1 text-right text-amber-200">{formatCurrency(totalPaid, language)}</td>
+                        <td className="px-3 py-3 print:p-1 text-right text-rose-200">{formatCurrency(totalRemaining, language)}</td>
+                        <td colSpan={2} className="px-3 py-3 print:p-1 text-center">-</td>
                       </tr>
                     </tfoot>
                   )}

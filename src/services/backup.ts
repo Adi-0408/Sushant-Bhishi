@@ -11,7 +11,9 @@ export const DEFAULT_DRIVE_WEBHOOK_URL =
 
 const DEFAULT_CONFIG: AutoBackupConfig = {
   enabled: true,
-  intervalDays: 2, // Automatically backup every 2 days
+  intervalDays: 1, // Daily backup
+  backupHour: 23, // 11:00 PM
+  backupMinute: 0,
   lastBackupTimestamp: 0,
   driveBackupEnabled: true,
   driveWebhookUrl: DEFAULT_DRIVE_WEBHOOK_URL,
@@ -25,7 +27,12 @@ export const AutoBackupService = {
       const raw = localStorage.getItem(BACKUP_STORAGE_KEYS.CONFIG);
       if (!raw) return DEFAULT_CONFIG;
       const parsed = JSON.parse(raw);
-      return { ...DEFAULT_CONFIG, ...parsed };
+      const config: AutoBackupConfig = { ...DEFAULT_CONFIG, ...parsed };
+      // Migrate existing 2-day configurations to daily at 11:00 PM
+      if (config.backupHour === undefined) config.backupHour = 23;
+      if (config.backupMinute === undefined) config.backupMinute = 0;
+      if (parsed.intervalDays === 2 || !parsed.intervalDays) config.intervalDays = 1;
+      return config;
     } catch {
       return DEFAULT_CONFIG;
     }
@@ -214,31 +221,46 @@ export const AutoBackupService = {
     }
   },
 
-  // Checks if 2 days have passed since last backup and runs auto-backup
+  // Helper to determine if scheduled daily backup at 11:00 PM is due
+  isBackupDue: (config: AutoBackupConfig): boolean => {
+    if (!config.enabled) return false;
+
+    const now = new Date();
+    const targetHour = config.backupHour ?? 23;
+    const targetMinute = config.backupMinute ?? 0;
+
+    // Most recent scheduled slot (today at 11 PM or yesterday at 11 PM)
+    const mostRecentSlot = new Date(now);
+    mostRecentSlot.setHours(targetHour, targetMinute, 0, 0);
+
+    if (now.getTime() < mostRecentSlot.getTime()) {
+      mostRecentSlot.setDate(mostRecentSlot.getDate() - 1);
+    }
+
+    const lastBackup = config.lastBackupTimestamp || 0;
+    return lastBackup < mostRecentSlot.getTime();
+  },
+
+  // Checks and runs auto-backup if daily 11:00 PM slot is due
   checkAndRunAutoBackup: (
     onSuccess?: (snapshot: LocalBackupSnapshot, filename: string) => void
   ): boolean => {
     const config = AutoBackupService.getConfig();
     if (!config.enabled) return false;
 
-    const intervalMs = (config.intervalDays || 2) * 24 * 60 * 60 * 1000;
-    const now = Date.now();
-    const elapsed = now - (config.lastBackupTimestamp || 0);
-
-    // Check if 2 days have elapsed (or if it has never run)
-    if (elapsed >= intervalMs) {
+    if (AutoBackupService.isBackupDue(config)) {
       try {
         const data = StorageService.exportBackup();
         // Only run if there is some data (e.g. customers or bishi)
         const hasData = (data.customers && data.customers.length > 0) || (data.collections && data.collections.length > 0);
         if (!hasData && config.lastBackupTimestamp === 0) {
           // New installation with no data yet, record timestamp so we don't dump empty backups
-          config.lastBackupTimestamp = now;
+          config.lastBackupTimestamp = Date.now();
           AutoBackupService.saveConfig(config);
           return false;
         }
 
-        const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_AutoBackup_2Days');
+        const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_DailyBackup_11PM');
 
         // 1. Store snapshot in local device storage
         const snapshot = AutoBackupService.saveSnapshotLocally(data, filename);
@@ -247,6 +269,7 @@ export const AutoBackupService = {
         AutoBackupService.downloadBackupFile(data, filename);
 
         // 3. Update configuration
+        const now = Date.now();
         config.lastBackupTimestamp = now;
         config.lastBackupDate = new Date().toISOString();
         config.lastBackupFilename = filename;
@@ -264,7 +287,7 @@ export const AutoBackupService = {
         }
         return true;
       } catch (err) {
-        console.error('Auto backup execution failed:', err);
+        console.error('Daily 11 PM auto backup execution failed:', err);
         return false;
       }
     }
@@ -272,11 +295,20 @@ export const AutoBackupService = {
     return false;
   },
 
-  // Calculate next scheduled backup date
+  // Calculate next scheduled backup date (Today at 11:00 PM or Tomorrow at 11:00 PM)
   getNextBackupDate: (config: AutoBackupConfig): Date | null => {
     if (!config.enabled) return null;
-    const intervalMs = (config.intervalDays || 2) * 24 * 60 * 60 * 1000;
-    const last = config.lastBackupTimestamp || Date.now();
-    return new Date(last + intervalMs);
+    const now = new Date();
+    const targetHour = config.backupHour ?? 23;
+    const targetMinute = config.backupMinute ?? 0;
+
+    const next = new Date(now);
+    next.setHours(targetHour, targetMinute, 0, 0);
+
+    // If today's 11:00 PM has already passed, next scheduled backup is tomorrow at 11:00 PM
+    if (now.getTime() >= next.getTime()) {
+      next.setDate(next.getDate() + 1);
+    }
+    return next;
   },
 };

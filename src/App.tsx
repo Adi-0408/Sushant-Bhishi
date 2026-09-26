@@ -33,33 +33,33 @@ const ProtectedLayout: React.FC = () => {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const location = useLocation();
 
-  // Automatic Local 2-Day Backup Runner
+  // Automatic Daily 11:00 PM Backup Runner (Local + Google Drive Cloud)
   useEffect(() => {
     if (!currentAdmin) return;
 
-    // Check shortly after app loads
+    // Check shortly after app loads (runs if last night's 11 PM backup was missed)
     const timeoutId = setTimeout(() => {
       AutoBackupService.checkAndRunAutoBackup((snapshot, filename) => {
         showToast(
           language === 'EN'
-            ? `Automatic 2-day backup saved to this device: ${filename}`
-            : `स्वयंचलित २-दिवसीय बॅकअप डिव्हाइसवर सेव्ह झाला: ${filename}`,
+            ? `Daily 11:00 PM backup saved: ${filename}`
+            : `दररोज रात्री ११:०० वा. चा स्वयंचलित बॅकअप सेव्ह झाला: ${filename}`,
           'success'
         );
       });
     }, 2500);
 
-    // Periodic check every 1 hour while the app remains open
+    // Periodic check every 15 minutes while the app remains open
     const intervalId = setInterval(() => {
       AutoBackupService.checkAndRunAutoBackup((snapshot, filename) => {
         showToast(
           language === 'EN'
-            ? `Automatic 2-day backup saved to this device: ${filename}`
-            : `स्वयंचलित २-दिवसीय बॅकअप डिव्हाइसवर सेव्ह झाला: ${filename}`,
+            ? `Daily 11:00 PM backup saved: ${filename}`
+            : `दररोज रात्री ११:०० वा. चा स्वयंचलित बॅकअप सेव्ह झाला: ${filename}`,
           'success'
         );
       });
-    }, 60 * 60 * 1000);
+    }, 15 * 60 * 1000);
 
     return () => {
       clearTimeout(timeoutId);
