@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, Calendar as CalendarIcon, User, Landmark, Globe, ChevronDown } from 'lucide-react';
+import { Menu, Calendar as CalendarIcon, User, Landmark, Globe, ChevronDown, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { formatDateMarathi } from '../../utils/formatters';
@@ -15,7 +15,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
   const { currentAdmin, logout } = useAuth();
-  const { activeOffice, setActiveOffice, language, setLanguage, t } = useApp();
+  const { activeOffice, setActiveOffice, language, setLanguage, t, isRefreshing, refreshAllData } = useApp();
   const navigate = useNavigate();
 
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -84,6 +84,25 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
             triggerClassName="h-9 sm:h-10 bg-[#F4F6F5]"
           />
         </div>
+
+        {/* Universal Delta Refresh Button — Minimal/0-Read Incremental Sync across all sections */}
+        <button
+          onClick={() => refreshAllData()}
+          disabled={isRefreshing}
+          title={
+            language === 'EN'
+              ? 'Refresh data across all sections (minimal / 0 reads if unchanged)'
+              : 'सर्व विभागांचा डेटा रिफ्रेश करा (बदल नसल्यास ०-१ रीड)'
+          }
+          className="h-9 sm:h-10 min-h-[44px] px-2.5 sm:px-3 rounded-xl bg-white hover:bg-emerald-50 text-[#0F7A5C] hover:text-emerald-900 border border-[#E4EAE7] hover:border-[#0F7A5C] shadow-2xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer disabled:opacity-50 active:scale-95 touch-target flex-shrink-0"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0F7A5C] ${isRefreshing ? 'animate-spin' : ''}`} />
+          <span className="hidden md:inline text-xs font-black">
+            {isRefreshing
+              ? (language === 'EN' ? 'Refreshing...' : 'रिफ्रेश होत आहे...')
+              : (language === 'EN' ? 'Refresh' : 'रिफ्रेश')}
+          </span>
+        </button>
 
         {/* User Profile Avatar Dropdown */}
         <div className="relative">

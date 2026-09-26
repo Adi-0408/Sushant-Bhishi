@@ -165,6 +165,8 @@ export interface LoanPayment {
   totalPaid?: number;
   paymentMode?: 'CASH' | 'ONLINE';
   note?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface InterestRateConfig {

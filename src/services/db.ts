@@ -29,6 +29,7 @@ import {
 import { calculateLoanTotalAccruedInterest } from '../utils/calculations';
 import { invalidateStatsCache } from './stats';
 import { markInstallmentAsPaid } from './installments';
+import { touchSyncTimestamp, recordDeletion } from './incrementalSync';
 
 const STORAGE_KEYS = {
   ADMINS: 'sb_admins',
@@ -718,6 +719,7 @@ export const StorageService = {
     setStoredData(STORAGE_KEYS.CUSTOMERS, [newCustomer, ...customers]);
     syncToFirestore('customers', newCustomer.id, newCustomer);
     invalidateStatsCache();
+    touchSyncTimestamp();
     return newCustomer;
   },
 
@@ -821,7 +823,9 @@ export const StorageService = {
       }
     } catch (e) {}
 
+    customers[index].updatedAt = new Date().toISOString();
     syncToFirestore('customers', id, customers[index]);
+    touchSyncTimestamp();
     return customers[index];
   },
 
@@ -933,6 +937,11 @@ export const StorageService = {
 
       console.log(`[Firestore] Purged customer ${id} and ${docRefsToDelete.length} related documents with 0 server reads.`);
       invalidateStatsCache();
+      recordDeletion('customers', id);
+      toDeleteLoans.forEach((l) => recordDeletion('loans', l.id));
+      toDeleteColls.forEach((c) => recordDeletion('collections', c.id));
+      toDeletePayments.forEach((p) => recordDeletion('loanPayments', p.id));
+      touchSyncTimestamp();
       endSyncOp(true);
     } catch (err) {
       console.warn('Firestore customer purge note:', err);
@@ -1074,6 +1083,7 @@ export const StorageService = {
       markInstallmentAsPaid(updatedEntry.customerId, updatedEntry.periodIndex, 'bishi', updatedEntry.paymentDate || nowIso);
     }
     invalidateStatsCache();
+    touchSyncTimestamp();
     return updatedEntry;
   },
 
@@ -1083,6 +1093,9 @@ export const StorageService = {
     const filtered = collections.filter((c) => c.id !== id);
     setStoredData(STORAGE_KEYS.COLLECTIONS, filtered);
     await deleteFromFirestore('collections', id, entryToDelete);
+    recordDeletion('collections', id);
+    invalidateStatsCache();
+    touchSyncTimestamp();
   },
 
   // Loan Operations
@@ -1276,6 +1289,7 @@ export const StorageService = {
 
     setStoredData(STORAGE_KEYS.LOANS, loans);
     syncToFirestore('loans', newLoan.id, newLoan);
+    touchSyncTimestamp();
     return newLoan;
   },
 
@@ -1392,6 +1406,8 @@ export const StorageService = {
       totalInterestPaid,
       totalPaid,
       id: 'lpay_' + Date.now(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     payments.unshift(newPayment);
     setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, payments);
@@ -1427,6 +1443,7 @@ export const StorageService = {
 
     markInstallmentAsPaid(newPayment.customerId, 1, 'loan', newPayment.paymentDate);
     invalidateStatsCache();
+    touchSyncTimestamp();
 
     return newPayment;
   },

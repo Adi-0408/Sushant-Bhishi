@@ -4,10 +4,9 @@ service cloud.firestore {
     
     // stats/* singleton summary document:
     // Client can read freely (1 getDoc read per dashboard load or 0 with TTL cache),
-    // but client direct writes are denied — maintained securely via Cloud Functions (Admin SDK).
+    // and write stats updates / version timestamps directly or via Cloud Functions.
     match /stats/{docId} {
-      allow read: if true;
-      allow write: if false;
+      allow read, write: if true;
     }
 
     // installments/* due schedule collection:

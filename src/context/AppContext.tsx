@@ -15,6 +15,7 @@ import {
 import { StorageService } from '../services/db';
 import { useAuth } from './AuthContext';
 import { Language, translations } from '../utils/translations';
+import { performIncrementalSync, IncrementalSyncResult } from '../services/incrementalSync';
 
 interface Toast {
   id: string;
@@ -46,6 +47,8 @@ interface AppContextType {
   syncStatus: 'idle' | 'syncing' | 'synced' | 'error';
   syncWithFirebase: () => Promise<void>;
   clearAllData: () => Promise<void>;
+  isRefreshing: boolean;
+  refreshAllData: () => Promise<IncrementalSyncResult>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -170,6 +173,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const refreshAllData = async (): Promise<IncrementalSyncResult> => {
+    setIsRefreshing(true);
+    try {
+      const res = await performIncrementalSync();
+      refreshData();
+      if (res.updatedCount > 0 || res.deletedCount > 0) {
+        showToast(
+          language === 'EN'
+            ? `Data updated: ${res.updatedCount} added/modified, ${res.deletedCount} removed (${res.readsCount} reads)`
+            : `डेटा अद्ययावत: ${res.updatedCount} नवीन/बदल, ${res.deletedCount} हटवले (${res.readsCount} रीड्स)`,
+          'success'
+        );
+      } else {
+        showToast(
+          language === 'EN'
+            ? `All data is up to date (${res.readsCount} read)`
+            : `सर्व डेटा अद्ययावत आहे (${res.readsCount} रीड)`,
+          'info'
+        );
+      }
+      return res;
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Refresh error';
+      showToast(language === 'EN' ? `Refresh error: ${errorMsg}` : `रिफ्रेश करताना त्रुटी: ${errorMsg}`, 'error');
+      return {
+        updatedCount: 0,
+        deletedCount: 0,
+        readsCount: 1,
+        isUpToDate: false,
+        message: errorMsg,
+      };
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -196,6 +237,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         syncStatus,
         syncWithFirebase,
         clearAllData,
+        isRefreshing,
+        refreshAllData,
       }}
     >
       {children}
