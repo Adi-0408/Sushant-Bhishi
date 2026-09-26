@@ -853,35 +853,61 @@ export const StorageService = {
 
   deleteCustomer: async (id: string): Promise<void> => {
     const customers = StorageService.getCustomers();
-    const customerToDelete = customers.find((c) => c.id === id);
-    const remainingCustomers = customers.filter((c) => c.id !== id);
+    const cleanId = String(id || '').trim();
+    const customerToDelete = customers.find(
+      (c) => c.id === cleanId || String(c.accountNumber || '').trim().toLowerCase() === cleanId.toLowerCase()
+    );
+    const targetId = customerToDelete?.id || cleanId;
+    const targetAcc = customerToDelete?.accountNumber || cleanId;
+
+    const remainingCustomers = customers.filter(
+      (c) => c.id !== targetId && String(c.accountNumber || '').trim().toLowerCase() !== String(targetAcc).trim().toLowerCase()
+    );
     setStoredData(STORAGE_KEYS.CUSTOMERS, remainingCustomers);
 
     // Delete associated collections, loans, and loan payments locally
     const collections = StorageService.getCollections();
     const toDeleteColls = collections.filter(
-      (c) => c.customerId === id || (customerToDelete && String(c.accountNumber) === String(customerToDelete.accountNumber))
+      (c) =>
+        c.customerId === targetId ||
+        c.customerId === cleanId ||
+        (targetAcc && String(c.accountNumber).trim().toLowerCase() === String(targetAcc).trim().toLowerCase())
     );
     const remainingColls = collections.filter(
-      (c) => c.customerId !== id && (!customerToDelete || String(c.accountNumber) !== String(customerToDelete.accountNumber))
+      (c) =>
+        c.customerId !== targetId &&
+        c.customerId !== cleanId &&
+        (!targetAcc || String(c.accountNumber).trim().toLowerCase() !== String(targetAcc).trim().toLowerCase())
     );
     setStoredData(STORAGE_KEYS.COLLECTIONS, remainingColls);
 
     const loans = StorageService.getLoans();
     const toDeleteLoans = loans.filter(
-      (l) => l.customerId === id || (customerToDelete?.accountNumber && String(l.accountNumber) === String(customerToDelete.accountNumber))
+      (l) =>
+        l.customerId === targetId ||
+        l.customerId === cleanId ||
+        (targetAcc && String(l.accountNumber).trim().toLowerCase() === String(targetAcc).trim().toLowerCase())
     );
     const remainingLoans = loans.filter(
-      (l) => l.customerId !== id && (!customerToDelete?.accountNumber || String(l.accountNumber) !== String(customerToDelete.accountNumber))
+      (l) =>
+        l.customerId !== targetId &&
+        l.customerId !== cleanId &&
+        (!targetAcc || String(l.accountNumber).trim().toLowerCase() !== String(targetAcc).trim().toLowerCase())
     );
     setStoredData(STORAGE_KEYS.LOANS, remainingLoans);
 
     const allLoanPayments = StorageService.getLoanPayments();
     const toDeletePayments = allLoanPayments.filter(
-      (p) => p.customerId === id || (customerToDelete?.accountNumber && String(p.accountNumber) === String(customerToDelete.accountNumber))
+      (p) =>
+        p.customerId === targetId ||
+        p.customerId === cleanId ||
+        (targetAcc && String(p.accountNumber).trim().toLowerCase() === String(targetAcc).trim().toLowerCase())
     );
     const remainingPayments = allLoanPayments.filter(
-      (p) => p.customerId !== id && (!customerToDelete?.accountNumber || String(p.accountNumber) !== String(customerToDelete.accountNumber))
+      (p) =>
+        p.customerId !== targetId &&
+        p.customerId !== cleanId &&
+        (!targetAcc || String(p.accountNumber).trim().toLowerCase() !== String(targetAcc).trim().toLowerCase())
     );
     setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, remainingPayments);
 
@@ -959,11 +985,11 @@ export const StorageService = {
 
       console.log(`[Firestore] Purged customer ${id} and ${docRefsToDelete.length} related documents with 0 server reads.`);
       invalidateStatsCache();
-      recordDeletion('customers', id, { accountNumber: customerToDelete?.accountNumber, name: customerToDelete?.name });
-      toDeleteLoans.forEach((l) => recordDeletion('loans', l.id, { accountNumber: customerToDelete?.accountNumber }));
-      toDeleteColls.forEach((c) => recordDeletion('collections', c.id, { accountNumber: customerToDelete?.accountNumber }));
-      toDeletePayments.forEach((p) => recordDeletion('loanPayments', p.id, { accountNumber: customerToDelete?.accountNumber }));
-      touchSyncOnCustomerDelete(customerToDelete?.accountNumber);
+      recordDeletion('customers', targetId, { accountNumber: targetAcc, name: customerToDelete?.name });
+      toDeleteLoans.forEach((l) => recordDeletion('loans', l.id, { accountNumber: targetAcc }));
+      toDeleteColls.forEach((c) => recordDeletion('collections', c.id, { accountNumber: targetAcc }));
+      toDeletePayments.forEach((p) => recordDeletion('loanPayments', p.id, { accountNumber: targetAcc }));
+      touchSyncOnCustomerDelete(targetAcc);
       endSyncOp(true);
     } catch (err) {
       console.warn('Firestore customer purge note:', err);

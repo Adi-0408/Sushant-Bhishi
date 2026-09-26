@@ -43,6 +43,8 @@ export const Dashboard: React.FC = () => {
     setSelectedBishiFilter,
     bishiConfigs,
     customers,
+    collections,
+    loans,
     t,
     language,
     isRefreshing,
@@ -128,14 +130,115 @@ export const Dashboard: React.FC = () => {
     return () => clearTimeout(timer);
   }, [dashboardSearch]);
 
-  const totalCustomersCount = stats.totalCustomers > 0 ? stats.totalCustomers : customers.length;
-  const todaysCollection = stats.todaysCollection;
-  const todaysPendingAmount = stats.todaysDueAmount;
-  const totalCollectedBishi = stats.totalBishiCollected;
-  const totalLoanAmount = stats.totalPrincipalLoans;
-  const loanRemainingAmount = stats.loanBalanceDue;
-  const todaysPendingInstallmentsCount = stats.todaysDueInstallments;
-  const todaysPenaltyAmount = stats.todaysPenalty;
+  const isFilterActive = officeFilter !== 'ALL' || selectedBishiFilter !== 'ALL' || modalityFilter !== 'ALL';
+
+  const filteredCustomers = React.useMemo(() => {
+    return customers.filter((c) => {
+      if (officeFilter !== 'ALL' && c.officeId !== officeFilter) return false;
+      if (selectedBishiFilter !== 'ALL' && c.bishiType !== selectedBishiFilter) return false;
+      if (modalityFilter !== 'ALL' && c.modality !== modalityFilter) return false;
+      return true;
+    });
+  }, [customers, officeFilter, selectedBishiFilter, modalityFilter]);
+
+  const filteredCollections = React.useMemo(() => {
+    return collections.filter((c) => {
+      if (officeFilter !== 'ALL' && c.officeId !== officeFilter) return false;
+      if (selectedBishiFilter !== 'ALL' && c.bishiType !== selectedBishiFilter) return false;
+      return true;
+    });
+  }, [collections, officeFilter, selectedBishiFilter]);
+
+  const filteredLoans = React.useMemo(() => {
+    return loans.filter((l) => {
+      if (officeFilter !== 'ALL' && l.officeId !== officeFilter) return false;
+      return true;
+    });
+  }, [loans, officeFilter]);
+
+  // Card 1: Total Customers — live from memory (66), or filtered count if filter is active
+  const totalCustomersCount = isFilterActive
+    ? filteredCustomers.length
+    : (customers.length > 0 ? customers.length : (stats.totalCustomers || 0));
+
+  // Card 2: Today's Collection
+  const todaysCollection = React.useMemo(() => {
+    if (filteredCollections.length > 0) {
+      return filteredCollections
+        .filter((c) => c.paymentDate === todayStr)
+        .reduce((sum, c) => sum + (Number(c.collectedAmount) || 0), 0);
+    }
+    return stats.todaysCollection || 0;
+  }, [filteredCollections, todayStr, stats.todaysCollection]);
+
+  // Card 3: Today's Due / Pending Amount
+  const todaysPendingAmount = React.useMemo(() => {
+    if (todaysPendingList.length > 0) {
+      return todaysPendingList
+        .filter((inst) => officeFilter === 'ALL' || inst.officeId === officeFilter)
+        .reduce((sum, inst) => sum + (Number(inst.amount) || 0), 0);
+    }
+    if (filteredCollections.length > 0) {
+      return filteredCollections
+        .filter((c) => c.dueDate === todayStr && c.status !== 'PAID')
+        .reduce(
+          (sum, c) =>
+            sum +
+            (Number(c.remainingAmount) || Math.max(0, (Number(c.expectedAmount) || 0) - (Number(c.collectedAmount) || 0))),
+          0
+        );
+    }
+    return stats.todaysDueAmount || 0;
+  }, [todaysPendingList, filteredCollections, officeFilter, todayStr, stats.todaysDueAmount]);
+
+  // Card 4: Total Bishi Collected
+  const totalCollectedBishi = React.useMemo(() => {
+    if (filteredCollections.length > 0) {
+      return filteredCollections.reduce((sum, c) => sum + (Number(c.collectedAmount) || 0), 0);
+    }
+    return stats.totalBishiCollected || 0;
+  }, [filteredCollections, stats.totalBishiCollected]);
+
+  // Card 5: Total Loan Principal
+  const totalLoanAmount = React.useMemo(() => {
+    if (filteredLoans.length > 0) {
+      return filteredLoans
+        .filter((l) => l.status === 'ACTIVE')
+        .reduce((sum, l) => sum + (Number(l.principalAmount) || 0), 0);
+    }
+    return stats.totalPrincipalLoans || 0;
+  }, [filteredLoans, stats.totalPrincipalLoans]);
+
+  // Card 6: Loan Remaining Balance
+  const loanRemainingAmount = React.useMemo(() => {
+    if (filteredLoans.length > 0) {
+      return filteredLoans
+        .filter((l) => l.status === 'ACTIVE')
+        .reduce((sum, l) => sum + (Number(l.remainingAmount) || 0), 0);
+    }
+    return stats.loanBalanceDue || 0;
+  }, [filteredLoans, stats.loanBalanceDue]);
+
+  // Card 7: Pending Installments Count
+  const todaysPendingInstallmentsCount = React.useMemo(() => {
+    if (todaysPendingList.length > 0) {
+      return todaysPendingList.filter((inst) => officeFilter === 'ALL' || inst.officeId === officeFilter).length;
+    }
+    if (filteredCollections.length > 0) {
+      return filteredCollections.filter((c) => c.dueDate === todayStr && c.status !== 'PAID').length;
+    }
+    return stats.todaysDueInstallments || 0;
+  }, [todaysPendingList, filteredCollections, officeFilter, todayStr, stats.todaysDueInstallments]);
+
+  // Card 8: Today's Penalty
+  const todaysPenaltyAmount = React.useMemo(() => {
+    if (filteredCollections.length > 0) {
+      return filteredCollections
+        .filter((c) => c.paymentDate === todayStr)
+        .reduce((sum, c) => sum + (Number(c.penaltyAmount) || 0), 0);
+    }
+    return stats.todaysPenalty || 0;
+  }, [filteredCollections, todayStr, stats.todaysPenalty]);
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 font-marathi min-h-screen flex flex-col justify-between bg-[#F4F6F5]">
