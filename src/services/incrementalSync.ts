@@ -7,13 +7,23 @@ import {
   where,
   setDoc,
   updateDoc,
+  increment,
+  arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Customer, CollectionEntry, Loan, LoanPayment } from '../types';
-import { StorageService, deduplicateCustomers, deduplicateCollections, deduplicateLoans, deduplicateLoanPayments } from './db';
+import {
+  StorageService,
+  deduplicateCustomers,
+  deduplicateCollections,
+  deduplicateLoans,
+  deduplicateLoanPayments,
+} from './db';
 import { invalidateStatsCache } from './stats';
 
 const LAST_SYNC_KEY = 'sb_last_synced_at';
+let isSyncInProgress = false;
 
 export interface IncrementalSyncResult {
   updatedCount: number;
@@ -27,18 +37,75 @@ export interface IncrementalSyncResult {
  * Updates the global sync version / lastUpdated timestamp in Firestore.
  * This signals to all connected devices that an update has occurred.
  */
-export const touchSyncTimestamp = async (): Promise<void> => {
+export const touchSyncTimestamp = async (extraFields?: Record<string, any>): Promise<void> => {
   try {
     const now = new Date().toISOString();
     const statsRef = doc(db, 'stats', 'summary');
-    await updateDoc(statsRef, {
+    const updatePayload: Record<string, any> = {
       lastUpdated: now,
-    }).catch(async () => {
-      // If updateDoc fails (e.g. document doesn't exist yet), set it
-      await setDoc(statsRef, { lastUpdated: now }, { merge: true });
+      ...extraFields,
+    };
+    await updateDoc(statsRef, updatePayload).catch(async () => {
+      await setDoc(statsRef, updatePayload, { merge: true });
     });
+    localStorage.setItem(LAST_SYNC_KEY, now);
   } catch (err) {
     console.warn('[Sync] touchSyncTimestamp note:', err);
+  }
+};
+
+/**
+ * Atomic customer addition notification:
+ * Updates lastUpdated, increments totalCustomers, and adds accountNumber to activeCustomerAccounts.
+ */
+export const touchSyncOnCustomerAdd = async (accountNumber: string): Promise<void> => {
+  try {
+    const now = new Date().toISOString();
+    const cleanAcc = String(accountNumber || '').trim();
+    const statsRef = doc(db, 'stats', 'summary');
+    await updateDoc(statsRef, {
+      lastUpdated: now,
+      totalCustomers: increment(1),
+      activeCustomerAccounts: arrayUnion(cleanAcc),
+    }).catch(async () => {
+      await setDoc(
+        statsRef,
+        {
+          lastUpdated: now,
+          totalCustomers: increment(1),
+          activeCustomerAccounts: [cleanAcc],
+        },
+        { merge: true }
+      );
+    });
+    localStorage.setItem(LAST_SYNC_KEY, now);
+  } catch (err) {
+    console.warn('[Sync] touchSyncOnCustomerAdd note:', err);
+  }
+};
+
+/**
+ * Atomic customer deletion notification:
+ * Updates lastUpdated, decrements totalCustomers, and removes accountNumber from activeCustomerAccounts.
+ */
+export const touchSyncOnCustomerDelete = async (accountNumber?: string): Promise<void> => {
+  try {
+    const now = new Date().toISOString();
+    const cleanAcc = accountNumber ? String(accountNumber).trim() : '';
+    const statsRef = doc(db, 'stats', 'summary');
+    const payload: Record<string, any> = {
+      lastUpdated: now,
+      totalCustomers: increment(-1),
+    };
+    if (cleanAcc) {
+      payload.activeCustomerAccounts = arrayRemove(cleanAcc);
+    }
+    await updateDoc(statsRef, payload).catch(async () => {
+      await setDoc(statsRef, payload, { merge: true });
+    });
+    localStorage.setItem(LAST_SYNC_KEY, now);
+  } catch (err) {
+    console.warn('[Sync] touchSyncOnCustomerDelete note:', err);
   }
 };
 
@@ -48,19 +115,22 @@ export const touchSyncTimestamp = async (): Promise<void> => {
  */
 export const recordDeletion = async (
   collectionName: 'customers' | 'collections' | 'loans' | 'loanPayments',
-  docId: string
+  docId: string,
+  extra?: { accountNumber?: string; name?: string }
 ): Promise<void> => {
   try {
     const now = new Date().toISOString();
-    const deletionId = `${collectionName}_${docId}`;
+    const cleanAcc = extra?.accountNumber ? String(extra.accountNumber).trim() : null;
+    const deletionId = `${collectionName}_${cleanAcc || docId}`;
     const delRef = doc(db, 'deletions', deletionId);
     await setDoc(delRef, {
       id: deletionId,
       collectionName,
       docId,
+      accountNumber: cleanAcc,
+      name: extra?.name || null,
       deletedAt: now,
     });
-    await touchSyncTimestamp();
   } catch (err) {
     console.warn('[Sync] recordDeletion note:', err);
   }
@@ -69,11 +139,23 @@ export const recordDeletion = async (
 /**
  * Performs an ultra-low-read incremental delta sync across all collections:
  * 1. Checks `stats/summary` singleton (strictly 1 read).
- * 2. If `summary.lastUpdated <= lastSyncedAt`, 0 additional reads are incurred.
- * 3. If newer, queries ONLY documents `where('updatedAt', '>', lastSyncedAt)` and `where('deletedAt', '>', lastSyncedAt)`.
- * 4. Merges added/modified items and prunes deleted items from local storage.
+ * 2. Immediately reconciles `activeCustomerAccounts` to purge ghost/deleted customers.
+ * 3. If `summary.lastUpdated <= lastSyncedAt`, 0 additional reads are incurred.
+ * 4. If newer, queries ONLY documents `where('updatedAt', '>', lastSyncedAt)` and `where('deletedAt', '>', lastSyncedAt)`.
+ * 5. Merges added/modified items and prunes deleted items from local storage.
  */
 export const performIncrementalSync = async (): Promise<IncrementalSyncResult> => {
+  if (isSyncInProgress) {
+    return {
+      updatedCount: 0,
+      deletedCount: 0,
+      readsCount: 0,
+      isUpToDate: true,
+      message: 'सिंक आधीपासूनच सुरू आहे (Sync already in progress)',
+    };
+  }
+
+  isSyncInProgress = true;
   let readsCount = 0;
   let updatedCount = 0;
   let deletedCount = 0;
@@ -81,7 +163,7 @@ export const performIncrementalSync = async (): Promise<IncrementalSyncResult> =
   try {
     const lastSyncedAt = localStorage.getItem(LAST_SYNC_KEY);
 
-    // Step 1: Read stats/summary for the latest cloud timestamp (1 read)
+    // Step 1: Read stats/summary for the latest cloud timestamp & active accounts (1 read)
     const statsRef = doc(db, 'stats', 'summary');
     const statsSnap = await getDoc(statsRef);
     readsCount++;
@@ -89,14 +171,34 @@ export const performIncrementalSync = async (): Promise<IncrementalSyncResult> =
     const statsData = statsSnap.exists() ? statsSnap.data() : null;
     const cloudLastUpdated = statsData?.lastUpdated as string | undefined;
 
+    // Step 1.1: Immediate ghost-customer reconciliation using activeCustomerAccounts
+    // This instantly cleans up any deleted customers across all 4 devices without extra reads!
+    if (Array.isArray(statsData?.activeCustomerAccounts)) {
+      const activeSet = new Set(
+        statsData.activeCustomerAccounts.map((a: string) => String(a).trim().toLowerCase())
+      );
+      const localCusts = StorageService.getCustomers();
+      const pruned = localCusts.filter((c) =>
+        activeSet.has(String(c.accountNumber).trim().toLowerCase())
+      );
+      if (pruned.length !== localCusts.length) {
+        deletedCount += localCusts.length - pruned.length;
+        localStorage.setItem('sb_customers', JSON.stringify(pruned));
+      }
+    }
+
     // If cloud timestamp is valid and we are already synchronized with it
     if (cloudLastUpdated && lastSyncedAt && cloudLastUpdated <= lastSyncedAt) {
+      invalidateStatsCache();
       return {
         updatedCount: 0,
-        deletedCount: 0,
+        deletedCount,
         readsCount,
-        isUpToDate: true,
-        message: 'सर्व डेटा आधीपासूनच अद्ययावत आहे (Data is already up to date - 1 read)',
+        isUpToDate: deletedCount === 0,
+        message:
+          deletedCount > 0
+            ? `${deletedCount} हटवलेले खातेदार काढून टाकले (1 रीड)`
+            : 'सर्व डेटा आधीपासूनच अद्ययावत आहे (Data is already up to date - 1 read)',
       };
     }
 
@@ -118,7 +220,16 @@ export const performIncrementalSync = async (): Promise<IncrementalSyncResult> =
       const incomingCusts: Customer[] = [];
       custSnap.forEach((d: any) => {
         const raw = d.data();
-        incomingCusts.push({ ...raw, id: raw.id || d.id });
+        const acc = String(raw.accountNumber || raw.accountNo || '').trim();
+        const name = raw.name || raw.customerName || '';
+        incomingCusts.push({
+          ...raw,
+          id: raw.id || d.id,
+          name,
+          customerName: raw.customerName || name,
+          accountNumber: acc,
+          accountNo: acc,
+        });
       });
       const localCusts = StorageService.getCustomers();
       const merged = deduplicateCustomers([...incomingCusts, ...localCusts]);
@@ -168,21 +279,32 @@ export const performIncrementalSync = async (): Promise<IncrementalSyncResult> =
     // 2.5 Process Deletions
     if (!delSnap.empty) {
       const deletedCustomerIds = new Set<string>();
+      const deletedCustomerAccounts = new Set<string>();
       const deletedCollIds = new Set<string>();
       const deletedLoanIds = new Set<string>();
       const deletedPayIds = new Set<string>();
 
       delSnap.forEach((d: any) => {
         const raw = d.data();
-        if (raw.collectionName === 'customers') deletedCustomerIds.add(raw.docId);
-        else if (raw.collectionName === 'collections') deletedCollIds.add(raw.docId);
-        else if (raw.collectionName === 'loans') deletedLoanIds.add(raw.docId);
-        else if (raw.collectionName === 'loanPayments') deletedPayIds.add(raw.docId);
+        if (raw.collectionName === 'customers') {
+          if (raw.docId) deletedCustomerIds.add(raw.docId);
+          if (raw.accountNumber) deletedCustomerAccounts.add(String(raw.accountNumber).trim().toLowerCase());
+        } else if (raw.collectionName === 'collections') {
+          deletedCollIds.add(raw.docId);
+        } else if (raw.collectionName === 'loans') {
+          deletedLoanIds.add(raw.docId);
+        } else if (raw.collectionName === 'loanPayments') {
+          deletedPayIds.add(raw.docId);
+        }
         deletedCount++;
       });
 
-      if (deletedCustomerIds.size > 0) {
-        const current = StorageService.getCustomers().filter((c) => !deletedCustomerIds.has(c.id));
+      if (deletedCustomerIds.size > 0 || deletedCustomerAccounts.size > 0) {
+        const current = StorageService.getCustomers().filter(
+          (c) =>
+            !deletedCustomerIds.has(c.id) &&
+            (!c.accountNumber || !deletedCustomerAccounts.has(String(c.accountNumber).trim().toLowerCase()))
+        );
         localStorage.setItem('sb_customers', JSON.stringify(current));
       }
       if (deletedCollIds.size > 0) {
@@ -223,5 +345,7 @@ export const performIncrementalSync = async (): Promise<IncrementalSyncResult> =
       isUpToDate: false,
       message: `रिफ्रेश करताना त्रुटी: ${err?.message || 'अज्ञात त्रुटी'}`,
     };
+  } finally {
+    isSyncInProgress = false;
   }
 };

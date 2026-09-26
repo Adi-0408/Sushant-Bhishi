@@ -42,6 +42,7 @@ export const Dashboard: React.FC = () => {
     selectedBishiFilter,
     setSelectedBishiFilter,
     bishiConfigs,
+    customers,
     t,
     language,
   } = useApp();
@@ -91,6 +92,11 @@ export const Dashboard: React.FC = () => {
     });
   }, []);
 
+  // When customers list updates via realtime listener, re-fetch fresh stats
+  useEffect(() => {
+    fetchStats(false);
+  }, [customers.length]);
+
   // Debounced search via prefix range query (costs max 20 reads only when searching)
   useEffect(() => {
     const term = dashboardSearch.trim();
@@ -120,7 +126,7 @@ export const Dashboard: React.FC = () => {
     return () => clearTimeout(timer);
   }, [dashboardSearch]);
 
-  const totalCustomersCount = stats.totalCustomers;
+  const totalCustomersCount = stats.totalCustomers > 0 ? stats.totalCustomers : customers.length;
   const todaysCollection = stats.todaysCollection;
   const todaysPendingAmount = stats.todaysDueAmount;
   const totalCollectedBishi = stats.totalBishiCollected;

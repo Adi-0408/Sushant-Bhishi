@@ -12,6 +12,8 @@ import {
   SmsLog,
   ThakbakiEntry,
 } from '../types';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase/config';
 import { StorageService } from '../services/db';
 import { useAuth } from './AuthContext';
 import { Language, translations } from '../utils/translations';
@@ -128,26 +130,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSyncStatus(status);
     });
 
-    // 2. One-time initial pull per session on startup if local storage is missing existing cloud data
+    // 2. Realtime listener on stats/summary doc (0 reads while idle, 1 read on actual remote update)
+    // Guarantees all 4 devices stay 100% in sync simultaneously when customers are added, modified, or deleted!
+    let unsubStats: (() => void) | null = null;
+    try {
+      unsubStats = onSnapshot(doc(db, 'stats', 'summary'), async (snap: any) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        const cloudLastUpdated = data?.lastUpdated as string | undefined;
+        const lastSyncedAt = localStorage.getItem('sb_last_synced_at');
+
+        // Immediately prune ghost/deleted customers locally using activeCustomerAccounts
+        if (Array.isArray(data?.activeCustomerAccounts)) {
+          const activeSet = new Set(
+            data.activeCustomerAccounts.map((a: string) => String(a).trim().toLowerCase())
+          );
+          const localCusts = StorageService.getCustomers();
+          const pruned = localCusts.filter((c) =>
+            activeSet.has(String(c.accountNumber).trim().toLowerCase())
+          );
+          if (pruned.length !== localCusts.length) {
+            localStorage.setItem('sb_customers', JSON.stringify(pruned));
+            refreshData();
+          }
+        }
+
+        // If cloud data is newer than this device's last sync, pull the deltas automatically
+        if (cloudLastUpdated && (!lastSyncedAt || cloudLastUpdated > lastSyncedAt)) {
+          await performIncrementalSync();
+          refreshData();
+        }
+      });
+    } catch (e) {
+      console.warn('[AppContext] Realtime stats listener note:', e);
+    }
+
+    // 3. Low-read startup sync: If local storage has data, do a quick delta check (1 read)
+    // Only perform full fetch if this device has completely empty storage (< 2 customers)
     if (currentAdmin) {
       const syncKey = 'sb_initial_sync_done';
       const hasSynced = sessionStorage.getItem(syncKey);
       const localCustCount = StorageService.getCustomers().length;
 
-      if (!hasSynced || localCustCount < 2) {
-        StorageService.fetchAndSyncFromFirestore()
-          .then(() => {
-            sessionStorage.setItem(syncKey, 'true');
-            refreshData();
-          })
-          .catch((err) => {
-            console.warn('[AppContext] Startup sync note:', err);
-          });
+      if (!hasSynced) {
+        sessionStorage.setItem(syncKey, 'true');
+        if (localCustCount < 2) {
+          StorageService.fetchAndSyncFromFirestore()
+            .then(() => {
+              refreshData();
+            })
+            .catch((err) => {
+              console.warn('[AppContext] Startup full sync note:', err);
+            });
+        } else {
+          performIncrementalSync()
+            .then(() => {
+              refreshData();
+            })
+            .catch((err) => {
+              console.warn('[AppContext] Startup incremental sync note:', err);
+            });
+        }
       }
     }
 
     return () => {
       if (unsubStatus) unsubStatus();
+      if (unsubStats) unsubStats();
     };
   }, [currentAdmin]);
 

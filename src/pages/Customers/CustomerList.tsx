@@ -92,9 +92,17 @@ export const CustomerList: React.FC = () => {
   }, [loadInitialCustomers]);
 
   useEffect(() => {
-    if (paginatedCustomers.length === 0 && customers.length > 0) {
-      setPaginatedCustomers(customers.slice(0, 20));
-    }
+    const activeCustIds = new Set(customers.map((c) => c.id));
+    const activeCustAccs = new Set(customers.map((c) => String(c.accountNumber).trim().toLowerCase()));
+    setPaginatedCustomers((prev) => {
+      const valid = prev.filter(
+        (c) => activeCustIds.has(c.id) || (c.accountNumber && activeCustAccs.has(String(c.accountNumber).trim().toLowerCase()))
+      );
+      if (valid.length === 0 && customers.length > 0) {
+        return customers.slice(0, 20);
+      }
+      return valid;
+    });
   }, [customers]);
 
   // Load more via cursor pagination (startAfter)
@@ -208,6 +216,8 @@ export const CustomerList: React.FC = () => {
     });
   }, [activeList, officeFilter, bishiFilter, modalityFilter, statusFilter, customerFinancialsMap]);
 
+  const hasActiveFilter = officeFilter !== 'ALL' || bishiFilter !== 'ALL' || modalityFilter !== 'ALL' || statusFilter !== 'ALL';
+
   const handleDeleteConfirm = async () => {
     if (!customerToDelete) return;
     try {
@@ -232,7 +242,13 @@ export const CustomerList: React.FC = () => {
           <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
             <Users className="w-6 h-6 text-brand-700" />
             <span>
-              {t.customerListTitle} ({searchResults !== null ? filteredCustomers.length : Math.max(customers.length, filteredCustomers.length)})
+              {t.customerListTitle} (
+                {searchResults !== null
+                  ? filteredCustomers.length
+                  : hasActiveFilter
+                  ? filteredCustomers.length
+                  : customers.length}
+              )
             </span>
           </h2>
           <p className="text-xs text-slate-500 font-medium">

@@ -29,7 +29,12 @@ import {
 import { calculateLoanTotalAccruedInterest } from '../utils/calculations';
 import { invalidateStatsCache } from './stats';
 import { markInstallmentAsPaid } from './installments';
-import { touchSyncTimestamp, recordDeletion } from './incrementalSync';
+import {
+  touchSyncTimestamp,
+  touchSyncOnCustomerAdd,
+  touchSyncOnCustomerDelete,
+  recordDeletion,
+} from './incrementalSync';
 
 const STORAGE_KEYS = {
   ADMINS: 'sb_admins',
@@ -705,6 +710,7 @@ export const StorageService = {
     }
 
     const cleanName = (customerData.name || customerData.customerName || '').trim();
+    const nowIso = new Date().toISOString();
     const newCustomer: Customer = {
       ...customerData,
       id: 'cust_' + Date.now(),
@@ -713,13 +719,14 @@ export const StorageService = {
       nameLower: cleanName.toLowerCase(),
       accountNumber: cleanAcc,
       accountNo: cleanAcc,
-      createdAt: new Date().toISOString(),
+      createdAt: nowIso,
+      updatedAt: nowIso,
     };
 
     setStoredData(STORAGE_KEYS.CUSTOMERS, [newCustomer, ...customers]);
     syncToFirestore('customers', newCustomer.id, newCustomer);
     invalidateStatsCache();
-    touchSyncTimestamp();
+    touchSyncOnCustomerAdd(cleanAcc);
     return newCustomer;
   },
 
@@ -937,11 +944,11 @@ export const StorageService = {
 
       console.log(`[Firestore] Purged customer ${id} and ${docRefsToDelete.length} related documents with 0 server reads.`);
       invalidateStatsCache();
-      recordDeletion('customers', id);
-      toDeleteLoans.forEach((l) => recordDeletion('loans', l.id));
-      toDeleteColls.forEach((c) => recordDeletion('collections', c.id));
-      toDeletePayments.forEach((p) => recordDeletion('loanPayments', p.id));
-      touchSyncTimestamp();
+      recordDeletion('customers', id, { accountNumber: customerToDelete?.accountNumber, name: customerToDelete?.name });
+      toDeleteLoans.forEach((l) => recordDeletion('loans', l.id, { accountNumber: customerToDelete?.accountNumber }));
+      toDeleteColls.forEach((c) => recordDeletion('collections', c.id, { accountNumber: customerToDelete?.accountNumber }));
+      toDeletePayments.forEach((p) => recordDeletion('loanPayments', p.id, { accountNumber: customerToDelete?.accountNumber }));
+      touchSyncOnCustomerDelete(customerToDelete?.accountNumber);
       endSyncOp(true);
     } catch (err) {
       console.warn('Firestore customer purge note:', err);
