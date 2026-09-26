@@ -11,7 +11,7 @@ import {
 import { calculateCustomerFinancials } from '../../utils/calculations';
 import { CustomerFormModal } from './CustomerFormModal';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
-import { StorageService } from '../../services/db';
+import { StorageService, deduplicateCustomers } from '../../services/db';
 import {
   fetchCustomersPaginated,
   searchCustomersByName,
@@ -44,6 +44,8 @@ export const CustomerList: React.FC = () => {
   const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isLoadingAll, setIsLoadingAll] = useState(false);
+  const [isAllLoaded, setIsAllLoaded] = useState(false);
 
   // Search state (0 reads when empty; prefix search capped at 20 reads; accNo capped at 1 read)
   const [searchTerm, setSearchTerm] = useState('');
@@ -95,6 +97,9 @@ export const CustomerList: React.FC = () => {
     const activeCustIds = new Set(customers.map((c) => c.id));
     const activeCustAccs = new Set(customers.map((c) => String(c.accountNumber).trim().toLowerCase()));
     setPaginatedCustomers((prev) => {
+      if (isAllLoaded) {
+        return customers;
+      }
       const valid = prev.filter(
         (c) => activeCustIds.has(c.id) || (c.accountNumber && activeCustAccs.has(String(c.accountNumber).trim().toLowerCase()))
       );
@@ -103,7 +108,7 @@ export const CustomerList: React.FC = () => {
       }
       return valid;
     });
-  }, [customers]);
+  }, [customers, isAllLoaded]);
 
   // Load more via cursor pagination (startAfter)
   const handleLoadMore = async () => {
@@ -111,7 +116,13 @@ export const CustomerList: React.FC = () => {
     setIsLoadingMore(true);
     try {
       const res = await fetchCustomersPaginated(20, lastDocSnapshot);
-      setPaginatedCustomers((prev) => [...prev, ...res.customers]);
+      setPaginatedCustomers((prev) => {
+        const nextList = deduplicateCustomers([...prev, ...res.customers]);
+        if (nextList.length >= customers.length) {
+          setIsAllLoaded(true);
+        }
+        return nextList;
+      });
       setLastDocSnapshot(res.lastDoc);
       setHasMore(res.hasMore);
     } catch (err) {
@@ -119,6 +130,55 @@ export const CustomerList: React.FC = () => {
     } finally {
       setIsLoadingMore(false);
     }
+  };
+
+  // Load ALL customers (0 reads if already loaded in AppContext, or fetch remaining batches)
+  const handleLoadAll = async () => {
+    setIsLoadingAll(true);
+    try {
+      if (customers.length >= paginatedCustomers.length && customers.length > 0) {
+        setPaginatedCustomers(customers);
+        setHasMore(false);
+        setIsAllLoaded(true);
+        return;
+      }
+
+      let currentSnapshot = lastDocSnapshot;
+      let currentList = [...paginatedCustomers];
+      let moreAvailable = hasMore;
+
+      while (moreAvailable) {
+        const res = await fetchCustomersPaginated(50, currentSnapshot);
+        if (res.customers.length > 0) {
+          currentList = [...currentList, ...res.customers];
+          currentSnapshot = res.lastDoc;
+          moreAvailable = res.hasMore;
+        } else {
+          moreAvailable = false;
+        }
+      }
+
+      const deduped = deduplicateCustomers(currentList);
+      setPaginatedCustomers(deduped);
+      setLastDocSnapshot(currentSnapshot);
+      setHasMore(false);
+      setIsAllLoaded(true);
+    } catch (err) {
+      console.warn('[CustomerList] Load all note:', err);
+      if (customers.length > 0) {
+        setPaginatedCustomers(customers);
+        setHasMore(false);
+        setIsAllLoaded(true);
+      }
+    } finally {
+      setIsLoadingAll(false);
+    }
+  };
+
+  const handleShowLess = () => {
+    setPaginatedCustomers(customers.slice(0, 20));
+    setHasMore(customers.length > 20);
+    setIsAllLoaded(false);
   };
 
   // Debounced search query
@@ -664,23 +724,66 @@ export const CustomerList: React.FC = () => {
           </>
         )}
 
-        {/* Cursor pagination: Load More Button */}
-        {searchResults === null && hasMore && (
-          <div className="p-4 flex justify-center bg-slate-50 border-t border-slate-200">
-            <button
-              onClick={handleLoadMore}
-              disabled={isLoadingMore}
-              className="px-6 py-2.5 rounded-xl bg-white border border-[#E4EAE7] hover:border-[#0F7A5C] text-[#0F7A5C] font-extrabold text-sm shadow-xs transition-all flex items-center space-x-2 cursor-pointer disabled:opacity-50"
-            >
-              {isLoadingMore ? (
+        {/* Cursor pagination: Load More & Load All Buttons */}
+        {searchResults === null && (hasMore || isAllLoaded || paginatedCustomers.length < customers.length) && (
+          <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 border-t border-slate-200">
+            <div className="text-xs font-bold text-slate-600">
+              {language === 'EN'
+                ? `Showing ${paginatedCustomers.length} of ${customers.length} customers`
+                : `${customers.length} पैकी ${paginatedCustomers.length} खातेदार दाखवले आहेत`}
+            </div>
+
+            <div className="flex items-center space-x-2 self-end sm:self-auto">
+              {(hasMore || paginatedCustomers.length < customers.length) && (
                 <>
-                  <RefreshCw className="w-4 h-4 animate-spin text-[#0F7A5C]" />
-                  <span>{language === 'EN' ? 'Loading...' : 'लोड होत आहे...'}</span>
+                  <button
+                    type="button"
+                    onClick={handleLoadMore}
+                    disabled={isLoadingMore || isLoadingAll}
+                    className="px-4 py-2 rounded-xl bg-white border border-[#E4EAE7] hover:border-[#0F7A5C] text-[#0F7A5C] font-extrabold text-xs sm:text-sm shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {isLoadingMore ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#0F7A5C]" />
+                        <span>{language === 'EN' ? 'Loading...' : 'लोड होत आहे...'}</span>
+                      </>
+                    ) : (
+                      <span>{language === 'EN' ? 'Load More (20)' : 'अधिक दाखवा (२०)'}</span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleLoadAll}
+                    disabled={isLoadingMore || isLoadingAll}
+                    className="px-4 py-2 rounded-xl bg-[#0F7A5C] hover:bg-[#0B5C45] text-white font-extrabold text-xs sm:text-sm shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {isLoadingAll ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />
+                        <span>{language === 'EN' ? 'Loading All...' : 'सर्व लोड होत आहे...'}</span>
+                      </>
+                    ) : (
+                      <span>
+                        {language === 'EN'
+                          ? `Load All (${customers.length})`
+                          : `सर्व खातेदार दाखवा (${customers.length})`}
+                      </span>
+                    )}
+                  </button>
                 </>
-              ) : (
-                <span>{language === 'EN' ? 'Load More Customers (20)' : 'अधिक खातेदार दाखवा (२०)'}</span>
               )}
-            </button>
+
+              {isAllLoaded && customers.length > 20 && (
+                <button
+                  type="button"
+                  onClick={handleShowLess}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-xs sm:text-sm transition-all flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <span>{language === 'EN' ? 'Show Less (20)' : 'पहिले २० दाखवा'}</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
