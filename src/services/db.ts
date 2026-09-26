@@ -453,7 +453,15 @@ export const deduplicateCollections = (entries: CollectionEntry[]): CollectionEn
   return Array.from(map.values()).sort((a, b) => (a.periodIndex || 0) - (b.periodIndex || 0));
 };
 
-// Deduplicates customers by accountNumber (or ID)
+export const compareAccountNumbers = (a?: string, b?: string, direction: 'asc' | 'desc' = 'asc'): number => {
+  const result = String(a || '').trim().localeCompare(String(b || '').trim(), undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
+  return direction === 'asc' ? result : -result;
+};
+
+// Deduplicates customers by accountNumber (or ID) and sorts numerically by Account Number
 export const deduplicateCustomers = (custs: Customer[]): Customer[] => {
   if (!custs || !Array.isArray(custs) || custs.length === 0) return [];
 
@@ -475,7 +483,9 @@ export const deduplicateCustomers = (custs: Customer[]): Customer[] => {
     }
   });
 
-  return Array.from(map.values());
+  return Array.from(map.values()).sort((a, b) =>
+    compareAccountNumbers(a.accountNumber, b.accountNumber)
+  );
 };
 
 // Deduplicates loans by ID or account + issueDate + principal
@@ -1795,13 +1805,6 @@ export const StorageService = {
           loanPayments.map((p) => ({ docId: p.id, data: p }))
         );
       }
-      const collections = StorageService.getCollections();
-      if (collections.length > 0) {
-        await syncBatchToFirestore(
-          'collections',
-          collections.map((col) => ({ docId: col.id, data: col }))
-        );
-      }
       const bishi = StorageService.getBishiConfigs();
       if (bishi.length > 0) {
         await syncBatchToFirestore(
@@ -1839,22 +1842,22 @@ export const StorageService = {
       startSyncOp();
       const [
         custSnap,
-        collSnap,
         loanSnap,
         loanPaySnap,
         bishiSnap,
         rateSnap,
         penaltySnap,
         adminSnap,
+        thakbakiSnap,
       ] = await Promise.all([
         getDocs(collection(db, 'customers')),
-        getDocs(collection(db, 'collections')),
         getDocs(collection(db, 'loans')),
         getDocs(collection(db, 'loanPayments')),
         getDocs(collection(db, 'bishi')),
         getDocs(collection(db, 'interestRates')),
         getDocs(collection(db, 'penaltySettings')),
         getDocs(collection(db, 'admins')),
+        getDocs(collection(db, 'thakbaki')),
       ]);
 
       let hadRemoteData = false;
@@ -1862,6 +1865,7 @@ export const StorageService = {
       if (!custSnap.empty) {
         hadRemoteData = true;
         const remoteCusts: Customer[] = [];
+        const extractedColls: CollectionEntry[] = [];
         const seenCustDocs = new Map<string, any>();
         custSnap.forEach((d: any) => {
           const raw = d.data();
@@ -1873,43 +1877,54 @@ export const StorageService = {
           } else {
             seenCustDocs.set(key, d);
           }
-          remoteCusts.push({
+          const fullCustomer: Customer = {
             ...raw,
             id: raw.id || d.id,
             name: raw.name || raw.customerName || '',
             customerName: raw.customerName || raw.name || '',
-          });
+          };
+          remoteCusts.push(fullCustomer);
+
+          // Unpack embedded installments from customer document (0 reads!)
+          if (Array.isArray(raw.installments) && raw.installments.length > 0) {
+            raw.installments.forEach((inst: any) => {
+              extractedColls.push({
+                id: inst.id || `coll_${fullCustomer.id}_${inst.periodIndex}`,
+                customerId: fullCustomer.id,
+                customerName: fullCustomer.name,
+                accountNumber: fullCustomer.accountNumber,
+                officeId: inst.officeId || fullCustomer.officeId || 'MAIN',
+                bishiType: inst.bishiType || fullCustomer.bishiType,
+                bishiName: inst.bishiName || fullCustomer.bishiName,
+                periodIndex: inst.periodIndex,
+                periodLabel: inst.periodLabel || `हप्ता ${inst.periodIndex}`,
+                dueDate: inst.dueDate,
+                paymentDate: inst.paymentDate || undefined,
+                paymentTime: inst.paymentTime || undefined,
+                paymentMode: inst.paymentMode || undefined,
+                expectedAmount: Number(inst.expectedAmount) || 0,
+                collectedAmount: Number(inst.collectedAmount) || 0,
+                extraAmount: Number(inst.extraAmount) || 0,
+                remainingAmount: Number(inst.remainingAmount) || 0,
+                interestAmount: Number(inst.interestAmount) || 0,
+                historicalInterestRate: Number(inst.historicalInterestRate) || 0,
+                penaltyAmount: Number(inst.penaltyAmount) || 0,
+                historicalPenaltyRate: Number(inst.historicalPenaltyRate) || 0,
+                totalPaid: Number(inst.totalPaid) || 0,
+                totalWithPenalty: Number(inst.totalWithPenalty) || 0,
+                status: inst.status || 'PENDING',
+                note: inst.note || undefined,
+                updatedAt: inst.updatedAt || undefined,
+              });
+            });
+          }
         });
         setStoredData(STORAGE_KEYS.CUSTOMERS, deduplicateCustomers(remoteCusts));
-      }
 
-      if (!collSnap.empty) {
-        hadRemoteData = true;
-        const remoteColls: CollectionEntry[] = [];
-        const seenCollDocs = new Map<string, any>();
-        collSnap.forEach((d: any) => {
-          const raw = d.data();
-          const acc = String(raw.accountNumber || '').trim().toLowerCase();
-          const custId = String(raw.customerId || '').trim();
-          const bishi = String(raw.bishiType || '').trim();
-          const period = String(raw.periodIndex ?? '');
-          const primaryKey = acc ? `${acc}_${period}` : `${custId}_${period}`;
-          const key = bishi ? `${primaryKey}_${bishi}` : primaryKey;
-
-          if (seenCollDocs.has(key)) {
-            const readableId = getFirestoreDocId('collections', d.id, raw);
-            if (d.id === readableId) seenCollDocs.set(key, d);
-          } else {
-            seenCollDocs.set(key, d);
-          }
-
-          remoteColls.push({
-            ...raw,
-            id: raw.id || d.id,
-            customerName: raw.customerName || '',
-          });
-        });
-        setStoredData(STORAGE_KEYS.COLLECTIONS, deduplicateCollections(remoteColls));
+        if (extractedColls.length > 0) {
+          const localColls = getStoredData<CollectionEntry[]>(STORAGE_KEYS.COLLECTIONS, []);
+          setStoredData(STORAGE_KEYS.COLLECTIONS, deduplicateCollections([...extractedColls, ...localColls]));
+        }
       }
 
       if (!loanSnap.empty) {
@@ -2001,6 +2016,20 @@ export const StorageService = {
         if (remoteAdmins.length > 0) {
           setStoredData(STORAGE_KEYS.ADMINS, remoteAdmins);
         }
+      }
+
+      if (thakbakiSnap && !thakbakiSnap.empty) {
+        hadRemoteData = true;
+        const remoteThakbaki: ThakbakiEntry[] = [];
+        thakbakiSnap.forEach((d: any) => {
+          const raw = d.data();
+          remoteThakbaki.push({
+            ...raw,
+            id: raw.id || d.id,
+            payments: raw.payments || [],
+          });
+        });
+        setStoredData(STORAGE_KEYS.THAKBAKI, remoteThakbaki);
       }
 
       // If Firestore is completely fresh and empty, upload local data to seed cloud database

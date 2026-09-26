@@ -204,50 +204,77 @@ export const performIncrementalSync = async (): Promise<IncrementalSyncResult> =
 
     const filterTimestamp = lastSyncedAt || '2000-01-01T00:00:00.000Z';
 
-    // Step 2: Query only modified or newly created documents across collections
-    const [custSnap, collSnap, loanSnap, loanPaySnap, delSnap] = await Promise.all([
+    // Step 2: Query only modified or newly created documents across collections (installments embedded in customers)
+    const [custSnap, loanSnap, loanPaySnap, delSnap] = await Promise.all([
       getDocs(query(collection(db, 'customers'), where('updatedAt', '>', filterTimestamp))),
-      getDocs(query(collection(db, 'collections'), where('updatedAt', '>', filterTimestamp))),
       getDocs(query(collection(db, 'loans'), where('updatedAt', '>', filterTimestamp))),
       getDocs(query(collection(db, 'loanPayments'), where('updatedAt', '>', filterTimestamp))),
       getDocs(query(collection(db, 'deletions'), where('deletedAt', '>', filterTimestamp))),
     ]);
 
-    readsCount += custSnap.size + collSnap.size + loanSnap.size + loanPaySnap.size + delSnap.size;
+    readsCount += custSnap.size + loanSnap.size + loanPaySnap.size + delSnap.size;
 
-    // 2.1 Update Customers
+    // 2.1 Update Customers and their embedded installments (0 duplicate collection reads)
     if (!custSnap.empty) {
       const incomingCusts: Customer[] = [];
+      const extractedColls: CollectionEntry[] = [];
       custSnap.forEach((d: any) => {
         const raw = d.data();
         const acc = String(raw.accountNumber || raw.accountNo || '').trim();
         const name = raw.name || raw.customerName || '';
-        incomingCusts.push({
+        const fullCust: Customer = {
           ...raw,
           id: raw.id || d.id,
           name,
           customerName: raw.customerName || name,
           accountNumber: acc,
           accountNo: acc,
-        });
+        };
+        incomingCusts.push(fullCust);
+
+        if (Array.isArray(raw.installments) && raw.installments.length > 0) {
+          raw.installments.forEach((inst: any) => {
+            extractedColls.push({
+              id: inst.id || `coll_${fullCust.id}_${inst.periodIndex}`,
+              customerId: fullCust.id,
+              customerName: fullCust.name,
+              accountNumber: fullCust.accountNumber,
+              officeId: inst.officeId || fullCust.officeId || 'MAIN',
+              bishiType: inst.bishiType || fullCust.bishiType,
+              bishiName: inst.bishiName || fullCust.bishiName,
+              periodIndex: inst.periodIndex,
+              periodLabel: inst.periodLabel || `हप्ता ${inst.periodIndex}`,
+              dueDate: inst.dueDate,
+              paymentDate: inst.paymentDate || undefined,
+              paymentTime: inst.paymentTime || undefined,
+              paymentMode: inst.paymentMode || undefined,
+              expectedAmount: Number(inst.expectedAmount) || 0,
+              collectedAmount: Number(inst.collectedAmount) || 0,
+              extraAmount: Number(inst.extraAmount) || 0,
+              remainingAmount: Number(inst.remainingAmount) || 0,
+              interestAmount: Number(inst.interestAmount) || 0,
+              historicalInterestRate: Number(inst.historicalInterestRate) || 0,
+              penaltyAmount: Number(inst.penaltyAmount) || 0,
+              historicalPenaltyRate: Number(inst.historicalPenaltyRate) || 0,
+              totalPaid: Number(inst.totalPaid) || 0,
+              totalWithPenalty: Number(inst.totalWithPenalty) || 0,
+              status: inst.status || 'PENDING',
+              note: inst.note || undefined,
+              updatedAt: inst.updatedAt || undefined,
+            });
+          });
+        }
       });
       const localCusts = StorageService.getCustomers();
       const merged = deduplicateCustomers([...incomingCusts, ...localCusts]);
       localStorage.setItem('sb_customers', JSON.stringify(merged));
-      updatedCount += incomingCusts.length;
-    }
 
-    // 2.2 Update Collections
-    if (!collSnap.empty) {
-      const incomingColls: CollectionEntry[] = [];
-      collSnap.forEach((d: any) => {
-        const raw = d.data();
-        incomingColls.push({ ...raw, id: raw.id || d.id });
-      });
-      const localColls = StorageService.getCollections();
-      const merged = deduplicateCollections([...incomingColls, ...localColls]);
-      localStorage.setItem('sb_collections', JSON.stringify(merged));
-      updatedCount += incomingColls.length;
+      if (extractedColls.length > 0) {
+        const localColls = StorageService.getCollections();
+        const mergedColls = deduplicateCollections([...extractedColls, ...localColls]);
+        localStorage.setItem('sb_collections', JSON.stringify(mergedColls));
+      }
+      updatedCount += incomingCusts.length;
     }
 
     // 2.3 Update Loans

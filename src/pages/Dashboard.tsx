@@ -8,12 +8,11 @@ import {
   formatDateMarathi,
   getBishiNameMarathi,
   getOfficeNameMarathi,
+  matchesCustomerSearch,
 } from '../utils/formatters';
 import { MarathiTextInput } from '../components/common/MarathiTextInput';
 import { CustomDropdown } from '../components/common/CustomDropdown';
 import { getStatsSummary, DEFAULT_STATS } from '../services/stats';
-import { searchCustomersByName, searchCustomerByAccountNumber } from '../services/customerSearch';
-import { fetchTodayPendingInstallments } from '../services/installments';
 import {
   Users,
   Wallet,
@@ -62,17 +61,34 @@ export const Dashboard: React.FC = () => {
   const [collectCustId, setCollectCustId] = useState<string | undefined>(undefined);
   const [dashboardSearch, setDashboardSearch] = useState('');
 
+  const navigate = useNavigate();
+  const todayStr = new Date().toISOString().split('T')[0];
+
   // ── Step 2 & 4: Singleton stats/summary read with ~2 minute TTL cache ──
   const [stats, setStats] = useState<StatsSummary>(DEFAULT_STATS);
   const [isRefreshingStats, setIsRefreshingStats] = useState(false);
 
-  // Today's pending list fetched directly from installments schedule
-  const [todaysPendingList, setTodaysPendingList] = useState<Installment[]>([]);
+  // Today's pending list computed locally from collections (0 Firestore reads!)
+  const todaysPendingList = React.useMemo(() => {
+    return collections
+      .filter((c) => {
+        if (c.status === 'PAID') return false;
+        if (activeOffice !== 'ALL' && c.officeId && c.officeId !== activeOffice) return false;
+        return c.dueDate <= todayStr;
+      })
+      .slice(0, 20)
+      .map((c) => ({
+        id: c.id,
+        customerId: c.customerId,
+        accountNumber: c.accountNumber,
+        customerName: c.customerName,
+        dueDate: c.dueDate,
+        amount: c.remainingAmount > 0 ? c.remainingAmount : c.expectedAmount,
+      })) as any[];
+  }, [collections, activeOffice, todayStr]);
+
   const [dashboardSearchResults, setDashboardSearchResults] = useState<Customer[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-
-  const navigate = useNavigate();
-  const todayStr = new Date().toISOString().split('T')[0];
 
   const fetchStats = async (force: boolean = false) => {
     setIsRefreshingStats(true);
@@ -89,11 +105,6 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     // 1 getDoc() call (or 0 reads if within 2-min sessionStorage TTL)
     fetchStats(false);
-
-    // Fetch today's pending installments schedule (capped at 20 docs)
-    fetchTodayPendingInstallments(todayStr, 20).then((insts) => {
-      setTodaysPendingList(insts);
-    });
   }, []);
 
   // When customers list updates via realtime listener, re-fetch fresh stats
@@ -101,7 +112,7 @@ export const Dashboard: React.FC = () => {
     fetchStats(false);
   }, [customers.length]);
 
-  // Debounced search via prefix range query (costs max 20 reads only when searching)
+  // Instant client-side search (0 Firestore reads!)
   useEffect(() => {
     const term = dashboardSearch.trim();
     if (!term) {
@@ -110,25 +121,12 @@ export const Dashboard: React.FC = () => {
       return;
     }
 
-    setIsSearching(true);
-    const timer = setTimeout(async () => {
-      try {
-        if (/^\d+$/.test(term)) {
-          const cust = await searchCustomerByAccountNumber(term);
-          setDashboardSearchResults(cust ? [cust] : []);
-        } else {
-          const results = await searchCustomersByName(term, 10);
-          setDashboardSearchResults(results);
-        }
-      } catch (err) {
-        console.warn('Dashboard search note:', err);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [dashboardSearch]);
+    const results = customers
+      .filter((c) => matchesCustomerSearch(c, term))
+      .slice(0, 10);
+    setDashboardSearchResults(results);
+    setIsSearching(false);
+  }, [dashboardSearch, customers]);
 
   const isFilterActive = officeFilter !== 'ALL' || selectedBishiFilter !== 'ALL' || modalityFilter !== 'ALL';
 

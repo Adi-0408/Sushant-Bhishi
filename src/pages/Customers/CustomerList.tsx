@@ -7,16 +7,12 @@ import {
   getModalityShort,
   getOfficeNameMarathi,
   getStatusBadgeClass,
+  matchesCustomerSearch,
 } from '../../utils/formatters';
 import { calculateCustomerFinancials } from '../../utils/calculations';
 import { CustomerFormModal } from './CustomerFormModal';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
-import { StorageService, deduplicateCustomers } from '../../services/db';
-import {
-  fetchCustomersPaginated,
-  searchCustomersByName,
-  searchCustomerByAccountNumber,
-} from '../../services/customerSearch';
+import { StorageService, deduplicateCustomers, compareAccountNumbers } from '../../services/db';
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 import { CustomDropdown } from '../../components/common/CustomDropdown';
 import { QuickCollectionModal } from '../../components/collections/QuickCollectionModal';
@@ -31,23 +27,54 @@ import {
   Users,
   X,
   RefreshCw,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 
 export const CustomerList: React.FC = () => {
   const { customers, collections, loans, bishiConfigs, activeOffice, setActiveOffice, refreshData, showToast, t, language, isRefreshing, refreshAllData } = useApp();
 
-  // ── Step 4: Paginated list state (cost capped at 20 reads per page) ──
-  const [paginatedCustomers, setPaginatedCustomers] = useState<Customer[]>(() => {
-    return customers.slice(0, 20);
-  });
-  const [lastDocSnapshot, setLastDocSnapshot] = useState<any>(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [isLoadingAll, setIsLoadingAll] = useState(false);
-  const [isAllLoaded, setIsAllLoaded] = useState(false);
+  // Sorting state (default: natural numeric order by Account Number)
+  const [sortBy, setSortBy] = useState<'accountNumber' | 'name'>('accountNumber');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  // Search state (0 reads when empty; prefix search capped at 20 reads; accNo capped at 1 read)
+  const toggleSort = (field: 'accountNumber' | 'name') => {
+    if (sortBy === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Full customer base sorted according to user selection (0 reads!)
+  const sortedCustomers = useMemo(() => {
+    return [...customers].sort((a, b) => {
+      if (sortBy === 'accountNumber') {
+        return compareAccountNumbers(a.accountNumber, b.accountNumber, sortDirection);
+      }
+      const nameA = String(a.name || '').trim();
+      const nameB = String(b.name || '').trim();
+      const res = nameA.localeCompare(nameB, 'mr', { sensitivity: 'base' });
+      return sortDirection === 'asc' ? res : -res;
+    });
+  }, [customers, sortBy, sortDirection]);
+
+  // ── Client-side pagination state (0 Firestore reads!) ──
+  const [displayLimit, setDisplayLimit] = useState(20);
+  const isLoading = false;
+  const isLoadingMore = false;
+  const isLoadingAll = false;
+
+  const hasMore = sortedCustomers.length > displayLimit;
+  const isAllLoaded = displayLimit >= sortedCustomers.length;
+
+  const paginatedCustomers = useMemo(() => {
+    return sortedCustomers.slice(0, displayLimit);
+  }, [sortedCustomers, displayLimit]);
+
+  // Search state (0 Firestore reads; instant in-memory search)
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Customer[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -67,121 +94,21 @@ export const CustomerList: React.FC = () => {
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
   const [collectCustomer, setCollectCustomer] = useState<Customer | null>(null);
 
-  // Initial load of first 20 customers
-  const loadInitialCustomers = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetchCustomersPaginated(20, null);
-      if (res.customers.length > 0) {
-        setPaginatedCustomers(res.customers);
-        setLastDocSnapshot(res.lastDoc);
-        setHasMore(res.hasMore);
-      } else if (customers.length > 0) {
-        setPaginatedCustomers(customers.slice(0, 20));
-      }
-    } catch (err) {
-      console.warn('[CustomerList] Initial load note:', err);
-      if (customers.length > 0) {
-        setPaginatedCustomers(customers.slice(0, 20));
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [customers]);
-
-  useEffect(() => {
-    loadInitialCustomers();
-  }, [loadInitialCustomers]);
-
-  useEffect(() => {
-    const activeCustIds = new Set(customers.map((c) => c.id));
-    const activeCustAccs = new Set(customers.map((c) => String(c.accountNumber).trim().toLowerCase()));
-    setPaginatedCustomers((prev) => {
-      if (isAllLoaded) {
-        return customers;
-      }
-      const valid = prev.filter(
-        (c) => activeCustIds.has(c.id) || (c.accountNumber && activeCustAccs.has(String(c.accountNumber).trim().toLowerCase()))
-      );
-      if (valid.length === 0 && customers.length > 0) {
-        return customers.slice(0, 20);
-      }
-      return valid;
-    });
-  }, [customers, isAllLoaded]);
-
-  // Load more via cursor pagination (startAfter)
-  const handleLoadMore = async () => {
-    if (!lastDocSnapshot || isLoadingMore || !hasMore) return;
-    setIsLoadingMore(true);
-    try {
-      const res = await fetchCustomersPaginated(20, lastDocSnapshot);
-      setPaginatedCustomers((prev) => {
-        const nextList = deduplicateCustomers([...prev, ...res.customers]);
-        if (nextList.length >= customers.length) {
-          setIsAllLoaded(true);
-        }
-        return nextList;
-      });
-      setLastDocSnapshot(res.lastDoc);
-      setHasMore(res.hasMore);
-    } catch (err) {
-      console.warn('[CustomerList] Load more note:', err);
-    } finally {
-      setIsLoadingMore(false);
-    }
+  // Load more via client-side pagination (0 reads)
+  const handleLoadMore = () => {
+    setDisplayLimit((prev) => prev + 20);
   };
 
-  // Load ALL customers (0 reads if already loaded in AppContext, or fetch remaining batches)
-  const handleLoadAll = async () => {
-    setIsLoadingAll(true);
-    try {
-      if (customers.length >= paginatedCustomers.length && customers.length > 0) {
-        setPaginatedCustomers(customers);
-        setHasMore(false);
-        setIsAllLoaded(true);
-        return;
-      }
-
-      let currentSnapshot = lastDocSnapshot;
-      let currentList = [...paginatedCustomers];
-      let moreAvailable = hasMore;
-
-      while (moreAvailable) {
-        const res = await fetchCustomersPaginated(50, currentSnapshot);
-        if (res.customers.length > 0) {
-          currentList = [...currentList, ...res.customers];
-          currentSnapshot = res.lastDoc;
-          moreAvailable = res.hasMore;
-        } else {
-          moreAvailable = false;
-        }
-      }
-
-      const deduped = deduplicateCustomers(currentList);
-      setPaginatedCustomers(deduped);
-      setLastDocSnapshot(currentSnapshot);
-      setHasMore(false);
-      setIsAllLoaded(true);
-    } catch (err) {
-      console.warn('[CustomerList] Load all note:', err);
-      if (customers.length > 0) {
-        setPaginatedCustomers(customers);
-        setHasMore(false);
-        setIsAllLoaded(true);
-      }
-    } finally {
-      setIsLoadingAll(false);
-    }
+  // Load ALL customers (0 reads!)
+  const handleLoadAll = () => {
+    setDisplayLimit(sortedCustomers.length);
   };
 
   const handleShowLess = () => {
-    setPaginatedCustomers(customers.slice(0, 20));
-    setHasMore(customers.length > 20);
-    setIsAllLoaded(false);
+    setDisplayLimit(20);
   };
 
-  // Debounced search query
+  // Instant client-side search across Name, Account No, Mobile (0 reads!)
   useEffect(() => {
     const term = searchTerm.trim();
     if (!term) {
@@ -190,28 +117,10 @@ export const CustomerList: React.FC = () => {
       return;
     }
 
-    setIsSearching(true);
-    const timer = setTimeout(async () => {
-      try {
-        if (/^\d+$/.test(term)) {
-          // Account number lookup — strictly 1 read!
-          const cust = await searchCustomerByAccountNumber(term);
-          setSearchResults(cust ? [cust] : []);
-        } else {
-          // Name prefix range query — strictly max 20 reads!
-          const results = await searchCustomersByName(term, 20);
-          setSearchResults(results);
-        }
-      } catch (err) {
-        console.warn('[CustomerList] Search note:', err);
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
+    const filtered = sortedCustomers.filter((c) => matchesCustomerSearch(c, term));
+    setSearchResults(filtered);
+    setIsSearching(false);
+  }, [searchTerm, sortedCustomers]);
 
   const activeList = searchResults !== null ? searchResults : paginatedCustomers;
 
@@ -283,7 +192,6 @@ export const CustomerList: React.FC = () => {
     try {
       await StorageService.deleteCustomer(customerToDelete.id);
       showToast(language === 'EN' ? 'Customer deleted successfully.' : 'खातेदाराची माहिती यशस्वीपणे हटवली.', 'success');
-      setPaginatedCustomers((prev) => prev.filter((c) => c.id !== customerToDelete.id));
       if (searchResults) {
         setSearchResults((prev) => (prev ? prev.filter((c) => c.id !== customerToDelete.id) : null));
       }
@@ -441,6 +349,43 @@ export const CustomerList: React.FC = () => {
           </div>
         ) : (
           <>
+            {/* Mobile Sort Bar (< md screens) */}
+            <div className="flex md:hidden items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs">
+              <span className="font-extrabold text-slate-500">
+                {language === 'EN' ? 'Sort by:' : 'क्रमवारी:'}
+              </span>
+              <div className="flex items-center space-x-1.5">
+                <button
+                  type="button"
+                  onClick={() => toggleSort('accountNumber')}
+                  className={`px-3 py-1.5 rounded-lg font-black flex items-center space-x-1 transition-all cursor-pointer ${
+                    sortBy === 'accountNumber'
+                      ? 'bg-brand-900 text-white shadow-xs'
+                      : 'bg-white text-slate-700 border border-slate-200'
+                  }`}
+                >
+                  <span>{t.colAccountNo}</span>
+                  {sortBy === 'accountNumber' && (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 stroke-[3]" /> : <ArrowDown className="w-3 h-3 stroke-[3]" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleSort('name')}
+                  className={`px-3 py-1.5 rounded-lg font-black flex items-center space-x-1 transition-all cursor-pointer ${
+                    sortBy === 'name'
+                      ? 'bg-brand-900 text-white shadow-xs'
+                      : 'bg-white text-slate-700 border border-slate-200'
+                  }`}
+                >
+                  <span>{t.colFullName}</span>
+                  {sortBy === 'name' && (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 stroke-[3]" /> : <ArrowDown className="w-3 h-3 stroke-[3]" />
+                  )}
+                </button>
+              </div>
+            </div>
+
             {/* Mobile Card View (< md screens) */}
             <div className="block md:hidden space-y-3 p-3 bg-slate-50/50">
               {filteredCustomers.map((cust) => {
@@ -595,8 +540,42 @@ export const CustomerList: React.FC = () => {
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
                   <tr>
-                    <th className="p-3.5 pl-5">{t.colAccountNo}</th>
-                    <th className="p-3.5">{t.colFullName}</th>
+                    <th
+                      onClick={() => toggleSort('accountNumber')}
+                      className="p-3.5 pl-5 cursor-pointer hover:bg-slate-100 transition-colors select-none group/th"
+                      title={language === 'EN' ? 'Click to sort by Account Number' : 'खाते क्रमांकाने क्रमवारी लावण्यासाठी क्लिक करा'}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span className={sortBy === 'accountNumber' ? 'text-brand-900 font-black' : ''}>{t.colAccountNo}</span>
+                        {sortBy === 'accountNumber' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-brand-700 stroke-[2.5]" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-brand-700 stroke-[2.5]" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 group-hover/th:text-slate-600 transition-colors" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => toggleSort('name')}
+                      className="p-3.5 cursor-pointer hover:bg-slate-100 transition-colors select-none group/th"
+                      title={language === 'EN' ? 'Click to sort by Name' : 'नावाने क्रमवारी लावण्यासाठी क्लिक करा'}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span className={sortBy === 'name' ? 'text-brand-900 font-black' : ''}>{t.colFullName}</span>
+                        {sortBy === 'name' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-brand-700 stroke-[2.5]" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-brand-700 stroke-[2.5]" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 group-hover/th:text-slate-600 transition-colors" />
+                        )}
+                      </div>
+                    </th>
                     <th className="p-3.5">{t.colMobile}</th>
                     <th className="p-3.5">{t.colBishi}</th>
                     <th className="p-3.5 text-center">{t.colModality}</th>
@@ -807,7 +786,6 @@ export const CustomerList: React.FC = () => {
         onClose={() => setIsFormOpen(false)}
         onSuccess={() => {
           refreshData();
-          loadInitialCustomers();
         }}
       />
 
