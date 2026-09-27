@@ -33,6 +33,12 @@ export const exportMemberLedgerToExcel = (
     finalRemainingBalance,
   } = ledgerCalculation;
 
+  const rate = customer.interestRate || (customer.modality === 'W' ? 2.5 : 10);
+  const expectedInterest = Math.round((totalExpected * rate) / 100);
+  const totalExpectedWithInt = totalExpected + expectedInterest;
+  const actualEarnedInterest = Math.round((totalDeposit * rate) / 100);
+  const totalPayout = totalDeposit + actualEarnedInterest;
+
   const tableRowsHtml = ledgerCalculation.rows.length === 0
     ? `<tr><td colspan="11" style="text-align: center; padding: 12px; color: #64748b; font-weight: bold; border: 1px solid #b8c2cc;">या खातेदाराची अद्याप कोणतीही पूर्ण जमा नोंद झालेली नाही.</td></tr>`
     : ledgerCalculation.rows
@@ -105,6 +111,12 @@ export const exportMemberLedgerToExcel = (
           <td class="meta-header" style="background-color:#8B4513; color:#ffffff; font-weight:bold;">पत्ता / मोबाईल</td>
           <td colspan="5" class="meta-val" style="background-color:#fffde7; font-weight:bold;">${customer.address || ''} (${customer.mobile})</td>
         </tr>
+        <tr>
+          <td class="meta-header" style="background-color:#8B4513; color:#ffffff; font-weight:bold;">एकूण भिशी (व्याजासह)</td>
+          <td colspan="4" class="meta-val" style="background-color:#fffde7; font-weight:bold; color:#0b5c45;">₹${totalExpectedWithInt} (ठेव: ₹${totalExpected} + व्याज: +₹${expectedInterest})</td>
+          <td class="meta-header" style="background-color:#8B4513; color:#ffffff; font-weight:bold;">लाभांश / व्याजदर</td>
+          <td colspan="5" class="meta-val" style="background-color:#fffde7; font-weight:bold; color:#1e3a8a;">${rate}% (${customer.modality === 'W' ? 'साप्ताहिक' : 'मासिक'})</td>
+        </tr>
         <tr><td colspan="11" style="border:none;"></td></tr>
 
         <!-- Table Header matching media_1789462342483.png -->
@@ -145,6 +157,22 @@ export const exportMemberLedgerToExcel = (
           </tr>
         </tfoot>
       </table>
+      <br/>
+      <table>
+        <tr>
+          <td colspan="5" style="background-color:#fffde7; border: 1px solid #8B4513; font-weight: bold; padding: 10px;">
+            <div>१) टाकणी: ___________________</div>
+            <div style="color: #0b5c45;">२) डिव्हिडंड / व्याज (${rate}%): ₹${actualEarnedInterest}</div>
+            <div>३) खाते नं.: <strong>${customer.accountNumber}</strong></div>
+            <div style="color: #1e3a8a;">४) एकूण अंतिम परतावा: ₹${totalPayout}</div>
+          </td>
+          <td colspan="6" style="text-align: right; border: none; font-weight: bold; padding: 10px;">
+            <p>सदर भिशीची एकूण रक्कम ₹${totalPayout} (व्याजासह) मिळाल्या बद्दल...</p>
+            <br/><br/>
+            <span>सेक्रेटरी / अध्यक्ष</span>
+          </td>
+        </tr>
+      </table>
     </body>
     </html>
   `;
@@ -168,33 +196,69 @@ export const exportGeneralReportToExcel = (
   rows: {
     customer: Customer;
     exp: number;
+    expectedInterest?: number;
+    totalExpWithInterest?: number;
     coll: number;
     rem: number;
+    int?: number;
+    pen?: number;
+    totalPayable?: number;
+    extraSubmitted?: number;
+    totalWithExtra?: number;
     isPaid: boolean;
   }[]
 ) => {
   const tableRowsHtml = rows
     .map(
-      (r, idx) => `
-      <tr>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${idx + 1}</td>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold;">${r.customer.accountNumber}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 6px; font-weight: bold;">${r.customer.name}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 6px;">${r.customer.mobile}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 6px;">${getBishiNameMarathi(r.customer.bishiType)}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 6px;">${r.customer.modality === 'W' ? 'साप्ताहिक' : 'मासिक'}</td>
-        <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px;">${r.exp}</td>
-        <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #15803d;">${r.coll}</td>
-        <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #be123c;">${r.rem}</td>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${r.isPaid ? 'पूर्ण जमा' : r.coll > 0 ? 'अंशतः जमा' : 'बाकी'}</td>
-      </tr>
-    `
+      (r, idx) => {
+        const rate = r.customer.interestRate || (r.customer.modality === 'W' ? 2.5 : 10);
+        const expInt = r.expectedInterest ?? Math.round((r.exp * rate) / 100);
+        const totalExpWithInt = r.totalExpWithInterest ?? (r.exp + expInt);
+        const intAmt = r.int || 0;
+        const payableAmt = r.totalPayable || (totalExpWithInt + (r.extraSubmitted || 0));
+        const extraAmt = r.extraSubmitted || 0;
+        const returnAmt = r.totalWithExtra || (r.coll + intAmt);
+
+        return `
+        <tr>
+          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${idx + 1}</td>
+          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold;">${r.customer.accountNumber}</td>
+          <td style="border: 1px solid #cbd5e1; padding: 6px; font-weight: bold;">${r.customer.name}</td>
+          <td style="border: 1px solid #cbd5e1; padding: 6px;">${r.customer.mobile}</td>
+          <td style="border: 1px solid #cbd5e1; padding: 6px;">${getBishiNameMarathi(r.customer.bishiType)}</td>
+          <td style="border: 1px solid #cbd5e1; padding: 6px;">${r.customer.modality === 'W' ? 'साप्ताहिक' : 'मासिक'}</td>
+          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px;">${r.exp}</td>
+          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; color: #1e40af;">+${expInt}</td>
+          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #064e3b; background-color: #ecfdf5;">${totalExpWithInt}</td>
+          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #15803d;">${r.coll}</td>
+          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #be123c;">${r.rem}</td>
+          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; color: #1d4ed8;">${intAmt > 0 ? intAmt : '-'}</td>
+          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #1e3a8a;">${payableAmt > 0 ? payableAmt : '-'}</td>
+          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #581c87;">${extraAmt > 0 ? `+${extraAmt}` : '-'}</td>
+          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #166534; background-color: #f0fdf4;">${returnAmt > 0 ? returnAmt : '-'}</td>
+          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${r.isPaid ? 'पूर्ण जमा' : r.coll > 0 ? 'अंशतः जमा' : 'बाकी'}</td>
+        </tr>
+      `;
+      }
     )
     .join('');
 
   const totalExp = rows.reduce((a, r) => a + r.exp, 0);
+  const totalExpInt = rows.reduce((a, r) => {
+    const rate = r.customer.interestRate || (r.customer.modality === 'W' ? 2.5 : 10);
+    return a + (r.expectedInterest ?? Math.round((r.exp * rate) / 100));
+  }, 0);
+  const totalExpWithInterest = totalExp + totalExpInt;
   const totalColl = rows.reduce((a, r) => a + r.coll, 0);
   const totalRem = rows.reduce((a, r) => a + r.rem, 0);
+  const totalInt = rows.reduce((a, r) => a + (r.int || 0), 0);
+  const totalPayable = rows.reduce((a, r) => {
+    const rate = r.customer.interestRate || (r.customer.modality === 'W' ? 2.5 : 10);
+    const expWithInt = r.totalExpWithInterest ?? (r.exp + Math.round((r.exp * rate) / 100));
+    return a + (r.totalPayable ?? (expWithInt + (r.extraSubmitted || 0)));
+  }, 0);
+  const totalExtra = rows.reduce((a, r) => a + (r.extraSubmitted || 0), 0);
+  const totalReturn = rows.reduce((a, r) => a + (r.totalWithExtra || 0), 0);
 
   const excelHtml = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -220,9 +284,15 @@ export const exportGeneralReportToExcel = (
             <th>मोबाईल</th>
             <th>भिशी प्रकार</th>
             <th>पद्धत</th>
-            <th>अपेक्षित (₹)</th>
+            <th>हप्ते ठेव (₹)</th>
+            <th>अपेक्षित व्याज (₹)</th>
+            <th>एकूण भिशी (व्याजासह) (₹)</th>
             <th>जमा (₹)</th>
             <th>बाकी (₹)</th>
+            <th>जमा व्याज (₹)</th>
+            <th>एकूण देय (₹)</th>
+            <th>जादा जमा (₹)</th>
+            <th>एकूण परतावा (₹)</th>
             <th>स्थिती</th>
           </tr>
         </thead>
@@ -233,8 +303,14 @@ export const exportGeneralReportToExcel = (
           <tr class="tf-footer" style="background-color:#0F4A3C; color:#ffffff; font-weight:bold;">
             <td colspan="6" style="font-weight:bold; text-align:right;">एकूण (TOTAL)</td>
             <td style="text-align:right;">${totalExp}</td>
+            <td style="text-align:right;">${totalExpInt}</td>
+            <td style="text-align:right; font-weight:bold; color:#a7f3d0;">${totalExpWithInterest}</td>
             <td style="text-align:right;">${totalColl}</td>
             <td style="text-align:right;">${totalRem}</td>
+            <td style="text-align:right;">${totalInt}</td>
+            <td style="text-align:right;">${totalPayable}</td>
+            <td style="text-align:right;">${totalExtra}</td>
+            <td style="text-align:right; font-weight:bold; color:#a7f3d0;">${totalReturn}</td>
             <td></td>
           </tr>
         </tfoot>

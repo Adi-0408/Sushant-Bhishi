@@ -426,6 +426,8 @@ export const generateReportPDF = async (
   const container = createPdfContainer(1122);
 
   let totalExp = 0;
+  let totalExpectedInterestSum = 0;
+  let totalExpWithInterestSum = 0;
   let totalColl = 0;
   let totalRem = 0;
   let totalInt = 0;
@@ -450,14 +452,18 @@ export const generateReportPDF = async (
 
     rem = Math.max(0, exp - coll);
     const rate = cust.interestRate || (cust.modality === 'W' ? 2.5 : 10);
+    const expectedInterest = Math.round((exp * rate) / 100);
+    const totalExpWithInterest = exp + expectedInterest;
     const bishiAmountForInt = exp > 0 ? Math.min(coll, exp) : coll;
     int = Math.round((bishiAmountForInt * rate) / 100);
 
     const extraSubmitted = Math.max(0, coll - exp);
     const totalWithExtra = coll > 0 ? coll + int : 0;
-    const totalPayable = Math.max(0, totalWithExtra - extraSubmitted);
+    const totalPayable = totalExpWithInterest + extraSubmitted;
 
     totalExp += exp;
+    totalExpectedInterestSum += expectedInterest;
+    totalExpWithInterestSum += totalExpWithInterest;
     totalColl += coll;
     totalRem += rem;
     totalInt += int;
@@ -473,6 +479,8 @@ export const generateReportPDF = async (
     return {
       cust,
       exp,
+      expectedInterest,
+      totalExpWithInterest,
       coll,
       rem,
       int,
@@ -512,7 +520,7 @@ export const generateReportPDF = async (
             <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: center; width: 75px;">मोबाईल</th>
             <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: center; width: 75px;">योजना</th>
             <th style="padding: 5px 4px; border: 1px solid #8B4513; text-align: center; width: 50px;">पद्धत</th>
-            <th style="padding: 5px 5px; border: 1px solid #8B4513; text-align: right; width: 75px;">अपेक्षित (₹)</th>
+            <th style="padding: 5px 5px; border: 1px solid #8B4513; text-align: right; width: 85px;">अपेक्षित (व्याजासह) (₹)</th>
             <th style="padding: 5px 5px; border: 1px solid #8B4513; text-align: right; width: 75px;">जमा (₹)</th>
             <th style="padding: 5px 5px; border: 1px solid #8B4513; text-align: right; width: 75px;">बाकी (₹)</th>
             <th style="padding: 5px 5px; border: 1px solid #8B4513; text-align: right; width: 80px;">व्याज/दंड (₹)</th>
@@ -533,7 +541,10 @@ export const generateReportPDF = async (
               <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: center; color: #475569;">${r.cust.mobile}</td>
               <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: center; color: #475569;">${getBishiNameMarathi(r.cust.bishiType)}</td>
               <td style="padding: 4px 4px; border: 1px solid #b8a99a; text-align: center; color: #475569;">${r.cust.modality === 'W' ? 'साप्ताहिक' : 'मासिक'}</td>
-              <td style="padding: 4px 5px; border: 1px solid #b8a99a; text-align: right; font-weight: 700; color: #334155;">${formatCurrency(r.exp)}</td>
+              <td style="padding: 4px 5px; border: 1px solid #b8a99a; text-align: right; font-weight: 700; color: #334155;">
+                <div style="font-weight: 800; color: #0f172a;">${formatCurrency(r.totalExpWithInterest)}</div>
+                <div style="font-size: 7px; color: #64748b;">(${formatCurrency(r.exp)} + व्याज: +${formatCurrency(r.expectedInterest)})</div>
+              </td>
               <td style="padding: 4px 5px; border: 1px solid #b8a99a; text-align: right; font-weight: 800; color: #15803d;">${formatCurrency(r.coll)}</td>
               <td style="padding: 4px 5px; border: 1px solid #b8a99a; text-align: right; font-weight: 900; color: #be123c;">${formatCurrency(r.rem)}</td>
               <td style="padding: 4px 5px; border: 1px solid #b8a99a; text-align: right; font-weight: 700; color: #64748b;">
@@ -562,7 +573,10 @@ export const generateReportPDF = async (
             <td style="padding: 6px 4px; border: 1px solid #5c3a21;">-</td>
             <td style="padding: 6px 4px; border: 1px solid #5c3a21;">-</td>
             <td style="padding: 6px 4px; border: 1px solid #5c3a21;">-</td>
-            <td style="padding: 6px 5px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalExp)}</td>
+            <td style="padding: 6px 5px; border: 1px solid #5c3a21; text-align: right;">
+              <div>${formatCurrency(totalExpWithInterestSum)}</div>
+              <div style="font-size: 7.5px; color: #fef08a;">(हप्ते: ${formatCurrency(totalExp)} + व्याज: +${formatCurrency(totalExpectedInterestSum)})</div>
+            </td>
             <td style="padding: 6px 5px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalColl)}</td>
             <td style="padding: 6px 5px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalRem)}</td>
             <td style="padding: 6px 5px; border: 1px solid #5c3a21; text-align: right;">${formatCurrency(totalInt + totalPen)}</td>
@@ -617,6 +631,13 @@ export const generateMemberLedgerPDF = async (
     showAllWeeks
   );
 
+  const rate = customer.interestRate || (customer.modality === 'W' ? 2.5 : 10);
+  const expectedBase = ledgerCalculation.totalExpected;
+  const expectedInterest = Math.round((expectedBase * rate) / 100);
+  const totalExpectedWithInt = expectedBase + expectedInterest;
+  const actualEarnedInterest = Math.round((ledgerCalculation.totalDeposit * rate) / 100);
+  const totalPayout = ledgerCalculation.totalDeposit + actualEarnedInterest;
+
   const tableRowsHtml = ledgerCalculation.rows.length === 0
     ? `<tr><td colspan="11" style="padding: 18px; text-align: center; color: #64748b; font-weight: 700; border: 1px solid #b8a99a;">या खातेदाराची अद्याप कोणतीही पूर्ण जमा नोंद झालेली नाही.</td></tr>`
     : ledgerCalculation.rows
@@ -667,6 +688,12 @@ export const generateMemberLedgerPDF = async (
           <td style="background: #8B4513; color: white; padding: 6px 8px; border: 1px solid #8B4513;">पत्ता / मोबाईल:</td>
           <td style="background: #fffde7; padding: 6px 8px; border: 1px solid #b8a99a;">${customer.address || '-'} (${customer.mobile})</td>
         </tr>
+        <tr>
+          <td style="background: #8B4513; color: white; padding: 6px 8px; border: 1px solid #8B4513;">एकूण भिशी (व्याजासह):</td>
+          <td style="background: #fffde7; padding: 6px 8px; border: 1px solid #b8a99a; font-weight: 900; color: #0b5c45; font-size: 13px;">₹${formatCurrency(totalExpectedWithInt)} <span style="font-size: 10px; color: #475569;">(ठेव: ₹${formatCurrency(expectedBase)} + व्याज: +₹${formatCurrency(expectedInterest)})</span></td>
+          <td style="background: #8B4513; color: white; padding: 6px 8px; border: 1px solid #8B4513;">लाभांश / व्याजदर:</td>
+          <td style="background: #fffde7; padding: 6px 8px; border: 1px solid #b8a99a; font-weight: bold; color: #1e3a8a;">${rate}% (${customer.modality === 'W' ? 'साप्ताहिक' : 'मासिक'})</td>
+        </tr>
       </table>
 
       <!-- Ledger Register 11-Column Table -->
@@ -711,15 +738,15 @@ export const generateMemberLedgerPDF = async (
 
       <!-- Footer Notes & Signature Block -->
       <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 16px; font-size: 11px; font-weight: 700;">
-        <div style="border: 1px solid #8B4513; padding: 8px 14px; border-radius: 6px; background: #fffde7; min-width: 240px; line-height: 1.6;">
+        <div style="border: 1px solid #8B4513; padding: 8px 14px; border-radius: 6px; background: #fffde7; min-width: 260px; line-height: 1.6;">
           <div>१) टाकणी: ___________________</div>
-          <div>२) डिव्हिडंड: ___________________</div>
+          <div style="color: #0b5c45; font-weight: 800;">२) डिव्हिडंड / व्याज (${rate}%): ₹${formatCurrency(actualEarnedInterest)}</div>
           <div>३) खाते नं.: <strong>${customer.accountNumber}</strong></div>
-          <div>४) शेरा: ___________________</div>
+          <div style="color: #1e3a8a; font-weight: 800;">४) एकूण अंतिम परतावा: ₹${formatCurrency(totalPayout)}</div>
         </div>
 
         <div style="text-align: right; padding-right: 20px;">
-          <p style="margin: 0 0 35px 0; color: #475569;">सदर भिशीची रक्कम मिळाल्या बद्दल...</p>
+          <p style="margin: 0 0 35px 0; color: #0f172a; font-weight: 800;">सदर भिशीची एकूण रक्कम ₹${formatCurrency(totalPayout)} (व्याजासह) मिळाल्या बद्दल...</p>
           <div style="font-weight: 900; font-size: 13px; border-top: 1px solid #333; padding-top: 4px; display: inline-block; min-width: 160px; text-align: center; color: #0f172a;">
             सेक्रेटरी / अध्यक्ष
           </div>
