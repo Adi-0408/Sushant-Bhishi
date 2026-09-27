@@ -690,7 +690,7 @@ export const generateMemberLedgerPDF = async (
         </tr>
         <tr>
           <td style="background: #8B4513; color: white; padding: 6px 8px; border: 1px solid #8B4513;">एकूण भिशी (व्याजासह):</td>
-          <td style="background: #fffde7; padding: 6px 8px; border: 1px solid #b8a99a; font-weight: 900; color: #0b5c45; font-size: 13px;">₹${formatCurrency(totalExpectedWithInt)} <span style="font-size: 10px; color: #475569;">(ठेव: ₹${formatCurrency(expectedBase)} + व्याज: +₹${formatCurrency(expectedInterest)})</span></td>
+          <td style="background: #fffde7; padding: 6px 8px; border: 1px solid #b8a99a; font-weight: 900; color: #0b5c45; font-size: 13px;">${formatCurrency(totalExpectedWithInt)} <span style="font-size: 10px; color: #475569;">(ठेव: ${formatCurrency(expectedBase)} + व्याज: +${formatCurrency(expectedInterest)})</span></td>
           <td style="background: #8B4513; color: white; padding: 6px 8px; border: 1px solid #8B4513;">लाभांश / व्याजदर:</td>
           <td style="background: #fffde7; padding: 6px 8px; border: 1px solid #b8a99a; font-weight: bold; color: #1e3a8a;">${rate}% (${customer.modality === 'W' ? 'साप्ताहिक' : 'मासिक'})</td>
         </tr>
@@ -740,13 +740,13 @@ export const generateMemberLedgerPDF = async (
       <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 16px; font-size: 11px; font-weight: 700;">
         <div style="border: 1px solid #8B4513; padding: 8px 14px; border-radius: 6px; background: #fffde7; min-width: 260px; line-height: 1.6;">
           <div>१) टाकणी: ___________________</div>
-          <div style="color: #0b5c45; font-weight: 800;">२) डिव्हिडंड / व्याज (${rate}%): ₹${formatCurrency(actualEarnedInterest)}</div>
+          <div style="color: #0b5c45; font-weight: 800;">२) डिव्हिडंड / व्याज (${rate}%): ${formatCurrency(actualEarnedInterest)}</div>
           <div>३) खाते नं.: <strong>${customer.accountNumber}</strong></div>
-          <div style="color: #1e3a8a; font-weight: 800;">४) एकूण अंतिम परतावा: ₹${formatCurrency(totalPayout)}</div>
+          <div style="color: #1e3a8a; font-weight: 800;">४) एकूण अंतिम परतावा: ${formatCurrency(totalPayout)}</div>
         </div>
 
         <div style="text-align: right; padding-right: 20px;">
-          <p style="margin: 0 0 35px 0; color: #0f172a; font-weight: 800;">सदर भिशीची एकूण रक्कम ₹${formatCurrency(totalPayout)} (व्याजासह) मिळाल्या बद्दल...</p>
+          <p style="margin: 0 0 35px 0; color: #0f172a; font-weight: 800;">सदर भिशीची एकूण रक्कम ${formatCurrency(totalPayout)} (व्याजासह) मिळाल्या बद्दल...</p>
           <div style="font-weight: 900; font-size: 13px; border-top: 1px solid #333; padding-top: 4px; display: inline-block; min-width: 160px; text-align: center; color: #0f172a;">
             सेक्रेटरी / अध्यक्ष
           </div>

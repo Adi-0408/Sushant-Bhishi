@@ -668,9 +668,9 @@ export const ReportManager: React.FC = () => {
                     <tr>
                       <td className="p-2.5 bg-[#8B4513] text-white font-extrabold">{language === 'EN' ? 'Total Bishi (with Int.)' : 'एकूण भिशी (व्याजासह)'}</td>
                       <td className="p-2.5 font-black text-emerald-950 text-sm sm:text-base border-r border-amber-900/30">
-                        ₹{formatCurrency(ledgerTotalExpWithInterest, language)}
+                        {formatCurrency(ledgerTotalExpWithInterest, language)}
                         <span className="text-[11px] font-bold text-slate-700 ml-1.5 block sm:inline">
-                          (हप्ते: ₹{formatCurrency(ledgerTotalBaseExpected, language)} + {language === 'EN' ? 'Int: +' : 'व्याज: +'}₹{formatCurrency(ledgerExpectedInterest, language)})
+                          (हप्ते: {formatCurrency(ledgerTotalBaseExpected, language)} + {language === 'EN' ? 'Int: +' : 'व्याज: +'}{formatCurrency(ledgerExpectedInterest, language)})
                         </span>
                       </td>
                       <td className="p-2.5 bg-[#8B4513] text-white font-extrabold">{language === 'EN' ? 'Dividend / Interest' : 'लाभांश / व्याजदर'}</td>
@@ -799,19 +799,19 @@ export const ReportManager: React.FC = () => {
                 <div className="bg-[#fffde7] border border-amber-900/30 p-3 rounded-lg space-y-1.5 w-full sm:w-80 shadow-xs">
                   <div>{language === 'EN' ? '1) Bid/Draw: ___________________' : '१) टाकणी: ___________________'}</div>
                   <div className="text-emerald-900 font-black">
-                    {language === 'EN' ? '2) Dividend / Interest (' : '२) डिव्हिडंड / व्याज ('}{ledgerCustRate}%): ₹{formatCurrency(ledgerEarnedInterest, language)}
+                    {language === 'EN' ? '2) Dividend / Interest (' : '२) डिव्हिडंड / व्याज ('}{ledgerCustRate}%): {formatCurrency(ledgerEarnedInterest, language)}
                   </div>
                   <div>{language === 'EN' ? '3) Acc No: ' : '३) खाते नं.: '}<strong>{activeLedgerCustomer.accountNumber}</strong></div>
                   <div className="text-blue-950 font-black">
-                    {language === 'EN' ? '4) Total Return Payout: ' : '४) एकूण अंतिम परतावा: '}₹{formatCurrency(ledgerTotalPayout, language)}
+                    {language === 'EN' ? '4) Total Return Payout: ' : '४) एकूण अंतिम परतावा: '}{formatCurrency(ledgerTotalPayout, language)}
                   </div>
                 </div>
 
                 <div className="text-right w-full sm:w-auto pr-4">
                   <p className="mb-8 font-black text-slate-900 text-xs sm:text-sm">
                     {language === 'EN'
-                      ? `Acknowledged receipt of total Bishi amount ₹${formatCurrency(ledgerTotalPayout, language)} (with interest)...`
-                      : `सदर भिशीची एकूण रक्कम ₹${formatCurrency(ledgerTotalPayout, language)} (व्याजासह) मिळाल्या बद्दल...`}
+                      ? `Acknowledged receipt of total Bishi amount ${formatCurrency(ledgerTotalPayout, language)} (with interest)...`
+                      : `सदर भिशीची एकूण रक्कम ${formatCurrency(ledgerTotalPayout, language)} (व्याजासह) मिळाल्या बद्दल...`}
                   </p>
                   <div className="border-t-2 border-slate-900 pt-1 inline-block min-w-44 text-center font-black text-slate-900">
                     {language === 'EN' ? 'Secretary / President' : 'सेक्रेटरी / अध्यक्ष'}
