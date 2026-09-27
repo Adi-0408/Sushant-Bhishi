@@ -64,6 +64,26 @@ export const BishiManager: React.FC = () => {
     });
 
     StorageService.saveBishiConfigs(updatedList);
+
+    // If total installments for the scheme changed, propagate and reconcile member customers
+    const oldConfig = bishiConfigs.find((cfg) => cfg.id === id);
+    const newInstallmentsNum = Number(installments);
+    if (oldConfig && oldConfig.totalInstallments !== newInstallmentsNum) {
+      try {
+        const allCustomers = StorageService.getCustomers();
+        const schemeCustomers = allCustomers.filter((c) => c.bishiType === id);
+        schemeCustomers.forEach((cust) => {
+          if (!cust.totalInstallments || cust.totalInstallments === oldConfig.totalInstallments) {
+            StorageService.updateCustomer(cust.id, {
+              totalInstallments: newInstallmentsNum,
+            });
+          }
+        });
+      } catch (err) {
+        console.error('Error synchronizing customer installments from scheme change:', err);
+      }
+    }
+
     showToast(
       language === 'EN'
         ? 'Bishi scheme updated successfully.'

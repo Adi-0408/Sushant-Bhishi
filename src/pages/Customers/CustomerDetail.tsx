@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { CollectionEntry } from '../../types';
@@ -14,7 +14,13 @@ import {
   getStatusBadgeClass,
   getStatusTextMarathi,
 } from '../../utils/formatters';
-import { calculateCustomerFinancials, calculateCollectionEntry, getLoanRemainingPrincipal, calculateLoanDueInterest } from '../../utils/calculations';
+import {
+  calculateCustomerFinancials,
+  calculateCollectionEntry,
+  getLoanRemainingPrincipal,
+  calculateLoanDueInterest,
+  reconcileCustomerInstallments,
+} from '../../utils/calculations';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 import { CustomerFormModal } from './CustomerFormModal';
@@ -97,6 +103,19 @@ export const CustomerDetail: React.FC = () => {
 
   const todayStr = new Date().toISOString().split('T')[0];
 
+  const schemeConfig = useMemo(() => {
+    return bishiConfigs.find((c) => c.id === customer?.bishiType);
+  }, [bishiConfigs, customer?.bishiType]);
+
+  const targetTotalInstallments = useMemo(() => {
+    if (!customer) return 40;
+    return (
+      Number(customer.totalInstallments) ||
+      Number(schemeConfig?.totalInstallments) ||
+      (customer.modality === 'W' ? 40 : 10)
+    );
+  }, [customer?.totalInstallments, schemeConfig?.totalInstallments, customer?.modality]);
+
   const customerCollections = useMemo(() => {
     if (!customer) return [];
     const custAcc = String(customer.accountNumber || '').trim().toLowerCase();
@@ -121,8 +140,32 @@ export const CustomerDetail: React.FC = () => {
         }
       }
     }
-    return Array.from(map.values()).sort((a, b) => a.periodIndex - b.periodIndex);
-  }, [collections, customer?.id, customer?.accountNumber, customer?.bishiType]);
+    const deduped = Array.from(map.values()).sort((a, b) => a.periodIndex - b.periodIndex);
+    if (customer.bishiType === 'LOAN_ONLY') return deduped;
+
+    // Immediately reconcile so weeks 51, 52 (or months 11, 12) never show when total weeks is 50 (or 10)
+    const reconciled = reconcileCustomerInstallments(customer, deduped, targetTotalInstallments);
+    return reconciled.updatedCollections;
+  }, [collections, customer, targetTotalInstallments]);
+
+  // Background auto-reconciliation to permanently prune/expand storage & Firestore
+  useEffect(() => {
+    if (!customer || customer.bishiType === 'LOAN_ONLY') return;
+    const custAcc = String(customer.accountNumber || '').trim().toLowerCase();
+    const raw = collections.filter((c) => {
+      const cAcc = String(c.accountNumber || '').trim().toLowerCase();
+      return c.customerId === customer.id || (custAcc && cAcc === custAcc);
+    });
+    const result = reconcileCustomerInstallments(customer, raw, targetTotalInstallments);
+    if (result.hasChanges) {
+      if (result.updatedCollections.length > 0) {
+        StorageService.saveCollectionsBatch(result.updatedCollections);
+      }
+      if (result.deletedIds.length > 0) {
+        StorageService.deleteCollectionEntriesBatch(result.deletedIds);
+      }
+    }
+  }, [customer?.id, customer?.totalInstallments, targetTotalInstallments]);
 
   if (!customer) {
     return (
@@ -615,8 +658,12 @@ export const CustomerDetail: React.FC = () => {
               {showAllWeeks ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               <span>
                 {language === 'EN'
-                  ? (showAllWeeks ? 'View Current Week' : `View All ${customerCollections.length} Weeks`)
-                  : (showAllWeeks ? 'चालू आठवडा पहा' : `सर्व ${customerCollections.length} आठवडे पहा`)}
+                  ? (showAllWeeks
+                      ? (customer.modality === 'W' ? 'View Current Week' : 'View Current Month')
+                      : `View All ${customerCollections.length} ${customer.modality === 'W' ? 'Weeks' : 'Months'}`)
+                  : (showAllWeeks
+                      ? (customer.modality === 'W' ? 'चालू आठवडा पहा' : 'चालू महिना पहा')
+                      : `सर्व ${customerCollections.length} ${customer.modality === 'W' ? 'आठवडे' : 'महिने'} पहा`)}
               </span>
             </button>
             <span className="text-xs font-bold px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full">

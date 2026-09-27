@@ -26,7 +26,7 @@ import {
   ThakbakiEntry,
   ThakbakiPayment,
 } from '../types';
-import { calculateLoanTotalAccruedInterest } from '../utils/calculations';
+import { calculateLoanTotalAccruedInterest, reconcileCustomerInstallments } from '../utils/calculations';
 import { invalidateStatsCache } from './stats';
 import { markInstallmentAsPaid } from './installments';
 import {
@@ -129,7 +129,10 @@ const enrichFirestoreData = (collectionName: string, rawData: any): any => {
           dedupMap.set(c.periodIndex, c);
         }
       });
-      const custColls = Array.from(dedupMap.values()).sort((a, b) => a.periodIndex - b.periodIndex);
+      const targetCount = Number(data.totalInstallments) || (data.modality === 'W' ? 40 : 10);
+      const custColls = Array.from(dedupMap.values())
+        .filter((c) => c.periodIndex <= targetCount || c.status === 'PAID' || (c.collectedAmount || 0) > 0)
+        .sort((a, b) => a.periodIndex - b.periodIndex);
 
       if (custColls.length > 0) {
         const totalExpected = custColls.reduce((acc, c) => acc + (c.expectedAmount || 0), 0);
@@ -796,22 +799,44 @@ export const StorageService = {
     try {
       const allColls = getStoredData<CollectionEntry[]>(STORAGE_KEYS.COLLECTIONS, []);
       let collsChanged = false;
-      const updatedColls = allColls.map((c) => {
-        if (c.customerId === id || (oldCustomer.accountNumber && c.accountNumber === oldCustomer.accountNumber)) {
+      if (customers[index].bishiType !== 'LOAN_ONLY') {
+        const customerColls = allColls.filter(
+          (c) => c.customerId === id || (oldCustomer.accountNumber && c.accountNumber === oldCustomer.accountNumber)
+        );
+        const otherColls = allColls.filter(
+          (c) => c.customerId !== id && (!oldCustomer.accountNumber || c.accountNumber !== oldCustomer.accountNumber)
+        );
+        const targetInstallments = Number(customers[index].totalInstallments) || (customers[index].modality === 'W' ? 40 : 10);
+        const reconcileRes = reconcileCustomerInstallments(customers[index], customerColls, targetInstallments);
+
+        if (reconcileRes.hasChanges) {
           collsChanged = true;
-          return {
-            ...c,
-            customerId: id,
-            customerName: customers[index].name,
-            accountNumber: customers[index].accountNumber,
-            officeId: customers[index].officeId,
-            bishiType: customers[index].bishiType,
-          };
+          setStoredData(STORAGE_KEYS.COLLECTIONS, [...otherColls, ...reconcileRes.updatedCollections]);
+          if (reconcileRes.deletedIds.length > 0) {
+            for (const dId of reconcileRes.deletedIds) {
+              deleteFromFirestore('collections', dId).catch(() => {});
+              recordDeletion('collections', dId);
+            }
+          }
+        } else {
+          const updatedColls = allColls.map((c) => {
+            if (c.customerId === id || (oldCustomer.accountNumber && c.accountNumber === oldCustomer.accountNumber)) {
+              collsChanged = true;
+              return {
+                ...c,
+                customerId: id,
+                customerName: customers[index].name,
+                accountNumber: customers[index].accountNumber,
+                officeId: customers[index].officeId,
+                bishiType: customers[index].bishiType,
+              };
+            }
+            return c;
+          });
+          if (collsChanged) {
+            setStoredData(STORAGE_KEYS.COLLECTIONS, updatedColls);
+          }
         }
-        return c;
-      });
-      if (collsChanged) {
-        setStoredData(STORAGE_KEYS.COLLECTIONS, updatedColls);
       }
 
       const allLoans = getStoredData<Loan[]>(STORAGE_KEYS.LOANS, []);
@@ -1195,6 +1220,31 @@ export const StorageService = {
     }
 
     recordDeletion('collections', id);
+    invalidateStatsCache();
+    touchSyncTimestamp();
+  },
+
+  deleteCollectionEntriesBatch: async (ids: string[]): Promise<void> => {
+    if (!ids || ids.length === 0) return;
+    const idSet = new Set(ids);
+    const collections = StorageService.getCollections();
+    const toDelete = collections.filter((c) => idSet.has(c.id));
+    const filtered = collections.filter((c) => !idSet.has(c.id));
+    setStoredData(STORAGE_KEYS.COLLECTIONS, filtered);
+
+    for (const item of toDelete) {
+      deleteFromFirestore('collections', item.id, item).catch(() => {});
+      recordDeletion('collections', item.id);
+    }
+
+    const affectedCustIds = new Set(toDelete.map((c) => c.customerId).filter(Boolean));
+    affectedCustIds.forEach((cId) => {
+      const cust = StorageService.getCustomerById(cId);
+      if (cust) {
+        syncToFirestore('customers', cust.id, cust);
+      }
+    });
+
     invalidateStatsCache();
     touchSyncTimestamp();
   },

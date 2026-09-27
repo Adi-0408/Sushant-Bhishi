@@ -42,6 +42,11 @@ export const CollectionManager: React.FC = () => {
     const cust = customers.find((c) => c.id === item.customerId);
     if (!cust) return false;
 
+    const targetInstallments = Number(cust.totalInstallments) || (cust.modality === 'W' ? 40 : 10);
+    if (item.periodIndex > targetInstallments && item.status !== 'PAID' && (item.collectedAmount || 0) <= 0) {
+      return false;
+    }
+
     if (isSearching) {
       if (!matchesCustomerSearch(cust, searchTerm, item.accountNumber)) {
         return false;

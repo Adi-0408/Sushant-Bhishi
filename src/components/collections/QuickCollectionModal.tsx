@@ -53,7 +53,11 @@ export const QuickCollectionModal: React.FC<QuickCollectionModalProps> = ({
 
   // Helper to check customer payment status (only consider items due on or before today)
   const getCustomerStatusInfo = (custId: string) => {
-    const custColl = collections.filter((item) => item.customerId === custId);
+    const cust = customers.find((c) => c.id === custId);
+    const targetInstallments = Number(cust?.totalInstallments) || (cust?.modality === 'W' ? 40 : 10);
+    const custColl = collections
+      .filter((item) => item.customerId === custId && (item.periodIndex <= targetInstallments || item.status === 'PAID' || (item.collectedAmount || 0) > 0))
+      .sort((a, b) => a.periodIndex - b.periodIndex);
     const duePending = custColl.find((item) => item.status !== 'PAID' && item.dueDate <= todayStr);
     const nextUpcoming = custColl.find((item) => item.status !== 'PAID' && item.dueDate > todayStr);
     const isFullyPaid = !duePending;

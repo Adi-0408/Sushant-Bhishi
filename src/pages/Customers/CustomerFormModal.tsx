@@ -2,7 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Customer, BishiConfig, BishiType, Modality, OfficeId } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { StorageService } from '../../services/db';
-import { generateWeeklyEntries, generateMonthlyEntries, calculateElapsedMonths } from '../../utils/calculations';
+import {
+  generateWeeklyEntries,
+  generateMonthlyEntries,
+  calculateElapsedMonths,
+  reconcileCustomerInstallments,
+} from '../../utils/calculations';
 import { generateNextAccountNumber } from '../../utils/formatters';
 import { MarathiTextInput, convertTextToMarathi } from '../../components/common/MarathiTextInput';
 import { CustomDropdown } from '../../components/common/CustomDropdown';
@@ -427,49 +432,20 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             (c) => c.customerId === editingCustomer.id || (editingCustomer.accountNumber && c.accountNumber === editingCustomer.accountNumber)
           );
 
-          if (customerColls.length > 0) {
-            const startDate = new Date(bishiDate || Date.now());
-            const updatedCustomerColls = allColls.map((c) => {
-              if (c.customerId === editingCustomer.id || (editingCustomer.accountNumber && c.accountNumber === editingCustomer.accountNumber)) {
-                let newDueDate = c.dueDate;
-                if (dateChanged || modalityChanged) {
-                  const d = new Date(startDate);
-                  if (modality === 'W') {
-                    d.setDate(d.getDate() + (c.periodIndex - 1) * 7);
-                  } else {
-                    d.setMonth(d.getMonth() + (c.periodIndex - 1));
-                  }
-                  newDueDate = d.toISOString().split('T')[0];
-                }
+          const targetInstallments = Number(totalInstallments) || (modality === 'W' ? 40 : 10);
+          const reconciliation = reconcileCustomerInstallments(
+            updated,
+            customerColls,
+            targetInstallments
+          );
 
-                let newExpected = c.expectedAmount;
-                let newRemaining = c.remainingAmount;
-                let newStatus = c.status;
-                if (amountChanged && c.status !== 'PAID') {
-                  newExpected = Number(amount) || c.expectedAmount;
-                  newRemaining = Math.max(0, newExpected - (c.collectedAmount || 0));
-                  newStatus = (c.collectedAmount || 0) >= newExpected ? 'PAID' : ((c.collectedAmount || 0) > 0 ? 'PARTIAL' : 'PENDING');
-                }
-
-                return {
-                  ...c,
-                  customerName: finalName,
-                  accountNumber: accountNumber.trim(),
-                  officeId,
-                  bishiType,
-                  periodLabel: modality === 'W' ? `आठवडा ${c.periodIndex}` : `महिना ${c.periodIndex}`,
-                  dueDate: newDueDate,
-                  expectedAmount: newExpected,
-                  remainingAmount: newRemaining,
-                  status: newStatus,
-                };
-              }
-              return c;
-            });
-            const onlyEditedCustomerColls = updatedCustomerColls.filter(
-              (c) => c.customerId === editingCustomer.id || (editingCustomer.accountNumber && c.accountNumber === editingCustomer.accountNumber)
-            );
-            StorageService.saveCollectionsBatch(onlyEditedCustomerColls);
+          if (reconciliation.hasChanges || dateChanged || modalityChanged || amountChanged) {
+            if (reconciliation.updatedCollections.length > 0) {
+              StorageService.saveCollectionsBatch(reconciliation.updatedCollections);
+            }
+            if (reconciliation.deletedIds.length > 0) {
+              StorageService.deleteCollectionEntriesBatch(reconciliation.deletedIds);
+            }
           }
         }
 

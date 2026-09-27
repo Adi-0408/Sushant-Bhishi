@@ -133,8 +133,12 @@ export const ReportManager: React.FC = () => {
   let grandFinalReturn = 0;
 
   const allRows = (summarySearch.trim() ? customers : officeCustomers).map((cust) => {
+    const schemeCfg = bishiConfigs.find((cfg) => cfg.id === cust.bishiType);
+    const targetInstallments = Number(cust.totalInstallments) || Number(schemeCfg?.totalInstallments) || (cust.modality === 'W' ? 40 : 10);
+
     const custColls = collections.filter((c) => {
       if (c.customerId !== cust.id) return false;
+      if (c.periodIndex > targetInstallments && c.status !== 'PAID' && (c.collectedAmount || 0) <= 0) return false;
       if (timePeriodFilter === 'ALL') return true;
       const matchDueDate = isDateInPeriod(c.dueDate, timePeriodFilter);
       const matchPaymentDate = isDateInPeriod(c.paymentDate, timePeriodFilter);

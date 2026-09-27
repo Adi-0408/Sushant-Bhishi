@@ -122,7 +122,21 @@ export const calculateCustomerFinancials = (
   const todayStr = new Date().toISOString().split('T')[0];
   let currentDueRemaining = 0;
 
-  customerCollections.forEach((item) => {
+  const config = bishiConfigs?.find((cfg) => cfg.id === customer.bishiType);
+  const totalInstallmentsCount = customer.totalInstallments
+    ? customer.totalInstallments
+    : config?.totalInstallments
+    ? config.totalInstallments
+    : customer.modality === 'W'
+    ? 40
+    : 10;
+
+  // Protect against any stray un-reconciled collections beyond totalInstallmentsCount
+  const effectiveCollections = customerCollections.filter(
+    (item) => item.periodIndex <= totalInstallmentsCount || item.status === 'PAID' || (item.collectedAmount || 0) > 0
+  );
+
+  effectiveCollections.forEach((item) => {
     const expectedAmt = item.expectedAmount || 0;
     const collectedAmt = item.collectedAmount || 0;
     // Per-entry remaining (used only for currentDueRemaining check below)
@@ -171,15 +185,6 @@ export const calculateCustomerFinancials = (
   // A customer has paid their current due if there are NO remaining balances on or before today
   // AND they have at least 1 collected entry or expected bishi
   const isCurrentDuePaid = currentDueRemaining === 0 && (totalCollectedBishi > 0 || completedInstallmentsCount > 0);
-
-  const config = bishiConfigs?.find((cfg) => cfg.id === customer.bishiType);
-  const totalInstallmentsCount = customer.totalInstallments
-    ? customer.totalInstallments
-    : config?.totalInstallments
-    ? config.totalInstallments
-    : customer.modality === 'W'
-    ? 40
-    : 10;
 
   // Final interest / dividend payout on total collected bishi
   const isBishiCompleted =
@@ -404,3 +409,144 @@ export const calculateLoanDueInterest = (loan?: Loan | null, asOfDateStr?: strin
 
   return Math.max(0, totalAccrued - paidInterest);
 };
+
+export interface ReconcileResult {
+  updatedCollections: CollectionEntry[];
+  deletedIds: string[];
+  hasChanges: boolean;
+}
+
+/**
+ * Reconciles customer collection records against their intended target installment count.
+ * - Trims and deletes extra unpaid entries beyond target installments (e.g. weeks 51, 52 when weeks is 50).
+ * - Generates missing entries if count is less than target (e.g. weeks 41-50).
+ * - Synchronizes dueDate and expectedAmount if customer bishiDate or amount changed.
+ * - Never deletes entries that have already been paid (to preserve financial accuracy).
+ */
+export const reconcileCustomerInstallments = (
+  customer: Customer,
+  existingEntries: CollectionEntry[],
+  targetInstallmentsCount?: number
+): ReconcileResult => {
+  const targetCount =
+    Number(targetInstallmentsCount) ||
+    Number(customer.totalInstallments) ||
+    (customer.modality === 'W' ? 40 : 10);
+
+  const startDateStr = customer.bishiDate || new Date().toISOString().split('T')[0];
+  const startDate = parseLocalDate(startDateStr);
+  const modality = customer.modality;
+  const expAmount = Number(customer.amount) || 0;
+
+  // Deduplicate existing entries by periodIndex
+  const map = new Map<number, CollectionEntry>();
+  existingEntries.forEach((entry) => {
+    const existing = map.get(entry.periodIndex);
+    if (!existing || (entry.updatedAt && (!existing.updatedAt || entry.updatedAt >= existing.updatedAt))) {
+      map.set(entry.periodIndex, entry);
+    }
+  });
+
+  const updatedCollections: CollectionEntry[] = [];
+  const deletedIds: string[] = [];
+  let hasChanges = false;
+
+  // 1. Process entries from index 1 to targetCount
+  for (let i = 1; i <= targetCount; i++) {
+    const dueDateObj = new Date(startDate);
+    if (modality === 'W') {
+      dueDateObj.setDate(startDate.getDate() + (i - 1) * 7);
+    } else {
+      dueDateObj.setMonth(startDate.getMonth() + (i - 1));
+    }
+    const expectedDueDate = formatLocalDate(dueDateObj);
+    const expectedLabel = modality === 'W' ? `आठवडा ${i}` : `महिना ${i}`;
+
+    const existing = map.get(i);
+    if (existing) {
+      // Check if metadata or dates need refreshing
+      const isPaid = existing.status === 'PAID';
+      const needsUpdate =
+        existing.customerName !== customer.name ||
+        existing.accountNumber !== customer.accountNumber ||
+        existing.bishiType !== customer.bishiType ||
+        existing.officeId !== customer.officeId ||
+        existing.periodLabel !== expectedLabel ||
+        (!isPaid && (existing.expectedAmount !== expAmount || existing.dueDate !== expectedDueDate));
+
+      if (needsUpdate) {
+        hasChanges = true;
+        const newExpected = isPaid ? existing.expectedAmount : expAmount;
+        const newCollected = existing.collectedAmount || 0;
+        const newRemaining = isPaid ? 0 : Math.max(0, newExpected - newCollected);
+        const newStatus = isPaid
+          ? 'PAID'
+          : (newCollected >= newExpected && newExpected > 0 ? 'PAID' : (newCollected > 0 ? 'PARTIAL' : 'PENDING'));
+
+        updatedCollections.push({
+          ...existing,
+          customerName: customer.name,
+          accountNumber: customer.accountNumber,
+          officeId: customer.officeId,
+          bishiType: customer.bishiType,
+          periodLabel: expectedLabel,
+          dueDate: isPaid ? existing.dueDate : expectedDueDate,
+          expectedAmount: newExpected,
+          remainingAmount: newRemaining,
+          status: newStatus,
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        updatedCollections.push(existing);
+      }
+    } else {
+      // Missing installment up to targetCount -> Generate it
+      hasChanges = true;
+      updatedCollections.push({
+        id: `inst_bishi_${customer.id}_${i}`,
+        customerId: customer.id,
+        customerName: customer.name,
+        accountNumber: customer.accountNumber,
+        officeId: customer.officeId,
+        bishiType: customer.bishiType,
+        periodIndex: i,
+        periodLabel: expectedLabel,
+        dueDate: expectedDueDate,
+        expectedAmount: expAmount,
+        collectedAmount: 0,
+        remainingAmount: expAmount,
+        interestAmount: 0,
+        historicalInterestRate: customer.interestRate,
+        penaltyAmount: 0,
+        historicalPenaltyRate: customer.penaltyRate,
+        totalPaid: 0,
+        status: 'PENDING',
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  // 2. Entries beyond targetCount
+  map.forEach((entry, idx) => {
+    if (idx > targetCount) {
+      const isPaid = entry.status === 'PAID' || (entry.collectedAmount || 0) > 0;
+      if (!isPaid) {
+        // Unpaid extra entry -> Delete it!
+        deletedIds.push(entry.id);
+        hasChanges = true;
+      } else {
+        // If money was already paid on this extra installment, retain it to protect financials
+        updatedCollections.push(entry);
+      }
+    }
+  });
+
+  updatedCollections.sort((a, b) => a.periodIndex - b.periodIndex);
+
+  return {
+    updatedCollections,
+    deletedIds,
+    hasChanges,
+  };
+};
+

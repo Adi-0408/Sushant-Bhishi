@@ -46,8 +46,9 @@ export const calculateMemberLedger = (
   showAllPeriods: boolean = false
 ): MemberLedgerCalculation => {
   // 1. Get customer-specific collections and loan payments
+  const targetInstallments = Number(customer.totalInstallments) || (customer.modality === 'W' ? 40 : 10);
   const allCustomerCollections = collections
-    .filter((c) => c.customerId === customer.id)
+    .filter((c) => c.customerId === customer.id && (c.periodIndex <= targetInstallments || c.status === 'PAID' || (c.collectedAmount || 0) > 0))
     .sort((a, b) => a.periodIndex - b.periodIndex);
 
   const custLoanPayments = loanPayments
