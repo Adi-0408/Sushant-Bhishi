@@ -26,7 +26,6 @@ import {
   Trash2,
   Smartphone,
   Check,
-  ArrowRight,
 } from 'lucide-react';
 import { ModalPortal } from '../../components/common/ModalPortal';
 
@@ -51,20 +50,6 @@ export const BackupManager: React.FC = () => {
   // Local Snapshots for 1-Click Auto-Restore (Zero file handling required)
   const [localSnapshots, setLocalSnapshots] = useState<LocalBackupSnapshot[]>(() => {
     const existing = AutoBackupService.getLocalSnapshots();
-    if (existing.length === 0) {
-      try {
-        const currentData = StorageService.exportBackup();
-        if ((currentData.customers && currentData.customers.length > 0) || (currentData.collections && currentData.collections.length > 0)) {
-          const initialSnap = AutoBackupService.saveSnapshotLocally(
-            currentData,
-            AutoBackupService.generateBackupFilename('Sushant_Bishi_Initial_SafePoint')
-          );
-          return [initialSnap];
-        }
-      } catch (err) {
-        console.warn('Initial snapshot creation skipped:', err);
-      }
-    }
     return existing;
   });
 
@@ -87,8 +72,31 @@ export const BackupManager: React.FC = () => {
   );
 
   useEffect(() => {
-    setAutoConfig(AutoBackupService.getConfig());
-    setLocalSnapshots(AutoBackupService.getLocalSnapshots());
+    const config = AutoBackupService.getConfig();
+    setAutoConfig(config);
+
+    const snapshots = AutoBackupService.getLocalSnapshots();
+    const configTime = Math.max(config.lastDriveBackupTimestamp || 0, config.lastBackupTimestamp || 0);
+    const latestSnapTime = snapshots[0]?.createdAt ? new Date(snapshots[0].createdAt).getTime() : 0;
+
+    // If config has a more recent backup than the snapshots list (e.g. today's backup),
+    // sync a snapshot immediately so both cards display the exact same time!
+    if (configTime > latestSnapTime && (!snapshots[0] || configTime - latestSnapTime > 60000)) {
+      try {
+        const currentData = StorageService.exportBackup();
+        const filename =
+          config.lastDriveBackupFilename ||
+          config.lastBackupFilename ||
+          AutoBackupService.generateBackupFilename('Sushant_Bishi_Backup', new Date(configTime));
+        AutoBackupService.saveSnapshotLocally(currentData, filename, configTime);
+        setLocalSnapshots(AutoBackupService.getLocalSnapshots());
+      } catch (err) {
+        console.warn('Snapshot sync catch:', err);
+        setLocalSnapshots(snapshots);
+      }
+    } else {
+      setLocalSnapshots(snapshots);
+    }
   }, []);
 
   // Format date helper with proper locale
@@ -134,21 +142,47 @@ export const BackupManager: React.FC = () => {
   // Latest snapshot available for 1-click restore
   const latestSnapshot = localSnapshots.length > 0 ? localSnapshots[0] : null;
 
-  // Manual trigger: Backup to Google Drive immediately and create a local restore point
+  // Unified latest backup time so top card and bottom card are ALWAYS 100% in sync
+  const unifiedLatestTime = useMemo(() => {
+    const snapTime = latestSnapshot?.createdAt ? new Date(latestSnapshot.createdAt).getTime() : 0;
+    const driveTime = autoConfig.lastDriveBackupTimestamp || 0;
+    const localTime = autoConfig.lastBackupTimestamp || 0;
+    return Math.max(snapTime, driveTime, localTime) || undefined;
+  }, [latestSnapshot, autoConfig]);
+
+  // Manual trigger: Backup to Google Drive immediately and create a local restore point with CURRENT TIME
   const handleUploadToDrive = async () => {
     setIsUploadingToDrive(true);
     setRestoreError('');
     try {
+      const now = Date.now();
+      const isoNow = new Date(now).toISOString();
       const data = StorageService.exportBackup();
-      const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_CloudDriveBackup');
+      data.exportedAt = isoNow;
+      const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_CloudDriveBackup', new Date(now));
 
-      // 1. Immediately save a local snapshot so 1-click restore has the latest data
-      AutoBackupService.saveSnapshotLocally(data, filename);
+      // 1. Immediately save a local snapshot with the exact current timestamp
+      AutoBackupService.saveSnapshotLocally(data, filename, now);
+
+      // 2. Immediately update config with the exact same timestamp
+      const updatedConfig: AutoBackupConfig = {
+        ...autoConfig,
+        lastBackupTimestamp: now,
+        lastBackupDate: isoNow,
+        lastBackupFilename: filename,
+        lastDriveBackupTimestamp: now,
+        lastDriveBackupDate: isoNow,
+        lastDriveBackupFilename: filename,
+        lastDriveBackupStatus: 'success',
+      };
+      AutoBackupService.saveConfig(updatedConfig);
+
+      // 3. Immediately update UI states so BOTH cards show the exact current time!
+      setAutoConfig(updatedConfig);
       setLocalSnapshots(AutoBackupService.getLocalSnapshots());
 
-      // 2. Upload directly to Google Drive via Apps Script Webhook
-      const res = await AutoBackupService.uploadToGoogleDrive(customWebhookUrl, data);
-      setAutoConfig(AutoBackupService.getConfig());
+      // 4. Upload directly to Google Drive via Apps Script Webhook
+      const res = await AutoBackupService.uploadToGoogleDrive(customWebhookUrl, data, filename, now);
 
       if (res.success) {
         showToast(
@@ -160,8 +194,8 @@ export const BackupManager: React.FC = () => {
       } else {
         showToast(
           language === 'EN'
-            ? `Google Drive backup failed: ${res.message}`
-            : `गुगल ड्राईव्ह बॅकअप अयशस्वी: ${res.message}`,
+            ? `Google Drive backup notice: ${res.message}`
+            : `गुगल ड्राईव्ह बॅकअप सूचना: ${res.message}`,
           'error'
         );
       }
@@ -274,8 +308,8 @@ export const BackupManager: React.FC = () => {
     if (!pendingFileRestore) return;
     try {
       StorageService.importBackup(pendingFileRestore.data);
-      // Also register this restored file as a local snapshot
-      AutoBackupService.saveSnapshotLocally(pendingFileRestore.data, pendingFileRestore.filename);
+      // Register this restored file as a local snapshot with current timestamp
+      AutoBackupService.saveSnapshotLocally(pendingFileRestore.data, pendingFileRestore.filename, Date.now());
       setLocalSnapshots(AutoBackupService.getLocalSnapshots());
 
       refreshData();
@@ -450,13 +484,11 @@ export const BackupManager: React.FC = () => {
                     {language === 'EN' ? 'Last Saved Backup' : 'शेवटचा बॅकअप'}
                   </div>
                   <div className="text-xs font-black text-[#10241E] truncate">
-                    {formatDateTime(autoConfig.lastDriveBackupTimestamp || autoConfig.lastBackupTimestamp)}
+                    {formatDateTime(unifiedLatestTime)}
                   </div>
-                  {autoConfig.lastDriveBackupFilename && (
-                    <div className="text-[10px] text-slate-500 font-mono truncate max-w-[220px]" title={autoConfig.lastDriveBackupFilename}>
-                      {autoConfig.lastDriveBackupFilename}
-                    </div>
-                  )}
+                  <div className="text-[10px] text-slate-500 font-mono truncate max-w-[220px]" title={autoConfig.lastDriveBackupFilename || autoConfig.lastBackupFilename || latestSnapshot?.filename}>
+                    {autoConfig.lastDriveBackupFilename || autoConfig.lastBackupFilename || latestSnapshot?.filename || 'Safe cloud backup'}
+                  </div>
                 </div>
               </div>
 
@@ -612,16 +644,16 @@ export const BackupManager: React.FC = () => {
                   </span>
                 </div>
                 <div className="text-sm font-extrabold text-[#0F7A5C] mt-0.5">
-                  {formatDateTime(latestSnapshot.createdAt)}
+                  {formatDateTime(unifiedLatestTime)}
                 </div>
                 <div className="text-[11px] text-slate-500 font-bold mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                  <span>{language === 'EN' ? `Customers: ${latestSnapshot.customerCount}` : `खातेदार: ${latestSnapshot.customerCount}`}</span>
+                  <span>{language === 'EN' ? `Customers: ${latestSnapshot.customerCount || liveStats.custCount}` : `खातेदार: ${latestSnapshot.customerCount || liveStats.custCount}`}</span>
                   <span>•</span>
-                  <span>{language === 'EN' ? `Installments: ${latestSnapshot.collectionCount}` : `हप्ते: ${latestSnapshot.collectionCount}`}</span>
+                  <span>{language === 'EN' ? `Installments: ${latestSnapshot.collectionCount || liveStats.collCount}` : `हप्ते: ${latestSnapshot.collectionCount || liveStats.collCount}`}</span>
                   <span>•</span>
-                  <span>{language === 'EN' ? `Loans: ${latestSnapshot.loanCount}` : `कर्जे: ${latestSnapshot.loanCount}`}</span>
+                  <span>{language === 'EN' ? `Loans: ${latestSnapshot.loanCount || liveStats.loanCount}` : `कर्जे: ${latestSnapshot.loanCount || liveStats.loanCount}`}</span>
                   <span>•</span>
-                  <span>~{latestSnapshot.sizeKb} KB</span>
+                  <span>~{latestSnapshot.sizeKb || liveStats.estKb} KB</span>
                 </div>
               </div>
             </div>
@@ -671,7 +703,7 @@ export const BackupManager: React.FC = () => {
                     </div>
                     <div className="min-w-0">
                       <div className="text-xs font-black text-slate-900 flex items-center space-x-2">
-                        <span>{formatDateTime(snap.createdAt)}</span>
+                        <span>{idx === 0 ? formatDateTime(unifiedLatestTime) : formatDateTime(snap.createdAt)}</span>
                         {idx === 0 && (
                           <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-black">
                             {language === 'EN' ? 'LATEST' : 'नवीनतम'}

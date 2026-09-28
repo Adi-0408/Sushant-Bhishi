@@ -20,6 +20,70 @@ const DEFAULT_CONFIG: AutoBackupConfig = {
   lastDriveBackupTimestamp: 0,
 };
 
+// ── Native IndexedDB Helper for Large Snapshot Storage (> 500MB, no 5MB quota errors) ──
+const IDB_NAME = 'SB_Snapshots_DB';
+const IDB_STORE = 'snapshots';
+const IDB_VERSION = 1;
+
+let inMemorySnapshots: LocalBackupSnapshot[] | null = null;
+
+function openSnapshotsDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      return reject(new Error('IndexedDB unavailable'));
+    }
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveIDBSnapshot(snapshot: LocalBackupSnapshot): Promise<void> {
+  try {
+    const db = await openSnapshotsDB();
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    const store = tx.objectStore(IDB_STORE);
+    store.put(snapshot);
+  } catch (err) {
+    console.warn('IndexedDB save snapshot notice:', err);
+  }
+}
+
+async function deleteIDBSnapshot(id: string): Promise<void> {
+  try {
+    const db = await openSnapshotsDB();
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    const store = tx.objectStore(IDB_STORE);
+    store.delete(id);
+  } catch (err) {
+    console.warn('IndexedDB delete snapshot notice:', err);
+  }
+}
+
+async function loadSnapshotsFromIDB(): Promise<LocalBackupSnapshot[]> {
+  try {
+    const db = await openSnapshotsDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const store = tx.objectStore(IDB_STORE);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const list: LocalBackupSnapshot[] = req.result || [];
+        resolve(list);
+      };
+      req.onerror = () => resolve([]);
+    });
+  } catch {
+    return [];
+  }
+}
+
 export const AutoBackupService = {
   // Get Auto Backup Settings
   getConfig: (): AutoBackupConfig => {
@@ -28,7 +92,7 @@ export const AutoBackupService = {
       if (!raw) return DEFAULT_CONFIG;
       const parsed = JSON.parse(raw);
       const config: AutoBackupConfig = { ...DEFAULT_CONFIG, ...parsed };
-      // Migrate existing 2-day configurations to daily at 11:00 PM
+      // Migrate existing configurations
       if (config.backupHour === undefined) config.backupHour = 23;
       if (config.backupMinute === undefined) config.backupMinute = 0;
       if (parsed.intervalDays === 2 || !parsed.intervalDays) config.intervalDays = 1;
@@ -49,26 +113,37 @@ export const AutoBackupService = {
 
   // Get list of local snapshot restore points stored on this device
   getLocalSnapshots: (): LocalBackupSnapshot[] => {
+    if (inMemorySnapshots && inMemorySnapshots.length > 0) {
+      return inMemorySnapshots;
+    }
+
     try {
       const raw = localStorage.getItem(BACKUP_STORAGE_KEYS.SNAPSHOTS);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
+      const parsed = raw ? JSON.parse(raw) : [];
+      let list: LocalBackupSnapshot[] = Array.isArray(parsed) ? parsed : [];
 
-      // Filter out invalid/empty test snapshots (0 customers) if valid populated snapshots exist
-      const hasValidSnapshots = parsed.some((s) => (s.customerCount || 0) > 0);
-      const cleaned = hasValidSnapshots
-        ? parsed.filter((s) => (s.customerCount || 0) > 0)
-        : parsed;
+      // Filter out empty 0-customer test snapshots if valid data exists
+      const hasValid = list.some((s) => (s.customerCount || 0) > 0);
+      let cleaned = hasValid ? list.filter((s) => (s.customerCount || 0) > 0) : list;
 
-      // If we filtered out garbage test entries, persist the cleaned list back to storage
-      if (cleaned.length !== parsed.length) {
-        try {
-          localStorage.setItem(BACKUP_STORAGE_KEYS.SNAPSHOTS, JSON.stringify(cleaned));
-        } catch {
-          // Ignore write failure
-        }
-      }
+      cleaned.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      inMemorySnapshots = cleaned;
+
+      // Asynchronously sync with IndexedDB in background
+      loadSnapshotsFromIDB()
+        .then((idbList) => {
+          if (idbList && idbList.length > 0) {
+            const map = new Map<string, LocalBackupSnapshot>();
+            cleaned.forEach((s) => map.set(s.id, s));
+            idbList.forEach((s) => {
+              if ((s.customerCount || 0) > 0) map.set(s.id, s);
+            });
+            const merged = Array.from(map.values());
+            merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            inMemorySnapshots = merged.slice(0, 10);
+          }
+        })
+        .catch(() => {});
 
       return cleaned;
     } catch {
@@ -77,7 +152,11 @@ export const AutoBackupService = {
   },
 
   // Save snapshot to local device storage (retaining up to 10 latest restore points)
-  saveSnapshotLocally: (data: SystemBackupData, filename: string): LocalBackupSnapshot => {
+  saveSnapshotLocally: (
+    data: SystemBackupData,
+    filename: string,
+    exactTimestamp?: number
+  ): LocalBackupSnapshot => {
     const custCount = data.customers?.length || 0;
     const existing = AutoBackupService.getLocalSnapshots();
 
@@ -86,12 +165,14 @@ export const AutoBackupService = {
       return existing[0];
     }
 
+    const timeMs = exactTimestamp || Date.now();
+    const createdAt = new Date(timeMs).toISOString();
     const jsonStr = JSON.stringify(data);
-    const sizeKb = Math.round((jsonStr.length * 2) / 1024); // approx UTF-16 bytes to KB
+    const sizeKb = Math.round((jsonStr.length * 2) / 1024);
 
     const snapshot: LocalBackupSnapshot = {
-      id: 'snap_' + Date.now(),
-      createdAt: new Date().toISOString(),
+      id: 'snap_' + timeMs,
+      createdAt,
       filename,
       customerCount: custCount,
       collectionCount: data.collections?.length || 0,
@@ -101,18 +182,30 @@ export const AutoBackupService = {
       data,
     };
 
-    // Keep 10 most recent snapshots on device
-    const updated = [snapshot, ...existing.filter((s) => (s.customerCount || 0) > 0)].slice(0, 10);
+    // Filter out duplicates within 2 seconds
+    const filteredExisting = existing.filter(
+      (s) => (s.customerCount || 0) > 0 && Math.abs(new Date(s.createdAt).getTime() - timeMs) > 2000
+    );
 
+    const updated = [snapshot, ...filteredExisting].slice(0, 10);
+    updated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Update in-memory cache immediately
+    inMemorySnapshots = updated;
+
+    // Save to IndexedDB (asynchronous, virtually unlimited quota)
+    saveIDBSnapshot(snapshot);
+
+    // Save to localStorage safely (if quota is tight, keep only top 2 in localStorage)
     try {
       localStorage.setItem(BACKUP_STORAGE_KEYS.SNAPSHOTS, JSON.stringify(updated));
     } catch (err) {
-      console.warn('LocalStorage full, trimming older snapshots:', err);
+      console.warn('LocalStorage quota tight, trimming local storage cache:', err);
       try {
-        const minimal = [snapshot, ...existing.slice(0, 3)];
+        const minimal = updated.slice(0, 2);
         localStorage.setItem(BACKUP_STORAGE_KEYS.SNAPSHOTS, JSON.stringify(minimal));
       } catch (e2) {
-        console.error('Could not save local snapshot to localStorage:', e2);
+        console.warn('Could not save to localStorage, using IndexedDB & memory:', e2);
       }
     }
 
@@ -123,6 +216,8 @@ export const AutoBackupService = {
   deleteSnapshot: (id: string): void => {
     const existing = AutoBackupService.getLocalSnapshots();
     const filtered = existing.filter((s) => s.id !== id);
+    inMemorySnapshots = filtered;
+    deleteIDBSnapshot(id);
     try {
       localStorage.setItem(BACKUP_STORAGE_KEYS.SNAPSHOTS, JSON.stringify(filtered));
     } catch (err) {
@@ -153,8 +248,8 @@ export const AutoBackupService = {
   },
 
   // Formats human-readable filename with current date and time
-  generateBackupFilename: (prefix: string = 'Sushant_Bishi_AutoBackup'): string => {
-    const now = new Date();
+  generateBackupFilename: (prefix: string = 'Sushant_Bishi_AutoBackup', exactDate?: Date): string => {
+    const now = exactDate || new Date();
     const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
@@ -165,20 +260,24 @@ export const AutoBackupService = {
 
   // Run a manual or instant backup
   performBackupNow: (): { snapshot: LocalBackupSnapshot; filename: string } => {
+    const now = Date.now();
     const data = StorageService.exportBackup();
-    const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_Backup');
+    const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_Backup', new Date(now));
 
     // 1. Save snapshot to local device storage
-    const snapshot = AutoBackupService.saveSnapshotLocally(data, filename);
+    const snapshot = AutoBackupService.saveSnapshotLocally(data, filename, now);
 
     // 2. Download directly to device filesystem
     AutoBackupService.downloadBackupFile(data, filename);
 
     // 3. Update auto-backup timestamp
     const config = AutoBackupService.getConfig();
-    config.lastBackupTimestamp = Date.now();
-    config.lastBackupDate = new Date().toISOString();
+    config.lastBackupTimestamp = now;
+    config.lastBackupDate = new Date(now).toISOString();
     config.lastBackupFilename = filename;
+    config.lastDriveBackupTimestamp = now;
+    config.lastDriveBackupDate = new Date(now).toISOString();
+    config.lastDriveBackupFilename = filename;
     AutoBackupService.saveConfig(config);
 
     return { snapshot, filename };
@@ -187,7 +286,9 @@ export const AutoBackupService = {
   // Upload complete system backup directly to Google Drive via Google Apps Script (Zero Firestore Reads)
   uploadToGoogleDrive: async (
     customUrl?: string,
-    providedData?: SystemBackupData
+    providedData?: SystemBackupData,
+    customFilename?: string,
+    exactTimestamp?: number
   ): Promise<{ success: boolean; message: string; filename?: string; fileId?: string }> => {
     const config = AutoBackupService.getConfig();
     const webhookUrl = (customUrl || config.driveWebhookUrl || DEFAULT_DRIVE_WEBHOOK_URL).trim();
@@ -197,8 +298,9 @@ export const AutoBackupService = {
     }
 
     try {
+      const now = exactTimestamp || Date.now();
       const data = providedData || StorageService.exportBackup();
-      const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_CloudDriveBackup');
+      const filename = customFilename || AutoBackupService.generateBackupFilename('Sushant_Bishi_CloudDriveBackup', new Date(now));
 
       const response = await fetch(webhookUrl, {
         method: 'POST',
@@ -218,10 +320,12 @@ export const AutoBackupService = {
       const result = await response.json();
 
       if (result.status === 'success' || result.success) {
-        const now = Date.now();
         config.lastDriveBackupTimestamp = now;
-        config.lastDriveBackupDate = new Date().toISOString();
+        config.lastDriveBackupDate = new Date(now).toISOString();
         config.lastDriveBackupFilename = result.fileName || filename;
+        config.lastBackupTimestamp = now;
+        config.lastBackupDate = new Date(now).toISOString();
+        config.lastBackupFilename = result.fileName || filename;
         config.lastDriveBackupStatus = 'success';
         if (customUrl) config.driveWebhookUrl = customUrl;
         AutoBackupService.saveConfig(config);
@@ -292,21 +396,24 @@ export const AutoBackupService = {
           return false;
         }
 
-        const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_AutoBackup');
+        const now = Date.now();
+        const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_AutoBackup', new Date(now));
 
         // 1. Store snapshot in local memory for instant 1-click restore without needing files
-        const snapshot = AutoBackupService.saveSnapshotLocally(data, filename);
+        const snapshot = AutoBackupService.saveSnapshotLocally(data, filename, now);
 
         // 2. Update configuration timestamp
-        const now = Date.now();
         config.lastBackupTimestamp = now;
-        config.lastBackupDate = new Date().toISOString();
+        config.lastBackupDate = new Date(now).toISOString();
         config.lastBackupFilename = filename;
+        config.lastDriveBackupTimestamp = now;
+        config.lastDriveBackupDate = new Date(now).toISOString();
+        config.lastDriveBackupFilename = filename;
         AutoBackupService.saveConfig(config);
 
         // 3. Automatically push directly to Google Drive in background (0 Firestore reads, zero effort for client)
         if (config.driveBackupEnabled !== false) {
-          await AutoBackupService.uploadToGoogleDrive(config.driveWebhookUrl, data).catch((err) => {
+          await AutoBackupService.uploadToGoogleDrive(config.driveWebhookUrl, data, filename, now).catch((err) => {
             console.warn('Silent auto drive backup background upload notice:', err);
           });
         }
