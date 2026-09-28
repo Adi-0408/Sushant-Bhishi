@@ -222,15 +222,25 @@ export const AutoBackupService = {
     }
   },
 
-  // Helper to determine if scheduled daily backup at 11:00 PM is due
+  // Helper to determine if scheduled backup is due (runs at least once every 12 hours or at 11 PM)
   isBackupDue: (config: AutoBackupConfig): boolean => {
-    if (!config.enabled) return false;
+    if (!config.enabled && config.driveBackupEnabled === false) return false;
 
     const now = new Date();
+    const lastBackup = Math.max(config.lastBackupTimestamp || 0, config.lastDriveBackupTimestamp || 0);
+
+    // If never backed up, run immediately
+    if (lastBackup === 0) return true;
+
+    // If more than 12 hours have passed since last backup, it is due
+    const twelveHoursMs = 12 * 60 * 60 * 1000;
+    if (now.getTime() - lastBackup > twelveHoursMs) {
+      return true;
+    }
+
     const targetHour = config.backupHour ?? 23;
     const targetMinute = config.backupMinute ?? 0;
 
-    // Most recent scheduled slot (today at 11 PM or yesterday at 11 PM)
     const mostRecentSlot = new Date(now);
     mostRecentSlot.setHours(targetHour, targetMinute, 0, 0);
 
@@ -238,48 +248,42 @@ export const AutoBackupService = {
       mostRecentSlot.setDate(mostRecentSlot.getDate() - 1);
     }
 
-    const lastBackup = config.lastBackupTimestamp || 0;
     return lastBackup < mostRecentSlot.getTime();
   },
 
-  // Checks and runs auto-backup if daily 11:00 PM slot is due
-  checkAndRunAutoBackup: (
+  // Checks and runs auto-backup silently to Google Drive and local snapshot (no annoying download popups)
+  checkAndRunAutoBackup: async (
     onSuccess?: (snapshot: LocalBackupSnapshot, filename: string) => void
-  ): boolean => {
+  ): Promise<boolean> => {
     const config = AutoBackupService.getConfig();
-    if (!config.enabled) return false;
+    if (!config.enabled && config.driveBackupEnabled === false) return false;
 
     if (AutoBackupService.isBackupDue(config)) {
       try {
         const data = StorageService.exportBackup();
-        // Only run if there is some data (e.g. customers or bishi)
         const hasData = (data.customers && data.customers.length > 0) || (data.collections && data.collections.length > 0);
         if (!hasData && config.lastBackupTimestamp === 0) {
-          // New installation with no data yet, record timestamp so we don't dump empty backups
           config.lastBackupTimestamp = Date.now();
           AutoBackupService.saveConfig(config);
           return false;
         }
 
-        const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_DailyBackup_11PM');
+        const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_AutoBackup');
 
-        // 1. Store snapshot in local device storage
+        // 1. Store snapshot in local memory for instant 1-click restore without needing files
         const snapshot = AutoBackupService.saveSnapshotLocally(data, filename);
 
-        // 2. Automatically save file to device filesystem (Downloads)
-        AutoBackupService.downloadBackupFile(data, filename);
-
-        // 3. Update configuration
+        // 2. Update configuration timestamp
         const now = Date.now();
         config.lastBackupTimestamp = now;
         config.lastBackupDate = new Date().toISOString();
         config.lastBackupFilename = filename;
         AutoBackupService.saveConfig(config);
 
-        // 4. Automatically push to Google Drive in background if enabled (0 reads)
+        // 3. Automatically push directly to Google Drive in background (0 Firestore reads, zero effort for client)
         if (config.driveBackupEnabled !== false) {
-          AutoBackupService.uploadToGoogleDrive(config.driveWebhookUrl, data).catch((err) => {
-            console.warn('Auto drive backup background upload notice:', err);
+          await AutoBackupService.uploadToGoogleDrive(config.driveWebhookUrl, data).catch((err) => {
+            console.warn('Silent auto drive backup background upload notice:', err);
           });
         }
 
@@ -288,7 +292,7 @@ export const AutoBackupService = {
         }
         return true;
       } catch (err) {
-        console.error('Daily 11 PM auto backup execution failed:', err);
+        console.error('Silent auto backup execution failed:', err);
         return false;
       }
     }
