@@ -53,7 +53,24 @@ export const AutoBackupService = {
       const raw = localStorage.getItem(BACKUP_STORAGE_KEYS.SNAPSHOTS);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) return [];
+
+      // Filter out invalid/empty test snapshots (0 customers) if valid populated snapshots exist
+      const hasValidSnapshots = parsed.some((s) => (s.customerCount || 0) > 0);
+      const cleaned = hasValidSnapshots
+        ? parsed.filter((s) => (s.customerCount || 0) > 0)
+        : parsed;
+
+      // If we filtered out garbage test entries, persist the cleaned list back to storage
+      if (cleaned.length !== parsed.length) {
+        try {
+          localStorage.setItem(BACKUP_STORAGE_KEYS.SNAPSHOTS, JSON.stringify(cleaned));
+        } catch {
+          // Ignore write failure
+        }
+      }
+
+      return cleaned;
     } catch {
       return [];
     }
@@ -61,6 +78,14 @@ export const AutoBackupService = {
 
   // Save snapshot to local device storage (retaining up to 10 latest restore points)
   saveSnapshotLocally: (data: SystemBackupData, filename: string): LocalBackupSnapshot => {
+    const custCount = data.customers?.length || 0;
+    const existing = AutoBackupService.getLocalSnapshots();
+
+    // Prevent overwriting or adding empty snapshots if we already have valid data with customers
+    if (custCount === 0 && existing.some((s) => (s.customerCount || 0) > 0)) {
+      return existing[0];
+    }
+
     const jsonStr = JSON.stringify(data);
     const sizeKb = Math.round((jsonStr.length * 2) / 1024); // approx UTF-16 bytes to KB
 
@@ -68,7 +93,7 @@ export const AutoBackupService = {
       id: 'snap_' + Date.now(),
       createdAt: new Date().toISOString(),
       filename,
-      customerCount: data.customers?.length || 0,
+      customerCount: custCount,
       collectionCount: data.collections?.length || 0,
       loanCount: data.loans?.length || 0,
       loanPaymentCount: data.loanPayments?.length || 0,
@@ -76,9 +101,8 @@ export const AutoBackupService = {
       data,
     };
 
-    const existing = AutoBackupService.getLocalSnapshots();
     // Keep 10 most recent snapshots on device
-    const updated = [snapshot, ...existing].slice(0, 10);
+    const updated = [snapshot, ...existing.filter((s) => (s.customerCount || 0) > 0)].slice(0, 10);
 
     try {
       localStorage.setItem(BACKUP_STORAGE_KEYS.SNAPSHOTS, JSON.stringify(updated));
