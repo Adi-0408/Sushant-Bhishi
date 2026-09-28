@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, formatDateMarathi, getBishiNameMarathi, matchesCustomerSearch } from '../../utils/formatters';
 import { StorageService } from '../../services/db';
-import { Landmark, Search, Plus, Wallet, ArrowUpRight, X, UserPlus, Edit3, Save, Calendar, Clock, RefreshCw } from 'lucide-react';
+import { Landmark, Search, Plus, Wallet, ArrowUpRight, X, UserPlus, Edit3, Save, Calendar, Clock, RefreshCw, Calculator, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 import { CustomDropdown } from '../../components/common/CustomDropdown';
 import { Link } from 'react-router-dom';
@@ -24,10 +24,12 @@ export const LoanManager: React.FC = () => {
   const [interestRateInput, setInterestRateInput] = useState<number | ''>(12);
   const [issueDateInput, setIssueDateInput] = useState(new Date().toISOString().split('T')[0]);
   const [purposeInput, setPurposeInput] = useState('');
-  // Old loan options
-  const [isOldLoan, setIsOldLoan] = useState(false);
-  const [oldPaidPrincipal, setOldPaidPrincipal] = useState<number | ''>('');
-  const [oldPaidInterest, setOldPaidInterest] = useState<number | ''>('');
+  // Previous loan options & fields
+  const [hasPreviousLoan, setHasPreviousLoan] = useState(false);
+  const [previousLoanAmount, setPreviousLoanAmount] = useState<number | ''>('');
+  const [previousSubmittedAmount, setPreviousSubmittedAmount] = useState<number | ''>('');
+  const [previousInterestAmount, setPreviousInterestAmount] = useState<number | ''>('');
+  const [isManualPrevInterest, setIsManualPrevInterest] = useState(false);
 
   // Edit Loan Modal state
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
@@ -101,6 +103,83 @@ export const LoanManager: React.FC = () => {
     return true;
   });
 
+  const resetAddLoanModal = () => {
+    setIsAddLoanModalOpen(false);
+    setSelectedCustomerId('');
+    setPrincipalInput('');
+    setInterestRateInput(12);
+    setIssueDateInput(new Date().toISOString().split('T')[0]);
+    setPurposeInput('');
+    setHasPreviousLoan(false);
+    setPreviousLoanAmount('');
+    setPreviousSubmittedAmount('');
+    setPreviousInterestAmount('');
+    setIsManualPrevInterest(false);
+  };
+
+  const handleSelectCustomer = (customerId: string) => {
+    setSelectedCustomerId(customerId);
+    const cust = customers.find((c) => c.id === customerId);
+    const existingLoan = loans.find(
+      (l) =>
+        (l.customerId === customerId || (cust && l.accountNumber === cust.accountNumber)) &&
+        (l.status === 'ACTIVE' || Number(l.remainingAmount) > 0)
+    );
+
+    if (existingLoan) {
+      setHasPreviousLoan(true);
+      setPreviousLoanAmount(existingLoan.principalAmount);
+      setPreviousSubmittedAmount(existingLoan.paidAmount || 0);
+      const rate = existingLoan.interestRate || Number(interestRateInput) || 12;
+      setInterestRateInput(rate);
+
+      const prevRem = Math.max(
+        0,
+        existingLoan.principalAmount - (existingLoan.paidAmount || 0) - (existingLoan.discountAmount || 0)
+      );
+      const months = calculateElapsedMonths(existingLoan.issueDate);
+      const monthlyInt = Math.round((prevRem * rate) / 100);
+      const accrued = Math.max(monthlyInt, months * monthlyInt);
+      const netInterest = Math.max(0, accrued - (existingLoan.totalInterestPaid || 0));
+      setPreviousInterestAmount(netInterest > 0 ? netInterest : monthlyInt);
+      setIsManualPrevInterest(false);
+    } else if (cust?.hasLoan) {
+      setHasPreviousLoan(true);
+      setPreviousLoanAmount('');
+      setPreviousSubmittedAmount('');
+      setPreviousInterestAmount('');
+      setIsManualPrevInterest(false);
+    } else {
+      setHasPreviousLoan(false);
+      setPreviousLoanAmount('');
+      setPreviousSubmittedAmount('');
+      setPreviousInterestAmount('');
+      setIsManualPrevInterest(false);
+    }
+  };
+
+  const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
+  const existingCustomerLoan = loans.find(
+    (l) =>
+      (l.customerId === selectedCustomerId || (selectedCustomer && l.accountNumber === selectedCustomer.accountNumber)) &&
+      (l.status === 'ACTIVE' || Number(l.remainingAmount) > 0)
+  );
+
+  const prevLoanNum = hasPreviousLoan ? (Number(previousLoanAmount) || 0) : 0;
+  const prevSubmittedNum = hasPreviousLoan ? (Number(previousSubmittedAmount) || 0) : 0;
+  const prevRemainingPrin = Math.max(0, prevLoanNum - prevSubmittedNum);
+  const currentRate = Number(interestRateInput) || 12;
+  const prevMonthlyInterest = Math.round((prevRemainingPrin * currentRate) / 100);
+  const prevInterestNum = hasPreviousLoan ? (Number(previousInterestAmount) || 0) : 0;
+
+  const newPrincipalNum = Number(principalInput) || 0;
+  const totalEffectivePrincipal = prevRemainingPrin + newPrincipalNum;
+  const newElapsedMonths = calculateElapsedMonths(issueDateInput);
+  const newMonthlyInterest = Math.round((newPrincipalNum * currentRate) / 100);
+  const newAccruedInterest = Math.max(newMonthlyInterest, newElapsedMonths * newMonthlyInterest);
+  const totalCombinedInterest = prevInterestNum + (newPrincipalNum > 0 ? newAccruedInterest : 0);
+  const totalPayableAmount = totalEffectivePrincipal + totalCombinedInterest;
+
   const handleCreateLoan = (e: React.FormEvent) => {
     e.preventDefault();
     const cust = customers.find((c) => c.id === selectedCustomerId);
@@ -108,44 +187,60 @@ export const LoanManager: React.FC = () => {
       showToast(language === 'EN' ? 'Please select a customer.' : 'कृपया खातेदार निवडा.', 'error');
       return;
     }
-    const principal = Number(principalInput);
-    if (!principal || principal <= 0) {
+
+    const effectivePrincipal = hasPreviousLoan
+      ? Math.max(0, prevLoanNum - prevSubmittedNum) + newPrincipalNum
+      : newPrincipalNum;
+
+    if (effectivePrincipal <= 0 && (!hasPreviousLoan || prevLoanNum <= 0)) {
       showToast(language === 'EN' ? 'Please enter a valid loan amount.' : 'कृपया योग्य कर्जाची रक्कम भरा.', 'error');
       return;
     }
-    const rate = Number(interestRateInput) || 2;
-    const months = calculateElapsedMonths(issueDateInput);
-    const monthlyInterest = Math.round((principal * rate) / 100);
-    const totalInterest = Math.max(monthlyInterest, months * monthlyInterest);
-    const totalPayable = principal + totalInterest;
 
-    const paidPrin = isOldLoan ? (Number(oldPaidPrincipal) || 0) : 0;
-    const paidInt = isOldLoan ? (Number(oldPaidInterest) || 0) : 0;
-    const remPrin = Math.max(0, principal - paidPrin);
-    const remInt = Math.max(0, totalInterest - paidInt);
-    const remainingAmount = remPrin + remInt;
+    const rate = Number(interestRateInput) || 12;
+    const months = calculateElapsedMonths(issueDateInput);
+    const newMonthlyInterestVal = Math.round((newPrincipalNum * rate) / 100);
+    const newTotalInterestVal = Math.max(newMonthlyInterestVal, months * newMonthlyInterestVal);
+
+    const totalOriginalPrincipal = prevLoanNum > 0 ? (prevLoanNum + newPrincipalNum) : newPrincipalNum;
+    const totalPaidPrincipal = prevSubmittedNum;
+    const remainingPrincipal = Math.max(0, totalOriginalPrincipal - totalPaidPrincipal);
+
+    const totalInterest = prevInterestNum + (newPrincipalNum > 0 ? newTotalInterestVal : 0);
+    const totalPayable = totalOriginalPrincipal + totalInterest;
+    const remainingAmount = remainingPrincipal + (newPrincipalNum > 0 ? newTotalInterestVal : 0) + prevInterestNum;
     const isCompleted = remainingAmount <= 0;
 
-    const savedLoan = StorageService.saveLoan({
+    const existingLoan = loans.find(
+      (l) =>
+        (l.customerId === cust.id || (cust.accountNumber && l.accountNumber === cust.accountNumber)) &&
+        (l.status === 'ACTIVE' || Number(l.remainingAmount) > 0)
+    );
+
+    const loanToSave: any = {
+      id: existingLoan ? existingLoan.id : undefined,
       customerId: cust.id,
       customerName: cust.name,
       customerMobile: cust.mobile,
       accountNumber: cust.accountNumber,
       officeId: cust.officeId,
-      principalAmount: principal,
+      principalAmount: totalOriginalPrincipal,
       issueDate: issueDateInput,
       interestRate: rate,
       totalInterest,
-      totalInterestPaid: paidInt,
+      totalInterestPaid: existingLoan ? (existingLoan.totalInterestPaid || 0) : 0,
       totalPayable,
-      paidAmount: paidPrin,
+      paidAmount: totalPaidPrincipal,
       remainingAmount,
-      penaltyAmount: 0,
+      penaltyAmount: existingLoan ? (existingLoan.penaltyAmount || 0) : 0,
+      discountAmount: existingLoan ? (existingLoan.discountAmount || 0) : 0,
       status: isCompleted ? 'COMPLETED' : 'ACTIVE',
-      purposeNote: purposeInput.trim() || undefined,
-    });
+      purposeNote: purposeInput.trim() || existingLoan?.purposeNote || undefined,
+    };
 
-    if (paidPrin > 0 || paidInt > 0) {
+    const savedLoan = StorageService.saveLoan(loanToSave);
+
+    if (!existingLoan && (totalPaidPrincipal > 0 || prevInterestNum > 0)) {
       StorageService.addLoanPayment({
         loanId: savedLoan.id,
         customerId: cust.id,
@@ -154,27 +249,21 @@ export const LoanManager: React.FC = () => {
         officeId: cust.officeId,
         customerMobile: cust.mobile,
         paymentDate: issueDateInput,
-        paidAmount: paidPrin,
-        interestPaid: paidInt,
+        paidAmount: totalPaidPrincipal,
+        interestPaid: 0,
         penaltyPaid: 0,
         discountAmount: 0,
         remainingLoan: remainingAmount,
         paymentMode: 'CASH',
-        note: language === 'EN' ? 'Historical loan initial payment record' : 'जुनी जमा नोंद (आधीच भरलेली रक्कम)',
+        note: language === 'EN' ? 'Historical loan initial payment record' : 'मागील जमा नोंद (आधीच भरलेली रक्कम)',
       });
     }
 
     StorageService.updateCustomer(cust.id, { hasLoan: true });
 
-    showToast(language === 'EN' ? 'Loan created successfully.' : 'कर्ज नोंद यशस्वीपणे जोडली गेली.', 'success');
+    showToast(language === 'EN' ? 'Loan saved successfully.' : 'कर्ज नोंद यशस्वीपणे जतन झाली.', 'success');
     refreshData();
-    setIsAddLoanModalOpen(false);
-    setSelectedCustomerId('');
-    setPrincipalInput('');
-    setPurposeInput('');
-    setIsOldLoan(false);
-    setOldPaidPrincipal('');
-    setOldPaidInterest('');
+    resetAddLoanModal();
   };
 
   return (
@@ -470,12 +559,7 @@ export const LoanManager: React.FC = () => {
                 <span>{t.btnAddLoan}</span>
               </h3>
               <button
-                onClick={() => {
-                  setIsAddLoanModalOpen(false);
-                  setIsOldLoan(false);
-                  setOldPaidPrincipal('');
-                  setOldPaidInterest('');
-                }}
+                onClick={resetAddLoanModal}
                 className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 min-w-[40px] min-h-[40px] flex items-center justify-center cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -484,6 +568,7 @@ export const LoanManager: React.FC = () => {
 
             <form onSubmit={handleCreateLoan} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+                {/* Customer Selection */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-bold text-slate-700">
@@ -500,56 +585,236 @@ export const LoanManager: React.FC = () => {
                   </div>
                   <CustomDropdown<string>
                     value={selectedCustomerId}
-                    onChange={(val) => setSelectedCustomerId(val)}
+                    onChange={(val) => handleSelectCustomer(val)}
                     options={customers
                       .filter((c) => activeOffice === 'ALL' || c.officeId === activeOffice)
-                      .map((c) => ({
-                        value: c.id,
-                        label: `#${c.accountNumber} - ${c.name}`,
-                        subLabel: c.mobile,
-                        badge: c.bishiType === 'LOAN_ONLY' ? (language === 'EN' ? 'Loan Only' : 'फक्त कर्जदार') : undefined,
-                      }))}
+                      .map((c) => {
+                        const hasActiveLoan = loans.some(
+                          (l) => (l.customerId === c.id || (c.accountNumber && l.accountNumber === c.accountNumber)) && (l.status === 'ACTIVE' || Number(l.remainingAmount) > 0)
+                        );
+                        return {
+                          value: c.id,
+                          label: `#${c.accountNumber} - ${c.name}`,
+                          subLabel: c.mobile,
+                          badge: hasActiveLoan
+                            ? (language === 'EN' ? 'Active Loan' : 'चालू कर्जदार')
+                            : (c.bishiType === 'LOAN_ONLY' ? (language === 'EN' ? 'Loan Only' : 'फक्त कर्जदार') : undefined),
+                        };
+                      })}
                     placeholder={language === 'EN' ? '-- Select Customer --' : '-- खातेदार निवडा --'}
                     size="lg"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {language === 'EN' ? 'Loan Purpose / Item Description' : 'कर्जाचे कारण / वस्तूची माहिती (Add Item/Note)'}
-                  </label>
-                  <MarathiTextInput
-                    value={purposeInput}
-                    onChange={(val) => setPurposeInput(val)}
-                    placeholder={language === 'EN' ? 'e.g. Vehicle, Gold, Personal' : 'उदा. गाडी, सोने, वैयक्तिक...'}
-                    className="w-full px-4 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-amber-500"
-                  />
+                {/* Active Loan Alert if customer already has a loan */}
+                {selectedCustomer && existingCustomerLoan && (
+                  <div className="p-3 bg-amber-50 border border-amber-300 rounded-2xl text-xs space-y-1 shadow-2xs">
+                    <div className="flex items-center justify-between font-black text-amber-950">
+                      <span className="flex items-center space-x-1.5">
+                        <AlertCircle className="w-4 h-4 text-amber-700 shrink-0" />
+                        <span>{language === 'EN' ? 'Active Loan Found for this Customer' : 'खातेदाराचे चालू कर्ज अस्तित्वात आहे'}</span>
+                      </span>
+                      <span className="text-[10px] bg-amber-200 px-2 py-0.5 rounded-md text-amber-900 font-extrabold border border-amber-300">
+                        {language === 'EN' ? 'Auto-filled' : 'मागील माहिती भरली आहे'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 text-[11px] text-amber-900 pt-1 border-t border-amber-200/80">
+                      <div>{language === 'EN' ? 'Original:' : 'मागील मुद्दल:'} <strong className="font-black text-slate-900">₹{existingCustomerLoan.principalAmount}</strong></div>
+                      <div>{language === 'EN' ? 'Paid:' : 'भरलेली मुद्दल:'} <strong className="font-black text-emerald-800">₹{existingCustomerLoan.paidAmount || 0}</strong></div>
+                      <div>{language === 'EN' ? 'Outstanding:' : 'चालू बाकी:'} <strong className="font-black text-rose-800">₹{existingCustomerLoan.remainingAmount}</strong></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Previous Loan Toggle / Container */}
+                <div className="bg-amber-50/70 p-3.5 rounded-2xl border border-amber-200/90 space-y-3">
+                  <div
+                    className="flex items-center justify-between cursor-pointer select-none"
+                    onClick={() => setHasPreviousLoan(!hasPreviousLoan)}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="hasPreviousLoanCheckbox"
+                        checked={hasPreviousLoan}
+                        onChange={(e) => setHasPreviousLoan(e.target.checked)}
+                        className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500 cursor-pointer"
+                      />
+                      <label htmlFor="hasPreviousLoanCheckbox" className="text-xs font-black text-amber-950 cursor-pointer">
+                        {language === 'EN' ? 'This Customer Has a Previous Loan' : 'खातेदाराचे मागील/जुने कर्ज आहे (Previous Loan Record)'}
+                      </label>
+                    </div>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${hasPreviousLoan ? 'bg-amber-200 text-amber-900 border border-amber-300' : 'bg-slate-200/80 text-slate-600'}`}>
+                      {hasPreviousLoan ? (language === 'EN' ? 'PREVIOUS LOAN' : 'मागील कर्ज लागू') : (language === 'EN' ? 'FRESH LOAN' : 'नवीन कर्ज')}
+                    </span>
+                  </div>
+
+                  {hasPreviousLoan && (
+                    <div className="pt-2.5 border-t border-amber-200/80 space-y-3 animate-in fade-in duration-150">
+                      <p className="text-[11px] text-amber-900 font-medium">
+                        {language === 'EN'
+                          ? 'Enter the previous loan amount, previous submitted amount, and interest applying on the previous loan balance.'
+                          : 'मागील कर्ज मुद्दल, मागील जमा केलेली रक्कम व मागील बाकी कर्जावर लागू होणारे व्याज येथे नोंदवा.'}
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {/* 1. Previous Loan (मागील कर्ज मुद्दल) */}
+                        <div>
+                          <label className="block text-[11px] font-extrabold text-amber-950 mb-1">
+                            {language === 'EN' ? 'Previous Loan Amount (₹)' : 'मागील कर्ज (मुद्दल रक्कम) (₹)'}
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={previousLoanAmount}
+                            onChange={(e) => {
+                              const val = e.target.value ? Number(e.target.value) : '';
+                              setPreviousLoanAmount(val);
+                              if (!isManualPrevInterest) {
+                                const rem = Math.max(0, (Number(val) || 0) - (Number(previousSubmittedAmount) || 0));
+                                const rate = Number(interestRateInput) || 12;
+                                setPreviousInterestAmount(rem > 0 ? Math.round((rem * rate) / 100) : 0);
+                              }
+                            }}
+                            placeholder={language === 'EN' ? 'e.g. 50000' : 'उदा. 50000'}
+                            className="w-full px-3 py-2 rounded-xl border border-amber-300 text-xs font-bold text-amber-950 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          />
+                        </div>
+
+                        {/* 2. Previous Submitted (मागील जमा रक्कम) */}
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="block text-[11px] font-extrabold text-amber-950">
+                              {language === 'EN' ? 'Previous Submitted Amount (₹)' : 'मागील जमा रक्कम (₹)'}
+                            </label>
+                            {Number(previousLoanAmount) > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const fullVal = Number(previousLoanAmount) || 0;
+                                  setPreviousSubmittedAmount(fullVal);
+                                  if (!isManualPrevInterest) {
+                                    setPreviousInterestAmount(0);
+                                  }
+                                }}
+                                className="text-[10px] text-amber-800 font-bold underline cursor-pointer"
+                              >
+                                {language === 'EN' ? 'Full Paid' : 'पूर्ण जमा'}
+                              </button>
+                            )}
+                          </div>
+                          <input
+                            type="number"
+                            min={0}
+                            max={Number(previousLoanAmount) || undefined}
+                            value={previousSubmittedAmount}
+                            onChange={(e) => {
+                              const val = e.target.value ? Number(e.target.value) : '';
+                              setPreviousSubmittedAmount(val);
+                              if (!isManualPrevInterest) {
+                                const rem = Math.max(0, (Number(previousLoanAmount) || 0) - (Number(val) || 0));
+                                const rate = Number(interestRateInput) || 12;
+                                setPreviousInterestAmount(rem > 0 ? Math.round((rem * rate) / 100) : 0);
+                              }
+                            }}
+                            placeholder={language === 'EN' ? 'e.g. 20000' : 'उदा. 20000'}
+                            className="w-full px-3 py-2 rounded-xl border border-amber-300 text-xs font-bold text-amber-950 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Remaining Previous Principal Badge */}
+                      <div className="p-2.5 bg-white rounded-xl border border-amber-200 flex items-center justify-between text-xs font-bold shadow-2xs">
+                        <span className="text-slate-600">
+                          {language === 'EN' ? 'Remaining Previous Principal:' : 'मागील बाकी मुद्दल (Previous Balance):'}
+                        </span>
+                        <span className="text-sm font-black text-amber-950">
+                          ₹{prevRemainingPrin}
+                        </span>
+                      </div>
+
+                      {/* 3. Interest Applying on Previous Loan (मागील कर्जावरील लागू व्याज) */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="block text-[11px] font-extrabold text-amber-950">
+                            {language === 'EN' ? 'Interest Applying on Previous Loan (₹)' : 'मागील कर्जावर लागू होणारे व्याज (₹)'}
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsManualPrevInterest(false);
+                              const rate = Number(interestRateInput) || 12;
+                              const monthly = Math.round((prevRemainingPrin * rate) / 100);
+                              const months = existingCustomerLoan ? calculateElapsedMonths(existingCustomerLoan.issueDate) : calculateElapsedMonths(issueDateInput);
+                              const calculated = Math.max(monthly, months * monthly);
+                              const net = existingCustomerLoan ? Math.max(0, calculated - (existingCustomerLoan.totalInterestPaid || 0)) : calculated;
+                              setPreviousInterestAmount(net > 0 ? net : monthly);
+                            }}
+                            className="text-[10px] text-amber-800 font-bold underline cursor-pointer"
+                          >
+                            {language === 'EN' ? 'Recalculate Interest' : 'व्याज पुन्हा काढा'}
+                          </button>
+                        </div>
+                        <input
+                          type="number"
+                          min={0}
+                          value={previousInterestAmount}
+                          onChange={(e) => {
+                            setIsManualPrevInterest(true);
+                            setPreviousInterestAmount(e.target.value ? Number(e.target.value) : '');
+                          }}
+                          placeholder={language === 'EN' ? 'e.g. 3000' : 'उदा. 3000'}
+                          className="w-full px-3 py-2 rounded-xl border border-amber-300 text-xs font-bold text-amber-900 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                        />
+                        <div className="flex items-center justify-between text-[10px] text-amber-800 font-semibold mt-1">
+                          <span>
+                            {language === 'EN'
+                              ? `At ${currentRate}% interest, monthly interest on remaining ₹${prevRemainingPrin} is ₹${prevMonthlyInterest}.`
+                              : `${currentRate}% दरानुसार बाकी ₹${prevRemainingPrin} मुद्दलावर दरमहा व्याज ₹${prevMonthlyInterest} लागू होत आहे.`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
+                {/* New / Additional Principal Amount (मुद्दल रक्कम) */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {language === 'EN' ? 'Loan Principal Amount (₹)' : 'कर्जाची रक्कम (₹)'} <span className="text-rose-500">*</span>
+                    {hasPreviousLoan
+                      ? (language === 'EN' ? 'New / Additional Principal Amount (₹)' : 'नवीन मुद्दल रक्कम (अतिरिक्त कर्ज असल्यास भरा) (₹)')
+                      : (language === 'EN' ? 'Loan Principal Amount (₹)' : 'कर्जाची मुद्दल रक्कम (₹)')}{' '}
+                    {!hasPreviousLoan && <span className="text-rose-500">*</span>}
                   </label>
                   <input
                     type="number"
-                    required
-                    min={100}
+                    min={0}
+                    required={!hasPreviousLoan}
                     value={principalInput}
                     onChange={(e) => setPrincipalInput(e.target.value ? Number(e.target.value) : '')}
-                    placeholder={language === 'EN' ? 'e.g. 50000' : 'उदा. 50000'}
+                    placeholder={hasPreviousLoan ? (language === 'EN' ? 'e.g. 10000 (or leave empty if no additional cash)' : 'उदा. 10000 (अतिरिक्त रक्कम नसल्यास रिक्त ठेवा)') : 'उदा. 50000'}
                     className="w-full px-4 py-2.5 rounded-xl border border-amber-300 text-sm font-bold text-amber-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>
 
+                {/* Interest Rate & Issue Date */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      {t.colInterestRate}
+                      {t.colInterestRate} (%)
                     </label>
                     <input
                       type="number"
                       value={interestRateInput}
-                      onChange={(e) => setInterestRateInput(e.target.value ? Number(e.target.value) : '')}
+                      onChange={(e) => {
+                        const val = e.target.value ? Number(e.target.value) : '';
+                        setInterestRateInput(val);
+                        if (!isManualPrevInterest && hasPreviousLoan) {
+                          const rate = Number(val) || 12;
+                          const monthly = Math.round((prevRemainingPrin * rate) / 100);
+                          setPreviousInterestAmount(monthly);
+                        }
+                      }}
                       placeholder="12"
                       className="w-full px-4 py-2 rounded-xl border border-slate-300 text-sm font-bold"
                     />
@@ -569,132 +834,59 @@ export const LoanManager: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Old Loan Section */}
-                <div className="bg-amber-50/70 p-3.5 rounded-2xl border border-amber-200/90 space-y-2.5">
-                  <div
-                    className="flex items-center justify-between cursor-pointer select-none"
-                    onClick={() => setIsOldLoan(!isOldLoan)}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="oldLoanCheckbox"
-                        checked={isOldLoan}
-                        onChange={(e) => setIsOldLoan(e.target.checked)}
-                        className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500 cursor-pointer"
-                      />
-                      <label htmlFor="oldLoanCheckbox" className="text-xs font-black text-amber-950 cursor-pointer">
-                        {language === 'EN' ? 'This is an Old Loan (Has past repayments)' : 'हे जुने चालू कर्ज आहे (आधीची जमा रक्कम नोंदवा)'}
-                      </label>
-                    </div>
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${isOldLoan ? 'bg-amber-200 text-amber-900 border border-amber-300' : 'bg-slate-200/80 text-slate-600'}`}>
-                      {isOldLoan ? (language === 'EN' ? 'OLD LOAN' : 'जुने कर्ज') : (language === 'EN' ? 'NEW LOAN' : 'नवीन कर्ज')}
-                    </span>
-                  </div>
-
-                  {isOldLoan && (
-                    <div className="pt-2.5 border-t border-amber-200/80 space-y-2.5 animate-in fade-in duration-150">
-                      <p className="text-[11px] text-amber-900 font-semibold">
-                        {language === 'EN'
-                          ? 'Enter previously collected principal or interest for this loan to set the correct outstanding balance.'
-                          : 'या कर्जाची यापूर्वी जमा झालेली मुद्दल किंवा व्याज येथे भरा, जेणेकरून खरी बाकी अचूक दिसेल.'}
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div>
-                          <div className="flex justify-between items-center mb-1">
-                            <label className="block text-[11px] font-extrabold text-amber-950">
-                              {language === 'EN' ? 'Already Paid Principal (₹)' : 'आधीच जमा झालेली मुद्दल (₹)'}
-                            </label>
-                            {Number(principalInput) > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => setOldPaidPrincipal(Number(principalInput))}
-                                className="text-[10px] text-amber-800 font-bold underline cursor-pointer"
-                              >
-                                {language === 'EN' ? 'Full' : 'पूर्ण मुद्दल'}
-                              </button>
-                            )}
-                          </div>
-                          <input
-                            type="number"
-                            min={0}
-                            max={Number(principalInput) || undefined}
-                            value={oldPaidPrincipal}
-                            onChange={(e) => setOldPaidPrincipal(e.target.value ? Number(e.target.value) : '')}
-                            placeholder={language === 'EN' ? 'e.g. 10000' : 'उदा. 10000'}
-                            className="w-full px-3 py-2 rounded-xl border border-amber-300 text-xs font-bold text-amber-950 bg-white focus:ring-2 focus:ring-amber-500"
-                          />
-                        </div>
-                        <div>
-                          <div className="flex justify-between items-center mb-1">
-                            <label className="block text-[11px] font-extrabold text-amber-950">
-                              {language === 'EN' ? 'Already Paid Interest (₹)' : 'आधीच जमा झालेले व्याज (₹)'}
-                            </label>
-                            {Number(principalInput) > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const rate = Number(interestRateInput) || 0;
-                                  const m = calculateElapsedMonths(issueDateInput);
-                                  const mInt = Math.round((Number(principalInput) * rate) / 100);
-                                  setOldPaidInterest(Math.max(mInt, m * mInt));
-                                }}
-                                className="text-[10px] text-amber-800 font-bold underline cursor-pointer"
-                              >
-                                {language === 'EN' ? 'Full' : 'पूर्ण व्याज'}
-                              </button>
-                            )}
-                          </div>
-                          <input
-                            type="number"
-                            min={0}
-                            value={oldPaidInterest}
-                            onChange={(e) => setOldPaidInterest(e.target.value ? Number(e.target.value) : '')}
-                            placeholder={language === 'EN' ? 'e.g. 2000' : 'उदा. 2000'}
-                            className="w-full px-3 py-2 rounded-xl border border-amber-300 text-xs font-bold text-amber-950 bg-white focus:ring-2 focus:ring-amber-500"
-                          />
-                        </div>
-                      </div>
-
-                      {Number(principalInput) > 0 && (
-                        <div className="p-2.5 bg-white rounded-xl border border-amber-200 text-xs font-bold space-y-1 shadow-2xs">
-                          <div className="flex justify-between text-slate-600">
-                            <span>{language === 'EN' ? 'Total Loan (Principal + Accrued Int):' : 'एकूण कर्ज (मुद्दल + दिनांकानुसार व्याज):'}</span>
-                            <span>₹{Number(principalInput) + Math.max(Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100), calculateElapsedMonths(issueDateInput) * Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100))}</span>
-                          </div>
-                          <div className="flex justify-between text-emerald-700">
-                            <span>{language === 'EN' ? 'Total Already Paid:' : 'एकूण आधी जमा (मुद्दल + व्याज):'}</span>
-                            <span>₹{(Number(oldPaidPrincipal) || 0) + (Number(oldPaidInterest) || 0)}</span>
-                          </div>
-                          <div className="flex justify-between text-rose-700 font-extrabold pt-1 border-t border-amber-200 text-xs">
-                            <span>{language === 'EN' ? 'Current Remaining Loan Balance:' : 'उर्वरित बाकी कर्ज (Remaining Balance):'}</span>
-                            <span className="text-sm font-black">
-                              ₹{Math.max(0, (Number(principalInput) - (Number(oldPaidPrincipal) || 0)) + Math.max(0, Math.max(Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100), calculateElapsedMonths(issueDateInput) * Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100)) - (Number(oldPaidInterest) || 0)))}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                {/* Purpose / Item */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {language === 'EN' ? 'Loan Purpose / Item Description' : 'कर्जाचे कारण / वस्तूची माहिती (Add Item/Note)'}
+                  </label>
+                  <MarathiTextInput
+                    value={purposeInput}
+                    onChange={(val) => setPurposeInput(val)}
+                    placeholder={language === 'EN' ? 'e.g. Vehicle, Gold, Personal' : 'उदा. गाडी, सोने, वैयक्तिक...'}
+                    className="w-full px-4 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
 
-                {Number(principalInput) > 0 && (
-                  <div className="p-3 bg-amber-50/90 rounded-2xl border border-amber-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center shadow-2xs">
-                    <div className="p-1.5 bg-white rounded-xl border border-amber-100">
-                      <span className="text-[10px] font-bold text-amber-800 block">कालावधी (Duration)</span>
-                      <span className="text-xs font-black text-amber-950">{calculateElapsedMonths(issueDateInput)} महिने</span>
+                {/* Financial Summary & Breakdown Card */}
+                {(totalEffectivePrincipal > 0 || Number(previousLoanAmount) > 0) && (
+                  <div className="p-3 bg-amber-50/90 rounded-2xl border border-amber-200 space-y-2.5 shadow-2xs">
+                    <div className="text-[11px] font-black text-amber-950 flex items-center justify-between border-b border-amber-200/80 pb-1.5">
+                      <span className="flex items-center space-x-1.5">
+                        <Calculator className="w-3.5 h-3.5 text-amber-700" />
+                        <span>{language === 'EN' ? 'Loan Summary & Breakdown' : 'कर्ज हिशोब व एकूण बाकी तपशील'}</span>
+                      </span>
+                      <span className="text-[10px] text-amber-800 font-bold">{newElapsedMonths} महिने</span>
                     </div>
-                    <div className="p-1.5 bg-white rounded-xl border border-amber-100">
-                      <span className="text-[10px] font-bold text-amber-800 block">दरमहा व्याज</span>
-                      <span className="text-xs font-black text-amber-950">₹{Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100)}</span>
-                    </div>
-                    <div className="p-1.5 bg-amber-100/80 rounded-xl border border-amber-200">
-                      <span className="text-[10px] font-black text-amber-900 block">दिनांकानुसार एकूण व्याज</span>
-                      <span className="text-xs font-black text-amber-900">₹{Math.max(Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100), calculateElapsedMonths(issueDateInput) * Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100))}</span>
-                    </div>
-                    <div className="p-1.5 bg-emerald-50 rounded-xl border border-emerald-200">
-                      <span className="text-[10px] font-black text-emerald-800 block">एकूण परतफेड</span>
-                      <span className="text-xs font-black text-emerald-900">₹{Number(principalInput) + Math.max(Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100), calculateElapsedMonths(issueDateInput) * Math.round((Number(principalInput) * (Number(interestRateInput) || 0)) / 100))}</span>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center text-xs">
+                      {hasPreviousLoan && (
+                        <>
+                          <div className="p-1.5 bg-white rounded-xl border border-amber-100">
+                            <span className="text-[10px] font-bold text-slate-500 block">{language === 'EN' ? 'Prev Remaining Prin' : 'मागील बाकी मुद्दल'}</span>
+                            <span className="font-black text-slate-900">₹{prevRemainingPrin}</span>
+                          </div>
+                          <div className="p-1.5 bg-white rounded-xl border border-amber-100">
+                            <span className="text-[10px] font-bold text-slate-500 block">{language === 'EN' ? 'Interest on Prev Loan' : 'मागील लागू व्याज'}</span>
+                            <span className="font-black text-amber-900">₹{prevInterestNum}</span>
+                          </div>
+                        </>
+                      )}
+                      <div className="p-1.5 bg-white rounded-xl border border-amber-100">
+                        <span className="text-[10px] font-bold text-slate-500 block">{language === 'EN' ? 'New Principal' : 'नवीन मुद्दल'}</span>
+                        <span className="font-black text-emerald-800">₹{newPrincipalNum}</span>
+                      </div>
+                      <div className="p-1.5 bg-amber-100/70 rounded-xl border border-amber-200">
+                        <span className="text-[10px] font-black text-amber-900 block">{language === 'EN' ? 'Total Principal' : 'एकूण मुद्दल'}</span>
+                        <span className="font-black text-amber-950">₹{totalEffectivePrincipal}</span>
+                      </div>
+                      <div className="p-1.5 bg-amber-100/70 rounded-xl border border-amber-200">
+                        <span className="text-[10px] font-black text-amber-900 block">{language === 'EN' ? 'Total Interest' : 'एकूण चालू व्याज'}</span>
+                        <span className="font-black text-amber-950">₹{totalCombinedInterest}</span>
+                      </div>
+                      <div className="p-1.5 bg-emerald-100/80 rounded-xl border border-emerald-300">
+                        <span className="text-[10px] font-black text-emerald-900 block">{language === 'EN' ? 'Total Outstanding' : 'एकूण देय बाकी'}</span>
+                        <span className="font-black text-emerald-950 text-sm">₹{totalPayableAmount}</span>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -703,12 +895,7 @@ export const LoanManager: React.FC = () => {
               <div className="p-3.5 sm:px-6 sm:py-3.5 bg-slate-50 border-t border-slate-100 flex justify-end space-x-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsAddLoanModalOpen(false);
-                    setIsOldLoan(false);
-                    setOldPaidPrincipal('');
-                    setOldPaidInterest('');
-                  }}
+                  onClick={resetAddLoanModal}
                   className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-white min-h-[44px] flex items-center justify-center cursor-pointer shadow-2xs"
                 >
                   {t.btnCancel}
