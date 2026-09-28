@@ -1,3 +1,5 @@
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase/config';
 import { AutoBackupConfig, LocalBackupSnapshot, SystemBackupData } from '../types';
 import { StorageService } from './db';
 
@@ -8,6 +10,42 @@ const BACKUP_STORAGE_KEYS = {
 
 export const DEFAULT_DRIVE_WEBHOOK_URL =
   'https://script.google.com/macros/s/AKfycbzzOpsGVm-NuTwdQapw0OcOx9O64mALEAEzX3z1_wZ_rb12zmtDd98-IO97wE2PMSCK/exec';
+
+/**
+ * Pushes backup metadata (timestamp, filename, record counts) to Firestore stats/summary
+ * so all other devices (Laptop, Phone, Tablet) immediately update their backup display in real time!
+ */
+export const syncBackupMetadataToCloud = async (info: {
+  timestamp: number;
+  filename: string;
+  customerCount?: number;
+  collectionCount?: number;
+  loanCount?: number;
+  sizeKb?: number;
+}): Promise<void> => {
+  try {
+    const isoDate = new Date(info.timestamp).toISOString();
+    const statsRef = doc(db, 'stats', 'summary');
+    const payload: Record<string, any> = {
+      lastDriveBackupTimestamp: info.timestamp,
+      lastDriveBackupDate: isoDate,
+      lastDriveBackupFilename: info.filename,
+      lastBackupTimestamp: info.timestamp,
+      lastBackupDate: isoDate,
+      lastBackupFilename: info.filename,
+      lastBackupCustomerCount: info.customerCount,
+      lastBackupCollectionCount: info.collectionCount,
+      lastBackupLoanCount: info.loanCount,
+      lastBackupSizeKb: info.sizeKb,
+      lastUpdated: isoDate,
+    };
+    await updateDoc(statsRef, payload).catch(async () => {
+      await setDoc(statsRef, payload, { merge: true });
+    });
+  } catch (err) {
+    console.warn('[Backup] syncBackupMetadataToCloud notice:', err);
+  }
+};
 
 const DEFAULT_CONFIG: AutoBackupConfig = {
   enabled: true,
@@ -280,6 +318,16 @@ export const AutoBackupService = {
     config.lastDriveBackupFilename = filename;
     AutoBackupService.saveConfig(config);
 
+    // 4. Broadcast backup metadata to Firestore so all devices see the updated backup time
+    syncBackupMetadataToCloud({
+      timestamp: now,
+      filename,
+      customerCount: data.customers?.length || 0,
+      collectionCount: data.collections?.length || 0,
+      loanCount: data.loans?.length || 0,
+      sizeKb: Math.round((JSON.stringify(data).length * 2) / 1024),
+    });
+
     return { snapshot, filename };
   },
 
@@ -330,6 +378,16 @@ export const AutoBackupService = {
         if (customUrl) config.driveWebhookUrl = customUrl;
         AutoBackupService.saveConfig(config);
 
+        // Broadcast to Firestore so all devices (Laptop, Phone) update backup time in real time!
+        syncBackupMetadataToCloud({
+          timestamp: now,
+          filename: result.fileName || filename,
+          customerCount: data.customers?.length || 0,
+          collectionCount: data.collections?.length || 0,
+          loanCount: data.loans?.length || 0,
+          sizeKb: Math.round((JSON.stringify(data).length * 2) / 1024),
+        });
+
         return {
           success: true,
           message: result.message || 'Backup saved to Google Drive successfully!',
@@ -348,6 +406,73 @@ export const AutoBackupService = {
         message: err?.message || 'Failed to upload backup to Google Drive.',
       };
     }
+  },
+
+  // Synchronizes cloud backup metadata from Firestore into local device storage
+  syncCloudBackup: (cloudData: Record<string, any>): boolean => {
+    if (!cloudData) return false;
+    const cloudTimestamp = Number(cloudData.lastDriveBackupTimestamp || cloudData.lastBackupTimestamp) || 0;
+    if (!cloudTimestamp) return false;
+
+    const config = AutoBackupService.getConfig();
+    const localTime = Math.max(config.lastDriveBackupTimestamp || 0, config.lastBackupTimestamp || 0);
+
+    if (cloudTimestamp > localTime) {
+      const isoDate =
+        cloudData.lastDriveBackupDate || cloudData.lastBackupDate || new Date(cloudTimestamp).toISOString();
+      const filename =
+        cloudData.lastDriveBackupFilename || cloudData.lastBackupFilename || 'Sushant_Bishi_CloudDriveBackup.json';
+      config.lastDriveBackupTimestamp = cloudTimestamp;
+      config.lastDriveBackupDate = isoDate;
+      config.lastDriveBackupFilename = filename;
+      config.lastBackupTimestamp = cloudTimestamp;
+      config.lastBackupDate = isoDate;
+      config.lastBackupFilename = filename;
+      config.lastDriveBackupStatus = 'success';
+      AutoBackupService.saveConfig(config);
+
+      // Also ensure a snapshot exists locally matching this cloud backup
+      const existing = AutoBackupService.getLocalSnapshots();
+      const alreadyHas = existing.some((s) => Math.abs(new Date(s.createdAt).getTime() - cloudTimestamp) < 60000);
+      if (!alreadyHas) {
+        try {
+          const currentData = StorageService.exportBackup();
+          const snapshot: LocalBackupSnapshot = {
+            id: 'snap_' + cloudTimestamp,
+            createdAt: isoDate,
+            filename,
+            customerCount: Number(cloudData.lastBackupCustomerCount) || currentData.customers?.length || 0,
+            collectionCount: Number(cloudData.lastBackupCollectionCount) || currentData.collections?.length || 0,
+            loanCount: Number(cloudData.lastBackupLoanCount) || currentData.loans?.length || 0,
+            loanPaymentCount: currentData.loanPayments?.length || 0,
+            sizeKb: Number(cloudData.lastBackupSizeKb) || Math.round((JSON.stringify(currentData).length * 2) / 1024),
+            data: currentData,
+          };
+          const updated = [snapshot, ...existing].slice(0, 10);
+          inMemorySnapshots = updated;
+          saveIDBSnapshot(snapshot);
+          try {
+            localStorage.setItem(BACKUP_STORAGE_KEYS.SNAPSHOTS, JSON.stringify(updated.slice(0, 3)));
+          } catch {}
+        } catch (e) {}
+      }
+      return true;
+    }
+    return false;
+  },
+
+  // Pulls cloud backup metadata directly from Firestore
+  fetchCloudBackupMetadata: async (): Promise<boolean> => {
+    try {
+      const statsRef = doc(db, 'stats', 'summary');
+      const snap = await getDoc(statsRef);
+      if (snap.exists()) {
+        return AutoBackupService.syncCloudBackup(snap.data());
+      }
+    } catch (e) {
+      console.warn('[Backup] fetchCloudBackupMetadata notice:', e);
+    }
+    return false;
   },
 
   // Helper to determine if scheduled backup is due (runs at least once every 12 hours or at 11 PM)

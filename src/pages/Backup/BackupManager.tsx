@@ -73,31 +73,49 @@ export const BackupManager: React.FC = () => {
   );
 
   useEffect(() => {
-    const config = AutoBackupService.getConfig();
-    setAutoConfig(config);
+    const syncFromCurrent = () => {
+      const config = AutoBackupService.getConfig();
+      setAutoConfig(config);
 
-    const snapshots = AutoBackupService.getLocalSnapshots();
-    const configTime = Math.max(config.lastDriveBackupTimestamp || 0, config.lastBackupTimestamp || 0);
-    const latestSnapTime = snapshots[0]?.createdAt ? new Date(snapshots[0].createdAt).getTime() : 0;
+      const snapshots = AutoBackupService.getLocalSnapshots();
+      const configTime = Math.max(config.lastDriveBackupTimestamp || 0, config.lastBackupTimestamp || 0);
+      const latestSnapTime = snapshots[0]?.createdAt ? new Date(snapshots[0].createdAt).getTime() : 0;
 
-    // If config has a more recent backup than the snapshots list (e.g. today's backup),
-    // sync a snapshot immediately so both cards display the exact same time!
-    if (configTime > latestSnapTime && (!snapshots[0] || configTime - latestSnapTime > 60000)) {
-      try {
-        const currentData = StorageService.exportBackup();
-        const filename =
-          config.lastDriveBackupFilename ||
-          config.lastBackupFilename ||
-          AutoBackupService.generateBackupFilename('Sushant_Bishi_Backup', new Date(configTime));
-        AutoBackupService.saveSnapshotLocally(currentData, filename, configTime);
-        setLocalSnapshots(AutoBackupService.getLocalSnapshots());
-      } catch (err) {
-        console.warn('Snapshot sync catch:', err);
+      // If config has a more recent backup than the snapshots list (e.g. today's backup),
+      // sync a snapshot immediately so both cards display the exact same time!
+      if (configTime > latestSnapTime && (!snapshots[0] || configTime - latestSnapTime > 60000)) {
+        try {
+          const currentData = StorageService.exportBackup();
+          const filename =
+            config.lastDriveBackupFilename ||
+            config.lastBackupFilename ||
+            AutoBackupService.generateBackupFilename('Sushant_Bishi_Backup', new Date(configTime));
+          AutoBackupService.saveSnapshotLocally(currentData, filename, configTime);
+          setLocalSnapshots(AutoBackupService.getLocalSnapshots());
+        } catch (err) {
+          console.warn('Snapshot sync catch:', err);
+          setLocalSnapshots(snapshots);
+        }
+      } else {
         setLocalSnapshots(snapshots);
       }
-    } else {
-      setLocalSnapshots(snapshots);
-    }
+    };
+
+    syncFromCurrent();
+
+    // Check cloud backup metadata from Firestore on mount so Laptop immediately gets Mobile's latest backup time!
+    AutoBackupService.fetchCloudBackupMetadata().then((hasUpdate) => {
+      if (hasUpdate) {
+        syncFromCurrent();
+      }
+    });
+
+    // Listen for realtime backup synchronization events from AppContext
+    const handleBackupSynced = () => {
+      syncFromCurrent();
+    };
+    window.addEventListener('sb_backup_synced', handleBackupSynced);
+    return () => window.removeEventListener('sb_backup_synced', handleBackupSynced);
   }, []);
 
   // Format date helper with proper locale
@@ -182,12 +200,22 @@ export const BackupManager: React.FC = () => {
       setAutoConfig(updatedConfig);
       setLocalSnapshots(AutoBackupService.getLocalSnapshots());
 
-      // 3.5 Proactively push complete database to Firestore so other devices sync immediately!
+      // 3.5 Proactively push complete database and backup metadata to Firestore so other devices sync immediately!
       StorageService.syncAllToFirestore().then(() => {
         touchSyncTimestamp({
           totalCustomers: data.customers?.length || 0,
           totalCollections: data.collections?.length || 0,
           totalLoans: data.loans?.length || 0,
+          lastDriveBackupTimestamp: now,
+          lastDriveBackupDate: isoNow,
+          lastDriveBackupFilename: filename,
+          lastBackupTimestamp: now,
+          lastBackupDate: isoNow,
+          lastBackupFilename: filename,
+          lastBackupCustomerCount: data.customers?.length || 0,
+          lastBackupCollectionCount: data.collections?.length || 0,
+          lastBackupLoanCount: data.loans?.length || 0,
+          lastBackupSizeKb: Math.round((JSON.stringify(data).length * 2) / 1024),
         });
       }).catch((e) => console.warn('Sync on backup notice:', e));
 

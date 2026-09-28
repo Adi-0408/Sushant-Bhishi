@@ -18,6 +18,7 @@ import { StorageService } from '../services/db';
 import { useAuth } from './AuthContext';
 import { Language, translations } from '../utils/translations';
 import { performIncrementalSync, IncrementalSyncResult } from '../services/incrementalSync';
+import { AutoBackupService } from '../services/backup';
 
 interface Toast {
   id: string;
@@ -165,6 +166,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           (cloudCusts > 0 && localCusts !== cloudCusts) ||
           (cloudLoans > 0 && localLoans !== cloudLoans) ||
           (cloudColls > 0 && localColls !== cloudColls);
+
+        // Realtime synchronization of backup timestamps & metadata across all devices (Laptop, Phone)
+        const cloudBackupTime = Number(data?.lastDriveBackupTimestamp || data?.lastBackupTimestamp) || 0;
+        if (cloudBackupTime > 0) {
+          const hasUpdatedBackup = AutoBackupService.syncCloudBackup(data);
+          if (hasUpdatedBackup) {
+            window.dispatchEvent(new CustomEvent('sb_backup_synced', { detail: data }));
+          }
+        }
 
         // If cloud data is newer than this device's last sync or counts are different, pull updates automatically
         if ((cloudLastUpdated && (!lastSyncedAt || cloudLastUpdated > lastSyncedAt)) || isCountsMismatch) {
