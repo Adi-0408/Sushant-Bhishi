@@ -194,11 +194,29 @@ export const performIncrementalSync = async (forceFull: boolean = false): Promis
     const cloudColls = Number(statsData?.totalCollections) || 0;
     const cloudLoans = Number(statsData?.totalLoans) || 0;
 
-    // Detect if this device is missing records compared to the cloud
+    // Detect if this device is missing records compared to the cloud (needs pull from cloud)
     const hasCountsMismatch =
       (cloudCusts > 0 && localCusts.length < cloudCusts) ||
       (cloudColls > 0 && localColls.length < cloudColls) ||
       (cloudLoans > 0 && localLoans.length < cloudLoans);
+
+    // Detect if this device has more records than the cloud (needs push to cloud)
+    const hasLocalMore =
+      (cloudCusts > 0 && localCusts.length > cloudCusts) ||
+      (cloudColls > 0 && localColls.length > cloudColls) ||
+      (cloudLoans > 0 && localLoans.length > cloudLoans);
+
+    if (hasLocalMore) {
+      await StorageService.syncAllToFirestore();
+      await touchSyncTimestamp();
+      return {
+        updatedCount: 0,
+        deletedCount: 0,
+        readsCount,
+        isUpToDate: true,
+        message: 'नवीन नोंदी क्लाउडवर यशस्वीपणे सेव्ह झाल्या',
+      };
+    }
 
     // If forceFull is requested OR record count mismatch detected, run full reconciliation
     if (forceFull || hasCountsMismatch) {
@@ -241,8 +259,8 @@ export const performIncrementalSync = async (forceFull: boolean = false): Promis
       }
     }
 
-    // If cloud timestamp is valid and we are already synchronized with it
-    if (cloudLastUpdated && lastSyncedAt && cloudLastUpdated <= lastSyncedAt) {
+    // If cloud timestamp is valid, counts match, and we are already synchronized with it
+    if (cloudLastUpdated && lastSyncedAt && cloudLastUpdated <= lastSyncedAt && !hasCountsMismatch && !hasLocalMore) {
       invalidateStatsCache();
       return {
         updatedCount: 0,

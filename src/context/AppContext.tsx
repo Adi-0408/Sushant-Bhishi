@@ -155,15 +155,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
 
+        const cloudCusts = Number(data?.totalCustomers) || 0;
         const cloudLoans = Number(data?.totalLoans) || 0;
         const cloudColls = Number(data?.totalCollections) || 0;
+        const localCusts = StorageService.getCustomers().length;
         const localLoans = StorageService.getLoans().length;
         const localColls = StorageService.getCollections().length;
         const isCountsMismatch =
-          (cloudLoans > 0 && localLoans < cloudLoans) ||
-          (cloudColls > 0 && localColls < cloudColls);
+          (cloudCusts > 0 && localCusts !== cloudCusts) ||
+          (cloudLoans > 0 && localLoans !== cloudLoans) ||
+          (cloudColls > 0 && localColls !== cloudColls);
 
-        // If cloud data is newer than this device's last sync or counts are fewer, pull updates automatically
+        // If cloud data is newer than this device's last sync or counts are different, pull updates automatically
         if ((cloudLastUpdated && (!lastSyncedAt || cloudLastUpdated > lastSyncedAt)) || isCountsMismatch) {
           await performIncrementalSync(isCountsMismatch);
           refreshData();
@@ -174,31 +177,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // 3. Low-read startup sync: If local storage has data, do a quick delta check (1 read)
-    // Only perform full fetch if this device has completely empty storage (< 2 customers)
+    // Always runs on startup/login to guarantee immediate cross-device sync
     if (currentAdmin) {
-      const syncKey = 'sb_initial_sync_done';
-      const hasSynced = sessionStorage.getItem(syncKey);
       const localCustCount = StorageService.getCustomers().length;
-
-      if (!hasSynced) {
-        sessionStorage.setItem(syncKey, 'true');
-        if (localCustCount < 2) {
-          StorageService.fetchAndSyncFromFirestore()
-            .then(() => {
-              refreshData();
-            })
-            .catch((err) => {
-              console.warn('[AppContext] Startup full sync note:', err);
-            });
-        } else {
-          performIncrementalSync()
-            .then(() => {
-              refreshData();
-            })
-            .catch((err) => {
-              console.warn('[AppContext] Startup incremental sync note:', err);
-            });
-        }
+      if (localCustCount < 2) {
+        StorageService.fetchAndSyncFromFirestore()
+          .then(() => {
+            refreshData();
+          })
+          .catch((err) => {
+            console.warn('[AppContext] Startup full sync note:', err);
+          });
+      } else {
+        performIncrementalSync()
+          .then(() => {
+            refreshData();
+          })
+          .catch((err) => {
+            console.warn('[AppContext] Startup incremental sync note:', err);
+          });
       }
     }
 
