@@ -50,7 +50,7 @@ interface AppContextType {
   syncWithFirebase: () => Promise<void>;
   clearAllData: () => Promise<void>;
   isRefreshing: boolean;
-  refreshAllData: () => Promise<IncrementalSyncResult>;
+  refreshAllData: (forceFull?: boolean) => Promise<IncrementalSyncResult>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -155,9 +155,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
 
-        // If cloud data is newer than this device's last sync, pull the deltas automatically
-        if (cloudLastUpdated && (!lastSyncedAt || cloudLastUpdated > lastSyncedAt)) {
-          await performIncrementalSync();
+        const cloudLoans = Number(data?.totalLoans) || 0;
+        const cloudColls = Number(data?.totalCollections) || 0;
+        const localLoans = StorageService.getLoans().length;
+        const localColls = StorageService.getCollections().length;
+        const isCountsMismatch =
+          (cloudLoans > 0 && localLoans < cloudLoans) ||
+          (cloudColls > 0 && localColls < cloudColls);
+
+        // If cloud data is newer than this device's last sync or counts are fewer, pull updates automatically
+        if ((cloudLastUpdated && (!lastSyncedAt || cloudLastUpdated > lastSyncedAt)) || isCountsMismatch) {
+          await performIncrementalSync(isCountsMismatch);
           refreshData();
         }
       });
@@ -224,10 +232,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const refreshAllData = async (): Promise<IncrementalSyncResult> => {
+  const refreshAllData = async (forceFull: boolean = true): Promise<IncrementalSyncResult> => {
     setIsRefreshing(true);
     try {
-      const res = await performIncrementalSync();
+      const res = await performIncrementalSync(forceFull);
       refreshData();
       if (res.updatedCount > 0 || res.deletedCount > 0) {
         showToast(

@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { StorageService } from '../../services/db';
 import { AutoBackupService, DEFAULT_DRIVE_WEBHOOK_URL } from '../../services/backup';
+import { touchSyncTimestamp } from '../../services/incrementalSync';
 import { AutoBackupConfig, LocalBackupSnapshot, SystemBackupData } from '../../types';
 import {
   Cloud,
@@ -181,6 +182,15 @@ export const BackupManager: React.FC = () => {
       setAutoConfig(updatedConfig);
       setLocalSnapshots(AutoBackupService.getLocalSnapshots());
 
+      // 3.5 Proactively push complete database to Firestore so other devices sync immediately!
+      StorageService.syncAllToFirestore().then(() => {
+        touchSyncTimestamp({
+          totalCustomers: data.customers?.length || 0,
+          totalCollections: data.collections?.length || 0,
+          totalLoans: data.loans?.length || 0,
+        });
+      }).catch((e) => console.warn('Sync on backup notice:', e));
+
       // 4. Upload directly to Google Drive via Apps Script Webhook
       const res = await AutoBackupService.uploadToGoogleDrive(customWebhookUrl, data, filename, now);
 
@@ -346,15 +356,17 @@ export const BackupManager: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => refreshAllData()}
-          disabled={isRefreshing}
-          title={language === 'EN' ? 'Refresh Backup Data' : 'डेटा रिफ्रेश करा'}
-          className="h-11 px-4 bg-white hover:bg-emerald-50 text-[#0F7A5C] font-extrabold text-xs rounded-xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-1.5 cursor-pointer disabled:opacity-60 active:scale-95 transition-all self-start sm:self-auto shrink-0"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 text-[#0F7A5C] ${isRefreshing ? 'animate-spin' : ''}`} />
-          <span>{language === 'EN' ? 'Refresh' : 'रिफ्रेश'}</span>
-        </button>
+        <div className="flex items-center space-x-2 self-start sm:self-auto shrink-0">
+          <button
+            onClick={() => refreshAllData(true)}
+            disabled={isRefreshing}
+            title={language === 'EN' ? 'Sync All Devices with Cloud' : 'सर्व डिव्हाइसेस क्लाउडसह सिंक करा'}
+            className="h-11 px-4 bg-white hover:bg-emerald-50 text-[#0F7A5C] font-extrabold text-xs rounded-xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-1.5 cursor-pointer disabled:opacity-60 active:scale-95 transition-all"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[#0F7A5C] ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{language === 'EN' ? 'Sync All Devices' : 'सर्व डिव्हाइसेस सिंक करा'}</span>
+          </button>
+        </div>
       </div>
 
       {restoreError && (

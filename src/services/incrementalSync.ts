@@ -35,14 +35,20 @@ export interface IncrementalSyncResult {
 
 /**
  * Updates the global sync version / lastUpdated timestamp in Firestore.
- * This signals to all connected devices that an update has occurred.
+ * Also stores total counts so other devices can immediately detect record count mismatches.
  */
 export const touchSyncTimestamp = async (extraFields?: Record<string, any>): Promise<void> => {
   try {
     const now = new Date().toISOString();
     const statsRef = doc(db, 'stats', 'summary');
+    const custCount = StorageService.getCustomers().length;
+    const collCount = StorageService.getCollections().length;
+    const loanCount = StorageService.getLoans().length;
     const updatePayload: Record<string, any> = {
       lastUpdated: now,
+      totalCustomers: custCount,
+      totalCollections: collCount,
+      totalLoans: loanCount,
       ...extraFields,
     };
     await updateDoc(statsRef, updatePayload).catch(async () => {
@@ -63,16 +69,23 @@ export const touchSyncOnCustomerAdd = async (accountNumber: string): Promise<voi
     const now = new Date().toISOString();
     const cleanAcc = String(accountNumber || '').trim();
     const statsRef = doc(db, 'stats', 'summary');
+    const custCount = StorageService.getCustomers().length;
+    const collCount = StorageService.getCollections().length;
+    const loanCount = StorageService.getLoans().length;
     await updateDoc(statsRef, {
       lastUpdated: now,
-      totalCustomers: increment(1),
+      totalCustomers: custCount,
+      totalCollections: collCount,
+      totalLoans: loanCount,
       activeCustomerAccounts: arrayUnion(cleanAcc),
     }).catch(async () => {
       await setDoc(
         statsRef,
         {
           lastUpdated: now,
-          totalCustomers: increment(1),
+          totalCustomers: custCount,
+          totalCollections: collCount,
+          totalLoans: loanCount,
           activeCustomerAccounts: [cleanAcc],
         },
         { merge: true }
@@ -93,9 +106,14 @@ export const touchSyncOnCustomerDelete = async (accountNumber?: string): Promise
     const now = new Date().toISOString();
     const cleanAcc = accountNumber ? String(accountNumber).trim() : '';
     const statsRef = doc(db, 'stats', 'summary');
+    const custCount = StorageService.getCustomers().length;
+    const collCount = StorageService.getCollections().length;
+    const loanCount = StorageService.getLoans().length;
     const payload: Record<string, any> = {
       lastUpdated: now,
-      totalCustomers: increment(-1),
+      totalCustomers: custCount,
+      totalCollections: collCount,
+      totalLoans: loanCount,
     };
     if (cleanAcc) {
       payload.activeCustomerAccounts = arrayRemove(cleanAcc);
@@ -137,14 +155,11 @@ export const recordDeletion = async (
 };
 
 /**
- * Performs an ultra-low-read incremental delta sync across all collections:
- * 1. Checks `stats/summary` singleton (strictly 1 read).
- * 2. Immediately reconciles `activeCustomerAccounts` to purge ghost/deleted customers.
- * 3. If `summary.lastUpdated <= lastSyncedAt`, 0 additional reads are incurred.
- * 4. If newer, queries ONLY documents `where('updatedAt', '>', lastSyncedAt)` and `where('deletedAt', '>', lastSyncedAt)`.
- * 5. Merges added/modified items and prunes deleted items from local storage.
+ * Performs synchronization between local storage and Firestore:
+ * - If forceFull is true or count mismatch detected: fetches and merges complete remote records.
+ * - Otherwise performs fast delta sync based on updatedAt timestamps.
  */
-export const performIncrementalSync = async (): Promise<IncrementalSyncResult> => {
+export const performIncrementalSync = async (forceFull: boolean = false): Promise<IncrementalSyncResult> => {
   if (isSyncInProgress) {
     return {
       updatedCount: 0,
@@ -163,7 +178,7 @@ export const performIncrementalSync = async (): Promise<IncrementalSyncResult> =
   try {
     const lastSyncedAt = localStorage.getItem(LAST_SYNC_KEY);
 
-    // Step 1: Read stats/summary for the latest cloud timestamp & active accounts (1 read)
+    // Step 1: Read stats/summary for the latest cloud timestamp & counts (1 read)
     const statsRef = doc(db, 'stats', 'summary');
     const statsSnap = await getDoc(statsRef);
     readsCount++;
@@ -171,13 +186,52 @@ export const performIncrementalSync = async (): Promise<IncrementalSyncResult> =
     const statsData = statsSnap.exists() ? statsSnap.data() : null;
     const cloudLastUpdated = statsData?.lastUpdated as string | undefined;
 
+    const localCusts = StorageService.getCustomers();
+    const localLoans = StorageService.getLoans();
+    const localColls = StorageService.getCollections();
+
+    const cloudCusts = Number(statsData?.totalCustomers) || 0;
+    const cloudColls = Number(statsData?.totalCollections) || 0;
+    const cloudLoans = Number(statsData?.totalLoans) || 0;
+
+    // Detect if this device is missing records compared to the cloud
+    const hasCountsMismatch =
+      (cloudCusts > 0 && localCusts.length < cloudCusts) ||
+      (cloudColls > 0 && localColls.length < cloudColls) ||
+      (cloudLoans > 0 && localLoans.length < cloudLoans);
+
+    // If forceFull is requested OR record count mismatch detected, run full reconciliation
+    if (forceFull || hasCountsMismatch) {
+      await StorageService.fetchAndSyncFromFirestore();
+      const finalLoans = StorageService.getLoans().length;
+      const finalColls = StorageService.getCollections().length;
+      const finalCusts = StorageService.getCustomers().length;
+      const finalSyncTimestamp = cloudLastUpdated || new Date().toISOString();
+      localStorage.setItem(LAST_SYNC_KEY, finalSyncTimestamp);
+      invalidateStatsCache();
+
+      const diff =
+        Math.max(0, finalColls - localColls.length) +
+        Math.max(0, finalLoans - localLoans.length) +
+        Math.max(0, finalCusts - localCusts.length);
+
+      return {
+        updatedCount: diff,
+        deletedCount: 0,
+        readsCount: readsCount + 9,
+        isUpToDate: true,
+        message:
+          diff > 0
+            ? `${diff} नवीन नोंदी क्लाउडवरून यशस्वीपणे समक्रमित झाल्या`
+            : 'सर्व डेटा क्लाउडवरून अद्ययावत आहे',
+      };
+    }
+
     // Step 1.1: Immediate ghost-customer reconciliation using activeCustomerAccounts
-    // This instantly cleans up any deleted customers across all 4 devices without extra reads!
     if (Array.isArray(statsData?.activeCustomerAccounts)) {
       const activeSet = new Set(
         statsData.activeCustomerAccounts.map((a: string) => String(a).trim().toLowerCase())
       );
-      const localCusts = StorageService.getCustomers();
       const pruned = localCusts.filter((c) =>
         activeSet.has(String(c.accountNumber).trim().toLowerCase())
       );
@@ -204,17 +258,18 @@ export const performIncrementalSync = async (): Promise<IncrementalSyncResult> =
 
     const filterTimestamp = lastSyncedAt || '2000-01-01T00:00:00.000Z';
 
-    // Step 2: Query only modified or newly created documents across collections (installments embedded in customers)
-    const [custSnap, loanSnap, loanPaySnap, delSnap] = await Promise.all([
+    // Step 2: Query modified or newly created documents across collections
+    const [custSnap, loanSnap, loanPaySnap, delSnap, collSnap] = await Promise.all([
       getDocs(query(collection(db, 'customers'), where('updatedAt', '>', filterTimestamp))),
       getDocs(query(collection(db, 'loans'), where('updatedAt', '>', filterTimestamp))),
       getDocs(query(collection(db, 'loanPayments'), where('updatedAt', '>', filterTimestamp))),
       getDocs(query(collection(db, 'deletions'), where('deletedAt', '>', filterTimestamp))),
+      getDocs(query(collection(db, 'collections'), where('updatedAt', '>', filterTimestamp))).catch(() => null),
     ]);
 
-    readsCount += custSnap.size + loanSnap.size + loanPaySnap.size + delSnap.size;
+    readsCount += custSnap.size + loanSnap.size + loanPaySnap.size + delSnap.size + (collSnap?.size || 0);
 
-    // 2.1 Update Customers and their embedded installments (0 duplicate collection reads)
+    // 2.1 Update Customers and their embedded installments
     if (!custSnap.empty) {
       const incomingCusts: Customer[] = [];
       const extractedColls: CollectionEntry[] = [];
@@ -275,6 +330,21 @@ export const performIncrementalSync = async (): Promise<IncrementalSyncResult> =
         localStorage.setItem('sb_collections', JSON.stringify(mergedColls));
       }
       updatedCount += incomingCusts.length;
+    }
+
+    // 2.2 Direct Collections sync
+    if (collSnap && !collSnap.empty) {
+      const incomingDirectColls: CollectionEntry[] = [];
+      collSnap.forEach((d: any) => {
+        const raw = d.data();
+        incomingDirectColls.push({ ...raw, id: raw.id || d.id });
+      });
+      if (incomingDirectColls.length > 0) {
+        const localColls = StorageService.getCollections();
+        const mergedColls = deduplicateCollections([...incomingDirectColls, ...localColls]);
+        localStorage.setItem('sb_collections', JSON.stringify(mergedColls));
+        updatedCount += incomingDirectColls.length;
+      }
     }
 
     // 2.3 Update Loans

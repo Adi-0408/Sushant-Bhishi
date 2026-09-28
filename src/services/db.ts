@@ -1182,13 +1182,13 @@ export const StorageService = {
 
     syncToFirestore('collections', target.id || id, updatedEntry);
 
-    // Strategy 2: Sync owning customer doc with updated embedded installments
     const cust = targetCustId
       ? StorageService.getCustomerById(targetCustId)
       : StorageService.getCustomers().find(
           (c) => String(c.accountNumber || '').trim().toLowerCase() === targetAcc
         );
     if (cust) {
+      cust.updatedAt = nowIso;
       syncToFirestore('customers', cust.id, cust);
     }
 
@@ -1855,6 +1855,13 @@ export const StorageService = {
           loanPayments.map((p) => ({ docId: p.id, data: p }))
         );
       }
+      const collections = StorageService.getCollections();
+      if (collections.length > 0) {
+        await syncBatchToFirestore(
+          'collections',
+          collections.map((c) => ({ docId: c.id, data: c }))
+        );
+      }
       const bishi = StorageService.getBishiConfigs();
       if (bishi.length > 0) {
         await syncBatchToFirestore(
@@ -1886,7 +1893,7 @@ export const StorageService = {
     }
   },
 
-  // Proactive startup cloud pull: fetches all 8 collections from Firestore to immediately populate or sync local storage
+  // Proactive startup cloud pull: fetches all collections from Firestore to immediately populate or sync local storage
   fetchAndSyncFromFirestore: async (): Promise<void> => {
     try {
       startSyncOp();
@@ -1899,6 +1906,7 @@ export const StorageService = {
         penaltySnap,
         adminSnap,
         thakbakiSnap,
+        collSnap,
       ] = await Promise.all([
         getDocs(collection(db, 'customers')),
         getDocs(collection(db, 'loans')),
@@ -1908,6 +1916,7 @@ export const StorageService = {
         getDocs(collection(db, 'penaltySettings')),
         getDocs(collection(db, 'admins')),
         getDocs(collection(db, 'thakbaki')),
+        getDocs(collection(db, 'collections')).catch(() => null),
       ]);
 
       let hadRemoteData = false;
@@ -1935,7 +1944,7 @@ export const StorageService = {
           };
           remoteCusts.push(fullCustomer);
 
-          // Unpack embedded installments from customer document (0 reads!)
+          // Unpack embedded installments from customer document
           if (Array.isArray(raw.installments) && raw.installments.length > 0) {
             raw.installments.forEach((inst: any) => {
               extractedColls.push({
@@ -1971,9 +1980,18 @@ export const StorageService = {
         });
         setStoredData(STORAGE_KEYS.CUSTOMERS, deduplicateCustomers(remoteCusts));
 
-        if (extractedColls.length > 0) {
+        // Merge both direct collections collection and customer embedded installments
+        const directColls: CollectionEntry[] = [];
+        if (collSnap && !collSnap.empty) {
+          collSnap.forEach((d: any) => {
+            const raw = d.data();
+            directColls.push({ ...raw, id: raw.id || d.id });
+          });
+        }
+        const allRemoteColls = deduplicateCollections([...directColls, ...extractedColls]);
+        if (allRemoteColls.length > 0) {
           const localColls = getStoredData<CollectionEntry[]>(STORAGE_KEYS.COLLECTIONS, []);
-          setStoredData(STORAGE_KEYS.COLLECTIONS, deduplicateCollections([...extractedColls, ...localColls]));
+          setStoredData(STORAGE_KEYS.COLLECTIONS, deduplicateCollections([...allRemoteColls, ...localColls]));
         }
       }
 
