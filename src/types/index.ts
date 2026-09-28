@@ -248,6 +248,7 @@ export interface LocalBackupSnapshot {
   customerCount: number;
   collectionCount: number;
   loanCount: number;
+  loanPaymentCount?: number;
   sizeKb: number;
   data: SystemBackupData;
 }

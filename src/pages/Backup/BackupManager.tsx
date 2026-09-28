@@ -1,8 +1,8 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { StorageService } from '../../services/db';
 import { AutoBackupService, DEFAULT_DRIVE_WEBHOOK_URL } from '../../services/backup';
-import { AutoBackupConfig, LocalBackupSnapshot } from '../../types';
+import { AutoBackupConfig, LocalBackupSnapshot, SystemBackupData } from '../../types';
 import {
   HardDrive,
   Download,
@@ -21,19 +21,47 @@ import {
   Zap,
   FolderSync,
   Settings,
+  Database,
+  Check,
+  FileJson,
+  Layers,
+  Users,
+  Wallet,
+  Receipt,
+  FileCheck,
 } from 'lucide-react';
-import { formatDateMarathi } from '../../utils/formatters';
 import { ModalPortal } from '../../components/common/ModalPortal';
 import { runClientV2Migration } from '../../services/migration';
 
 export const BackupManager: React.FC = () => {
-  const { refreshData, showToast, syncStatus, syncWithFirebase, clearAllData, language, isRefreshing, refreshAllData } = useApp();
+  const {
+    customers,
+    collections,
+    loans,
+    loanPayments,
+    refreshData,
+    showToast,
+    syncStatus,
+    syncWithFirebase,
+    clearAllData,
+    language,
+    isRefreshing,
+    refreshAllData,
+  } = useApp();
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [restoreError, setRestoreError] = useState('');
   const [autoConfig, setAutoConfig] = useState<AutoBackupConfig>(() => AutoBackupService.getConfig());
   const [snapshots, setSnapshots] = useState<LocalBackupSnapshot[]>(() => AutoBackupService.getLocalSnapshots());
+
+  // Modal states
   const [selectedSnapshotForRestore, setSelectedSnapshotForRestore] = useState<LocalBackupSnapshot | null>(null);
+  const [pendingFileRestore, setPendingFileRestore] = useState<{
+    filename: string;
+    data: SystemBackupData;
+    sizeKb: number;
+  } | null>(null);
   const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
 
@@ -53,6 +81,47 @@ export const BackupManager: React.FC = () => {
     setAutoConfig(AutoBackupService.getConfig());
     setSnapshots(AutoBackupService.getLocalSnapshots());
   }, []);
+
+  // Format date helper with proper locale
+  const formatDateTime = (dateVal: string | number | Date | undefined) => {
+    if (!dateVal) return language === 'EN' ? 'Not yet recorded' : 'अद्याप झालेला नाही';
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    return d.toLocaleString(language === 'EN' ? 'en-IN' : 'mr-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  // Live Database Overview Statistics
+  const liveStats = useMemo(() => {
+    const custCount = customers?.length || 0;
+    const collCount = collections?.length || 0;
+    const loanCount = loans?.length || 0;
+    const payCount = loanPayments?.length || 0;
+    const totalRecords = custCount + collCount + loanCount + payCount;
+
+    // Estimate JSON database size in KB
+    let estKb = 0;
+    try {
+      const raw = StorageService.exportBackup();
+      estKb = Math.round((JSON.stringify(raw).length * 2) / 1024);
+    } catch {
+      estKb = 0;
+    }
+
+    return {
+      custCount,
+      collCount,
+      loanCount,
+      payCount,
+      totalRecords,
+      estKb,
+    };
+  }, [customers, collections, loans, loanPayments]);
 
   const handleDownloadBackup = () => {
     const backupData = StorageService.exportBackup();
@@ -122,7 +191,7 @@ export const BackupManager: React.FC = () => {
       }
     } catch (err: any) {
       showToast(
-        language === 'EN' ? 'Google Drive backup error' : 'गुगल ड्राईव्ह बॅकअप घेताना त्रुटी आली.',
+        language === 'EN' ? 'Google Drive backup error: ' + (err?.message || 'Failed') : 'गुगल ड्राईव्ह बॅकअप घेताना त्रुटी आली.',
         'error'
       );
     } finally {
@@ -159,14 +228,14 @@ export const BackupManager: React.FC = () => {
       StorageService.importBackup(snapshot.data);
       showToast(
         language === 'EN'
-          ? `Data restored from snapshot (${snapshot.filename})`
+          ? `Data successfully restored from snapshot (${snapshot.filename})`
           : `डेटा रिस्टोर पॉईंटवरून यशस्वीपणे पुनर्संचयित झाला (${snapshot.filename})`,
         'success'
       );
       refreshData();
       setSelectedSnapshotForRestore(null);
     } catch (err: any) {
-      setRestoreError(err.message || 'पुनर्संचयित करताना त्रुटी आली.');
+      setRestoreError(err.message || (language === 'EN' ? 'Failed to restore snapshot.' : 'पुनर्संचयित करताना त्रुटी आली.'));
     }
   };
 
@@ -196,22 +265,46 @@ export const BackupManager: React.FC = () => {
         const content = evt.target?.result as string;
         const parsed = JSON.parse(content);
 
-        StorageService.importBackup(parsed);
-        showToast(
-          language === 'EN'
-            ? 'Data successfully restored from file.'
-            : 'डेटा फाईलवरून यशस्वीपणे पुनर्संचयित (Restore) झाला.',
-          'success'
-        );
-        refreshData();
-        // Also save as snapshot
-        AutoBackupService.saveSnapshotLocally(parsed, file.name || 'Imported_Backup.json');
-        setSnapshots(AutoBackupService.getLocalSnapshots());
+        // Validation
+        if (!parsed || (!parsed.version && !parsed.customers && !parsed.collections)) {
+          throw new Error(
+            language === 'EN'
+              ? 'Invalid backup format. The selected file does not contain valid Sushant Bhishi database collections.'
+              : 'अवैध बॅकअप फाईल. निवडलेली JSON फाईल सुशांत भिशी डेटाबेसशी जुळत नाही.'
+          );
+        }
+
+        const sizeKb = Math.round((content.length * 2) / 1024);
+        setPendingFileRestore({
+          filename: file.name,
+          data: parsed,
+          sizeKb,
+        });
       } catch (err: any) {
-        setRestoreError(err.message || 'अवैध फाईल फॉरमॅट. पुनर्संचयित करण्यात त्रुटी.');
+        setRestoreError(err.message || (language === 'EN' ? 'Invalid JSON backup file.' : 'अवैध फाईल फॉरमॅट. पुनर्संचयित करण्यात त्रुटी.'));
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleConfirmFileRestore = () => {
+    if (!pendingFileRestore) return;
+    try {
+      StorageService.importBackup(pendingFileRestore.data);
+      AutoBackupService.saveSnapshotLocally(pendingFileRestore.data, pendingFileRestore.filename);
+      setSnapshots(AutoBackupService.getLocalSnapshots());
+      refreshData();
+      showToast(
+        language === 'EN'
+          ? `Data successfully restored from ${pendingFileRestore.filename}`
+          : `डेटा ${pendingFileRestore.filename} फाईलवरून यशस्वीपणे पुनर्संचयित झाला.`,
+        'success'
+      );
+      setPendingFileRestore(null);
+    } catch (err: any) {
+      setRestoreError(err.message || (language === 'EN' ? 'Failed to restore file data.' : 'डेटा पुनर्संचयित करताना त्रुटी आली.'));
+    }
   };
 
   const handleRunMigration = async () => {
@@ -233,7 +326,7 @@ export const BackupManager: React.FC = () => {
         refreshData();
       }
     } catch (err: any) {
-      setMigrationLogs((prev) => [...prev, `त्रुटी: ${err?.message || err}`]);
+      setMigrationLogs((prev) => [...prev, `${language === 'EN' ? 'Error' : 'त्रुटी'}: ${err?.message || err}`]);
       showToast(
         language === 'EN' ? 'Migration failed: ' + (err?.message || 'Error') : 'स्थलांतर अयशस्वी झाले.',
         'error'
@@ -256,7 +349,7 @@ export const BackupManager: React.FC = () => {
           </h2>
           <p className="text-xs text-[#5F6E68] font-bold mt-1">
             {language === 'EN'
-              ? 'Automatic daily 11:00 PM local backup, Google Drive cloud sync, and system restore'
+              ? 'Multi-layer data protection: Daily 11:00 PM local backup, Google Drive cloud sync, and 1-click restore'
               : 'स्थानिक डिव्हाइसवर दररोज रात्री ११:०० वा. स्वयंचलित बॅकअप, गुगल ड्राईव्ह सिंक व रिस्टोर व्यवस्थापन'}
           </p>
         </div>
@@ -283,11 +376,85 @@ export const BackupManager: React.FC = () => {
       </div>
 
       {restoreError && (
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-xs sm:text-sm font-bold flex items-center space-x-2 shadow-xs">
-          <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-600" />
-          <span>{restoreError}</span>
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-xs sm:text-sm font-bold flex items-center justify-between shadow-xs animate-in fade-in duration-150">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-600" />
+            <span>{restoreError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRestoreError('')}
+            className="text-xs text-rose-600 font-extrabold underline cursor-pointer"
+          >
+            {language === 'EN' ? 'Dismiss' : 'बंद करा'}
+          </button>
         </div>
       )}
+
+      {/* LIVE DATABASE METRICS OVERVIEW BAR */}
+      <div className="bg-white p-4 sm:p-5 rounded-3xl border border-[#E4EAE7] shadow-xs">
+        <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2.5">
+          <div className="flex items-center space-x-2">
+            <Database className="w-4 h-4 text-[#0F7A5C]" />
+            <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+              {language === 'EN' ? 'Current Database Health & Metrics' : 'चालू डेटाबेस आरोग्य व आकडेवारी'}
+            </span>
+          </div>
+          <span className="text-[11px] font-bold text-slate-500">
+            {language === 'EN' ? `Estimated DB Size: ~${liveStats.estKb} KB` : `अंदाजे आकार: ~${liveStats.estKb} KB`}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-100">
+            <div className="flex items-center justify-center space-x-1.5 text-[#0B5C45] mb-1">
+              <Users className="w-3.5 h-3.5" />
+              <span className="text-[11px] font-extrabold uppercase">
+                {language === 'EN' ? 'Customers' : 'खातेदार'}
+              </span>
+            </div>
+            <div className="text-lg sm:text-xl font-black text-[#0B5C45]">
+              {liveStats.custCount}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-blue-50/70 border border-blue-100">
+            <div className="flex items-center justify-center space-x-1.5 text-blue-800 mb-1">
+              <Receipt className="w-3.5 h-3.5" />
+              <span className="text-[11px] font-extrabold uppercase">
+                {language === 'EN' ? 'Installments' : 'जमा हप्ते'}
+              </span>
+            </div>
+            <div className="text-lg sm:text-xl font-black text-blue-900">
+              {liveStats.collCount}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-100">
+            <div className="flex items-center justify-center space-x-1.5 text-amber-800 mb-1">
+              <Wallet className="w-3.5 h-3.5" />
+              <span className="text-[11px] font-extrabold uppercase">
+                {language === 'EN' ? 'Loans' : 'कर्जे'}
+              </span>
+            </div>
+            <div className="text-lg sm:text-xl font-black text-amber-900">
+              {liveStats.loanCount}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-teal-50/70 border border-teal-100">
+            <div className="flex items-center justify-center space-x-1.5 text-teal-800 mb-1">
+              <Layers className="w-3.5 h-3.5" />
+              <span className="text-[11px] font-extrabold uppercase">
+                {language === 'EN' ? 'Total Records' : 'एकूण नोंदी'}
+              </span>
+            </div>
+            <div className="text-lg sm:text-xl font-black text-teal-900">
+              {liveStats.totalRecords}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* FEATURED: DAILY 11:00 PM AUTOMATIC LOCAL BACKUP STATUS CARD */}
       <div className="bg-gradient-to-br from-white to-[#F4F6F5] p-6 sm:p-7 rounded-3xl border-2 border-emerald-300 shadow-sm relative overflow-hidden">
@@ -301,7 +468,7 @@ export const BackupManager: React.FC = () => {
                 <span>
                   {autoConfig.enabled
                     ? (language === 'EN' ? 'Active: Daily at 11:00 PM' : 'सक्रिय: दररोज रात्री ११:०० वाजता')
-                    : (language === 'EN' ? 'Paused' : 'स्वयंचलित बॅकअप बंद आहे')}
+                    : (language === 'EN' ? 'Auto-Backup Paused' : 'स्वयंचलित बॅकअप बंद आहे')}
                 </span>
               </span>
               <span className="text-[11px] font-bold text-[#5F6E68]">
@@ -317,7 +484,7 @@ export const BackupManager: React.FC = () => {
 
             <p className="text-xs sm:text-sm text-[#5F6E68] font-bold max-w-2xl leading-relaxed">
               {language === 'EN'
-                ? 'Your entire database (customers, bishi accounts, weekly/monthly collections, loans, interest, penalties) is automatically compiled and saved directly onto your device every day at 11:00 PM.'
+                ? 'Your complete database (customers, bishi accounts, weekly/monthly collections, loans, interest, penalties, thakbaki) is automatically compiled and saved directly onto your device every day at 11:00 PM.'
                 : 'सर्व खातेदार, भिशी खाती, जमा हप्ते, कर्ज, व्याज आणि दंड यांचा सुरक्षित बॅकअप दररोज रात्री ११:०० वाजता आपोआप तयार होऊन तुमच्या स्थानिक डिव्हाइसवर सेव्ह केला जातो.'}
             </p>
 
@@ -329,19 +496,16 @@ export const BackupManager: React.FC = () => {
                 </div>
                 <div className="min-w-0">
                   <div className="text-[11px] font-bold text-[#5F6E68]">
-                    {language === 'EN' ? 'Last Saved Backup' : 'शेवटचा सेव्ह झालेला बॅकअप'}
+                    {language === 'EN' ? 'Last Saved Local Backup' : 'शेवटचा सेव्ह झालेला बॅकअप'}
                   </div>
                   <div className="text-xs font-black text-[#10241E] truncate">
-                    {autoConfig.lastBackupTimestamp
-                      ? new Date(autoConfig.lastBackupTimestamp).toLocaleString('mr-IN', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : (language === 'EN' ? 'Not yet recorded' : 'अद्याप झालेला नाही')}
+                    {formatDateTime(autoConfig.lastBackupTimestamp)}
                   </div>
+                  {autoConfig.lastBackupFilename && (
+                    <div className="text-[10px] text-slate-500 font-mono truncate max-w-[220px]" title={autoConfig.lastBackupFilename}>
+                      {autoConfig.lastBackupFilename}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -354,15 +518,7 @@ export const BackupManager: React.FC = () => {
                     {language === 'EN' ? 'Next Scheduled Backup' : 'पुढील स्वयंचलित बॅकअप'}
                   </div>
                   <div className="text-xs font-black text-[#10241E] truncate">
-                    {nextBackupDate
-                      ? nextBackupDate.toLocaleString('mr-IN', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : (language === 'EN' ? 'Inactive' : 'बंद आहे')}
+                    {nextBackupDate ? formatDateTime(nextBackupDate) : (language === 'EN' ? 'Inactive' : 'बंद आहे')}
                   </div>
                 </div>
               </div>
@@ -415,7 +571,7 @@ export const BackupManager: React.FC = () => {
               </span>
               <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-black bg-amber-100 text-amber-900 border border-amber-300">
                 <Sparkles className="w-3 h-3 text-amber-700" />
-                <span>0 Firestore Reads (100% Free)</span>
+                <span>{language === 'EN' ? '0 Firestore Reads (100% Free)' : '० फायरस्टोअर रीड्स (१००% मोफत)'}</span>
               </span>
             </div>
 
@@ -430,7 +586,7 @@ export const BackupManager: React.FC = () => {
 
             <p className="text-xs sm:text-sm text-[#5F6E68] font-bold max-w-2xl leading-relaxed">
               {language === 'EN'
-                ? 'Directly uploads your full JSON database to your personal/client Google Drive folder "Sushant_Bishi_Backups" via Google Apps Script without using a single Firestore read. Keeps the latest 10 backups automatically.'
+                ? 'Directly uploads your full JSON database to your personal/client Google Drive folder "Sushant_Bishi_Backups" via Google Apps Script without consuming any Firebase Firestore reads. Keeps the newest 10 rolling backups automatically.'
                 : 'तुमच्या गुगल ड्राईव्हमधील "Sushant_Bishi_Backups" फोल्डरमध्ये शून्य (०) फायरस्टोअर रीड्ससह थेट बॅकअप सेव्ह होतो. दरवेळी आपोआप नवीन बॅकअप सेव्ह होऊन सर्वात जुन्या १० फाईल्सचे रोलिंग व्यवस्थापन होते.'}
             </p>
 
@@ -445,15 +601,7 @@ export const BackupManager: React.FC = () => {
                     {language === 'EN' ? 'Last Google Drive Backup' : 'शेवटचा गुगल ड्राईव्ह बॅकअप'}
                   </div>
                   <div className="text-xs font-black text-[#10241E] truncate">
-                    {autoConfig.lastDriveBackupTimestamp
-                      ? new Date(autoConfig.lastDriveBackupTimestamp).toLocaleString('mr-IN', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : (language === 'EN' ? 'Not uploaded yet' : 'अद्याप अपलोड केलेला नाही')}
+                    {formatDateTime(autoConfig.lastDriveBackupTimestamp)}
                   </div>
                   {autoConfig.lastDriveBackupFilename && (
                     <div className="text-[10px] text-slate-500 font-mono truncate max-w-[220px]" title={autoConfig.lastDriveBackupFilename}>
@@ -475,7 +623,7 @@ export const BackupManager: React.FC = () => {
                     Sushant_Bishi_Backups
                   </div>
                   <div className="text-[10px] text-emerald-700 font-bold">
-                    {language === 'EN' ? 'Keeps newest 10 backups' : 'फक्त नवीनतम १० फायली सुरक्षित (Auto-Delete 11th)'}
+                    {language === 'EN' ? 'Auto-retains newest 10 backups' : 'फक्त नवीनतम १० फायली सुरक्षित (Auto-Delete 11th)'}
                   </div>
                 </div>
               </div>
@@ -531,10 +679,10 @@ export const BackupManager: React.FC = () => {
 
         {/* Collapsible Webhook URL Configuration */}
         {showDriveSettings && (
-          <div className="mt-5 pt-4 border-t border-emerald-200/60 space-y-3 relative z-10">
+          <div className="mt-5 pt-4 border-t border-emerald-200/60 space-y-3 relative z-10 animate-in fade-in duration-150">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <label className="text-xs font-black text-[#10241E]">
-                Google Apps Script Webhook URL:
+                {language === 'EN' ? 'Google Apps Script Webhook URL:' : 'गुगल अ‍ॅप्स स्क्रिप्ट Webhook URL:'}
               </label>
               <button
                 type="button"
@@ -563,8 +711,8 @@ export const BackupManager: React.FC = () => {
             </div>
             <p className="text-[11px] text-[#5F6E68] font-medium leading-relaxed">
               {language === 'EN'
-                ? 'To switch this backup to your client\'s Google account later: open client\'s Google Drive -> create Apps Script -> deploy Web App -> paste the new Webhook URL above.'
-                : 'भविष्यात क्लायंटच्या गुगल खात्यावर बॅकअप स्विच करण्यासाठी: क्लायंटच्या Google Drive वर जाऊन Apps Script डिप्लॉय करा व नवीन Webhook URL वरील बॉक्समध्ये पेस्ट करून सेव्ह करा.'}
+                ? 'To switch this backup to your personal Google account: Open Google Drive -> create an Apps Script -> deploy as Web App -> paste the generated Webhook URL above.'
+                : 'भविष्यात स्वतःच्या गुगल खात्यावर बॅकअप स्विच करण्यासाठी: Google Drive वर जाऊन Apps Script डिप्लॉय करा व नवीन Webhook URL वरील बॉक्समध्ये पेस्ट करून सेव्ह करा.'}
             </p>
           </div>
         )}
@@ -580,13 +728,13 @@ export const BackupManager: React.FC = () => {
             </h3>
             <p className="text-xs text-[#5F6E68] font-bold">
               {language === 'EN'
-                ? 'Saved snapshots stored directly in this device browser for quick 1-click restore or download'
+                ? 'Saved snapshots stored directly in this device browser for quick 1-click restore or re-download'
                 : 'या डिव्हाइसवर सेव्ह झालेले बॅकअप रिस्टोर पॉइंट्स — १ क्लिकमध्ये पूर्ववत किंवा पुन्हा डाउनलोड करा'}
             </p>
           </div>
 
           <span className="text-xs font-black px-3 py-1 bg-emerald-50 text-[#0F7A5C] rounded-full border border-emerald-200 self-start sm:self-auto">
-            {snapshots.length} {language === 'EN' ? 'Snapshots' : 'रिस्टोर पॉइंट्स उपलब्ध'}
+            {snapshots.length} {language === 'EN' ? 'Snapshots Stored' : 'रिस्टोर पॉइंट्स उपलब्ध'}
           </span>
         </div>
 
@@ -597,7 +745,7 @@ export const BackupManager: React.FC = () => {
               {language === 'EN' ? 'No local snapshots stored yet.' : 'या डिव्हाइसवर अद्याप कोणतेही रिस्टोर पॉइंट सेव्ह नाहीत.'}
             </div>
             <p className="text-[11px] text-[#5F6E68]">
-              {language === 'EN' ? 'Click "Backup to Device Now" to create your first snapshot.' : 'पहिला रिस्टोर पॉइंट तयार करण्यासाठी "आताच डिव्हाइसवर बॅकअप सेव्ह करा" वर क्लिक करा.'}
+              {language === 'EN' ? 'Click "Backup to Device Now" above to create your first local restore point.' : 'पहिला रिस्टोर पॉइंट तयार करण्यासाठी "आताच डिव्हाइसवर बॅकअप सेव्ह करा" वर क्लिक करा.'}
             </p>
           </div>
         ) : (
@@ -607,7 +755,7 @@ export const BackupManager: React.FC = () => {
                 <tr>
                   <th className="py-3 px-4 rounded-l-xl">{language === 'EN' ? 'Date & Time' : 'तारीख व वेळ'}</th>
                   <th className="py-3 px-4">{language === 'EN' ? 'File Name' : 'फाईल नाव'}</th>
-                  <th className="py-3 px-4">{language === 'EN' ? 'Records' : 'नोंदी तपशील'}</th>
+                  <th className="py-3 px-4">{language === 'EN' ? 'Records Included' : 'नोंदी तपशील'}</th>
                   <th className="py-3 px-4">{language === 'EN' ? 'Size' : 'फाईल आकार'}</th>
                   <th className="py-3 px-4 text-right rounded-r-xl">{language === 'EN' ? 'Actions' : 'कृती'}</th>
                 </tr>
@@ -616,13 +764,7 @@ export const BackupManager: React.FC = () => {
                 {snapshots.map((snap) => (
                   <tr key={snap.id} className="hover:bg-emerald-50/40 transition-colors font-bold">
                     <td className="py-3 px-4 text-[#10241E] whitespace-nowrap">
-                      {new Date(snap.createdAt).toLocaleString('mr-IN', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {formatDateTime(snap.createdAt)}
                     </td>
                     <td className="py-3 px-4 text-slate-600 font-mono text-[11px] truncate max-w-[200px]" title={snap.filename}>
                       {snap.filename}
@@ -717,7 +859,7 @@ export const BackupManager: React.FC = () => {
             </h3>
             <p className="text-xs text-[#5F6E68] font-bold leading-relaxed">
               {language === 'EN'
-                ? 'Select a previously downloaded backup JSON file from your device to restore the complete database.'
+                ? 'Select a previously downloaded backup JSON file from your device to verify its contents and restore the database.'
                 : 'आधी डाउनलोड केलेली कोणतीही बॅकअप JSON फाईल निवडून सिस्टीमचा संपूर्ण डेटा पूर्ववत करा.'}
             </p>
           </div>
@@ -781,7 +923,7 @@ export const BackupManager: React.FC = () => {
               </div>
               <p className="text-xs text-[#5F6E68] font-bold leading-relaxed max-w-2xl">
                 {language === 'EN'
-                  ? 'Sync all customers, bishi accounts, weekly/monthly installments, loans, payments, and configs directly to your Google Firebase cloud database.'
+                  ? 'Sync all customers, bishi accounts, weekly/monthly installments, loans, payments, and configs directly to your Google Firebase cloud database for real-time multi-device access.'
                   : 'सर्व खातेदार, त्यांचे तपशील, कर्ज, हप्ते जमा नोंदी आणि सर्व भिशी डेटा तुमच्या जोडलेल्या Firebase क्लाउड डेटाबेसमध्ये थेट आणि सुरक्षित जतन करा.'}
               </p>
             </div>
@@ -790,7 +932,7 @@ export const BackupManager: React.FC = () => {
           <button
             onClick={syncWithFirebase}
             disabled={syncStatus === 'syncing'}
-            className="py-3 px-6 rounded-xl bg-[#0F7A5C] hover:bg-[#0B5C45] active:scale-[0.98] text-white font-black text-sm transition-all shadow-md hover:shadow-lg flex items-center justify-center space-x-2 shrink-0 disabled:opacity-50 cursor-pointer min-h-[44px] touch-target"
+            className="py-3 px-6 rounded-xl bg-[#0F7A5C] hover:bg-[#0B5C45] active:scale-[0.98] text-white font-black text-sm transition-all shadow-md hover:shadow-lg flex items-center justify-center space-x-2 shrink-0 disabled:opacity-50 cursor-pointer min-h-[44px]"
           >
             {syncStatus === 'syncing' ? (
               <>
@@ -961,46 +1103,155 @@ export const BackupManager: React.FC = () => {
         </ModalPortal>
       )}
 
-      {/* CONFIRMATION RESTORE MODAL */}
+      {/* CONFIRMATION RESTORE FROM SNAPSHOT MODAL */}
       {selectedSnapshotForRestore && (
         <ModalPortal>
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-hidden no-print">
             <div className="bg-white rounded-3xl p-6 max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl my-auto animate-in fade-in zoom-in duration-150 overflow-hidden">
-            <div className="overflow-y-auto flex-1 space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-lg font-black text-[#10241E]">
-                  {language === 'EN' ? 'Confirm Restore from Snapshot?' : 'हा रिस्टोर पॉईंट लागू करायचा आहे का?'}
-                </h3>
-                <p className="text-xs font-bold text-[#5F6E68] mt-1">
-                  {language === 'EN'
-                    ? `Restoring "${selectedSnapshotForRestore.filename}" (${selectedSnapshotForRestore.customerCount} customers, ${selectedSnapshotForRestore.collectionCount} collections) will replace current database state with this backup.`
-                    : `"${selectedSnapshotForRestore.filename}" मधील डेटा (${selectedSnapshotForRestore.customerCount} खातेदार, ${selectedSnapshotForRestore.collectionCount} हप्ते) पुनर्संचयित केला जाईल. चालू डेटा या बॅकअपमधील डेटाने बदलला जाईल.`}
-                </p>
-              </div>
-            </div>
+              <div className="overflow-y-auto flex-1 space-y-4">
+                <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-[#10241E]">
+                    {language === 'EN' ? 'Confirm Restore from Snapshot?' : 'हा रिस्टोर पॉईंट लागू करायचा आहे का?'}
+                  </h3>
+                  <p className="text-xs font-bold text-[#5F6E68] mt-1">
+                    {language === 'EN'
+                      ? `Restoring "${selectedSnapshotForRestore.filename}" will replace current database state with this backup snapshot.`
+                      : `"${selectedSnapshotForRestore.filename}" मधील डेटा पुनर्संचयित केला जाईल. चालू डेटा या बॅकअपमधील डेटाने बदलला जाईल.`}
+                  </p>
+                </div>
 
-            <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-100 shrink-0 mt-4">
-              <button
-                type="button"
-                onClick={() => setSelectedSnapshotForRestore(null)}
-                className="px-4 py-2.5 rounded-xl border border-[#E4EAE7] text-xs font-black text-slate-700 hover:bg-slate-50 cursor-pointer"
-              >
-                {language === 'EN' ? 'Cancel' : 'रद्द करा'}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleRestoreSnapshot(selectedSnapshotForRestore)}
-                className="px-5 py-2.5 rounded-xl bg-[#0F7A5C] hover:bg-[#0B5C45] text-white text-xs font-black shadow-xs transition-colors cursor-pointer"
-              >
-                {language === 'EN' ? 'Yes, Restore Data' : 'होय, रिस्टोर करा'}
-              </button>
+                {/* Breakdown Card */}
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1.5 font-bold">
+                  <div className="text-[11px] font-black text-slate-800 border-b border-slate-200 pb-1 flex items-center justify-between">
+                    <span>{language === 'EN' ? 'Snapshot Contents:' : 'रिस्टोर पॉईंट तपशील:'}</span>
+                    <span className="font-mono text-slate-500">~{selectedSnapshotForRestore.sizeKb} KB</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>{language === 'EN' ? 'Customers:' : 'खातेदार:'}</span>
+                    <span className="text-emerald-700 font-black">{selectedSnapshotForRestore.customerCount}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>{language === 'EN' ? 'Installments:' : 'जमा हप्ते:'}</span>
+                    <span className="text-blue-800 font-black">{selectedSnapshotForRestore.collectionCount}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>{language === 'EN' ? 'Loans:' : 'कर्जे:'}</span>
+                    <span className="text-amber-800 font-black">{selectedSnapshotForRestore.loanCount}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-100 shrink-0 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setSelectedSnapshotForRestore(null)}
+                  className="px-4 py-2.5 rounded-xl border border-[#E4EAE7] text-xs font-black text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  {language === 'EN' ? 'Cancel' : 'रद्द करा'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRestoreSnapshot(selectedSnapshotForRestore)}
+                  className="px-5 py-2.5 rounded-xl bg-[#0F7A5C] hover:bg-[#0B5C45] text-white text-xs font-black shadow-xs transition-colors cursor-pointer"
+                >
+                  {language === 'EN' ? 'Yes, Restore Data' : 'होय, रिस्टोर करा'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </ModalPortal>
+        </ModalPortal>
+      )}
+
+      {/* CONFIRMATION RESTORE FROM UPLOADED JSON FILE MODAL */}
+      {pendingFileRestore && (
+        <ModalPortal>
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-hidden no-print">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl my-auto animate-in fade-in zoom-in duration-150 overflow-hidden">
+              <div className="overflow-y-auto flex-1 space-y-4">
+                <div className="w-12 h-12 rounded-2xl bg-teal-100 text-[#0F7A5C] flex items-center justify-center">
+                  <FileCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-[#10241E]">
+                    {language === 'EN' ? 'Verify & Restore Backup File' : 'बॅकअप फाईल तपासा व पुनर्संचयित करा'}
+                  </h3>
+                  <p className="text-xs font-bold text-[#5F6E68] mt-1">
+                    {language === 'EN'
+                      ? 'The selected file has been verified. Review the contents below before restoring:'
+                      : 'निवडलेली फाईल यशस्वीपणे तपासली गेली आहे. रिस्टोर करण्यापूर्वी खालील नोंदी तपासा:'}
+                  </p>
+                </div>
+
+                {/* File Inspection Details */}
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2 font-bold">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                    <span className="text-[11px] font-mono text-slate-700 truncate max-w-[220px]" title={pendingFileRestore.filename}>
+                      {pendingFileRestore.filename}
+                    </span>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-black">
+                      ~{pendingFileRestore.sizeKb} KB
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="p-2 bg-white rounded-xl border border-slate-200">
+                      <span className="text-slate-500 block text-[10px]">{language === 'EN' ? 'Customers' : 'खातेदार'}</span>
+                      <span className="text-sm font-black text-emerald-800">{pendingFileRestore.data.customers?.length || 0}</span>
+                    </div>
+                    <div className="p-2 bg-white rounded-xl border border-slate-200">
+                      <span className="text-slate-500 block text-[10px]">{language === 'EN' ? 'Installments' : 'हप्ते'}</span>
+                      <span className="text-sm font-black text-blue-800">{pendingFileRestore.data.collections?.length || 0}</span>
+                    </div>
+                    <div className="p-2 bg-white rounded-xl border border-slate-200">
+                      <span className="text-slate-500 block text-[10px]">{language === 'EN' ? 'Loans' : 'कर्जे'}</span>
+                      <span className="text-sm font-black text-amber-800">{pendingFileRestore.data.loans?.length || 0}</span>
+                    </div>
+                    <div className="p-2 bg-white rounded-xl border border-slate-200">
+                      <span className="text-slate-500 block text-[10px]">{language === 'EN' ? 'Loan Payments' : 'कर्ज हप्ते'}</span>
+                      <span className="text-sm font-black text-teal-800">{pendingFileRestore.data.loanPayments?.length || 0}</span>
+                    </div>
+                  </div>
+
+                  {pendingFileRestore.data.exportedAt && (
+                    <div className="text-[10px] text-slate-500 font-medium pt-1 border-t border-slate-200">
+                      {language === 'EN' ? 'Export Date: ' : 'बॅकअप तारीख: '}
+                      <strong>{formatDateTime(pendingFileRestore.data.exportedAt)}</strong>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-[11px] font-bold text-amber-900 flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                  <span>
+                    {language === 'EN'
+                      ? 'Restoring will overwrite current local records with the data in this backup.'
+                      : 'हा बॅकअप रिस्टोर केल्याने चालू डेटा या फाईलमधील डेटाने बदलला जाईल.'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-100 shrink-0 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setPendingFileRestore(null)}
+                  className="px-4 py-2.5 rounded-xl border border-[#E4EAE7] text-xs font-black text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  {language === 'EN' ? 'Cancel' : 'रद्द करा'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmFileRestore}
+                  className="px-5 py-2.5 rounded-xl bg-[#0F7A5C] hover:bg-[#0B5C45] text-white text-xs font-black shadow-xs transition-colors cursor-pointer"
+                >
+                  {language === 'EN' ? 'Confirm & Restore' : 'खात्री करा व रिस्टोर करा'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
       )}
     </div>
   );

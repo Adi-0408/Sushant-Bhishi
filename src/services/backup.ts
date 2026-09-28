@@ -71,6 +71,7 @@ export const AutoBackupService = {
       customerCount: data.customers?.length || 0,
       collectionCount: data.collections?.length || 0,
       loanCount: data.loans?.length || 0,
+      loanPaymentCount: data.loanPayments?.length || 0,
       sizeKb,
       data,
     };
