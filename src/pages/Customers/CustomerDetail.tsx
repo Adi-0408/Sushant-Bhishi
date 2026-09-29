@@ -704,7 +704,7 @@ export const CustomerDetail: React.FC = () => {
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                 <span className="font-extrabold text-slate-900 text-sm">{entry.periodLabel}</span>
                 <span
-                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-black ${
+                  className={`inline-flex items-center justify-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-[11px] font-black shrink-0 ${
                     entry.status === 'PAID'
                       ? getStatusBadgeClass('PAID')
                       : isPayableEntry(entry)
@@ -913,9 +913,9 @@ export const CustomerDetail: React.FC = () => {
                         : (language === 'EN' ? 'Cash' : 'नगद')}
                     </span>
                   </td>
-                  <td className="p-3.5 print:py-1 print:px-1.5 text-center print:text-[8.5px]">
+                  <td className="p-3.5 print:py-1 print:px-1.5 text-center print:text-[8.5px] whitespace-nowrap">
                     <span
-                      className={`px-2.5 py-1 print:px-1 print:py-0 rounded-full text-xs print:text-[8px] font-bold ${
+                      className={`inline-flex items-center justify-center whitespace-nowrap px-2.5 py-1 print:px-1 print:py-0 rounded-full text-xs print:text-[8px] font-bold ${
                         entry.status === 'PAID'
                           ? getStatusBadgeClass('PAID')
                           : isPayableEntry(entry)

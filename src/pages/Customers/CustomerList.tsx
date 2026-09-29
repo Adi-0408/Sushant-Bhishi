@@ -411,7 +411,7 @@ export const CustomerList: React.FC = () => {
                         </Link>
                       </div>
                       <span
-                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-black ${getStatusBadgeClass(
+                        className={`inline-flex items-center justify-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-[11px] font-black shrink-0 ${getStatusBadgeClass(
                           isPaid ? 'PAID' : 'PENDING'
                         )}`}
                       >
@@ -660,9 +660,9 @@ export const CustomerList: React.FC = () => {
                         <td className="p-3.5 text-slate-700 text-xs">
                           {getOfficeNameMarathi(cust.officeId, language)}
                         </td>
-                        <td className="p-3.5 text-center">
+                        <td className="p-3.5 text-center whitespace-nowrap">
                           <span
-                            className={`px-2.5 py-1 rounded-full text-xs font-bold ${getStatusBadgeClass(
+                            className={`inline-flex items-center justify-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold ${getStatusBadgeClass(
                               isPaid ? 'PAID' : 'PENDING'
                             )}`}
                           >

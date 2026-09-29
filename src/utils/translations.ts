@@ -106,9 +106,9 @@ export const translations = {
     btnSearch: 'शोधा',
 
     // Status Badges
-    statusPaid: 'पूर्ण जमा',
+    statusPaid: 'जमा',
     statusPending: 'बाकी',
-    statusPartial: 'अंशातः जमा',
+    statusPartial: 'अपूर्ण',
     statusActive: 'सुरू',
     statusClosed: 'पूर्ण बंद',
     statusBorrower: 'कर्जदार',

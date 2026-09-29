@@ -508,8 +508,8 @@ export const LoanManager: React.FC = () => {
                             <span className="text-emerald-700 font-extrabold">₹0</span>
                           )}
                         </td>
-                        <td className="p-3.5 text-center">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                        <td className="p-3.5 text-center whitespace-nowrap">
+                          <span className={`inline-flex items-center justify-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold ${
                             loan.status === 'COMPLETED' || loan.status === 'CLOSED' || loan.remainingAmount <= 0
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                               : 'bg-amber-100 text-amber-800 border border-amber-300'
