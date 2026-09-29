@@ -49,7 +49,8 @@ const ProtectedLayout: React.FC = () => {
       });
     }, 2500);
 
-    // Periodic check every 15 minutes while the app remains open
+    // Periodic check every 60 seconds while the app remains open
+    // Guarantees that at exactly 11:00 PM, the daily backup triggers immediately!
     const intervalId = setInterval(() => {
       AutoBackupService.checkAndRunAutoBackup((snapshot, filename) => {
         showToast(
@@ -59,7 +60,7 @@ const ProtectedLayout: React.FC = () => {
           'success'
         );
       });
-    }, 15 * 60 * 1000);
+    }, 60 * 1000);
 
     return () => {
       clearTimeout(timeoutId);

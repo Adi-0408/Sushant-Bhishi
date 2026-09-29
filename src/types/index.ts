@@ -267,5 +267,8 @@ export interface AutoBackupConfig {
   lastDriveBackupDate?: string;
   lastDriveBackupFilename?: string;
   lastDriveBackupStatus?: 'success' | 'error';
+  lastDaily11pmDate?: string; // YYYY-MM-DD slot date for which daily 11 PM backup was completed
+  lastDaily11pmTimestamp?: number;
+  lastDaily11pmFilename?: string;
 }
 

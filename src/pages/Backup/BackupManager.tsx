@@ -162,12 +162,24 @@ export const BackupManager: React.FC = () => {
   const latestSnapshot = localSnapshots.length > 0 ? localSnapshots[0] : null;
 
   // Unified latest backup time so top card and bottom card are ALWAYS 100% in sync
+  // Unified latest backup time so top card and bottom card are ALWAYS 100% in sync
   const unifiedLatestTime = useMemo(() => {
     const snapTime = latestSnapshot?.createdAt ? new Date(latestSnapshot.createdAt).getTime() : 0;
     const driveTime = autoConfig.lastDriveBackupTimestamp || 0;
     const localTime = autoConfig.lastBackupTimestamp || 0;
     return Math.max(snapTime, driveTime, localTime) || undefined;
   }, [latestSnapshot, autoConfig]);
+
+  // Calendar slot for today's 11:00 PM auto-backup
+  const todaySlotDate = useMemo(() => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }, []);
+
+  const isDaily11pmCompletedToday = autoConfig.lastDaily11pmDate === todaySlotDate;
 
   // Manual trigger: Backup to Google Drive immediately and create a local restore point with CURRENT TIME
   const handleUploadToDrive = async () => {
@@ -183,7 +195,7 @@ export const BackupManager: React.FC = () => {
       // 1. Immediately save a local snapshot with the exact current timestamp
       AutoBackupService.saveSnapshotLocally(data, filename, now);
 
-      // 2. Immediately update config with the exact same timestamp
+      // 2. Immediately update config with the exact same timestamp (preserving lastDaily11pmDate)
       const updatedConfig: AutoBackupConfig = {
         ...autoConfig,
         lastBackupTimestamp: now,
@@ -216,6 +228,9 @@ export const BackupManager: React.FC = () => {
           lastBackupCollectionCount: data.collections?.length || 0,
           lastBackupLoanCount: data.loans?.length || 0,
           lastBackupSizeKb: Math.round((JSON.stringify(data).length * 2) / 1024),
+          lastDaily11pmDate: autoConfig.lastDaily11pmDate,
+          lastDaily11pmTimestamp: autoConfig.lastDaily11pmTimestamp,
+          lastDaily11pmFilename: autoConfig.lastDaily11pmFilename,
         });
       }).catch((e) => console.warn('Sync on backup notice:', e));
 
@@ -514,7 +529,7 @@ export const BackupManager: React.FC = () => {
             </p>
 
             {/* Status Details */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
               <div className="p-3 bg-white rounded-2xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-3">
                 <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
                   <Clock className="w-4 h-4" />
@@ -533,6 +548,27 @@ export const BackupManager: React.FC = () => {
               </div>
 
               <div className="p-3 bg-white rounded-2xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-3">
+                <div className={`w-9 h-9 rounded-xl ${isDaily11pmCompletedToday ? 'bg-emerald-50 text-[#0F7A5C]' : 'bg-amber-50 text-amber-700'} flex items-center justify-center shrink-0`}>
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold text-[#5F6E68]">
+                    {language === 'EN' ? 'Daily 11:00 PM Backup' : 'दररोज रात्री ११:०० बॅकअप'}
+                  </div>
+                  <div className="text-xs font-black text-[#10241E] truncate">
+                    {isDaily11pmCompletedToday
+                      ? (language === 'EN' ? "Today's 11 PM: Completed" : 'आजचा ११:०० PM बॅकअप पूर्ण')
+                      : (language === 'EN' ? 'Scheduled: Tonight 11:00 PM' : 'नियोजित: आज रात्री ११:०० वा.')}
+                  </div>
+                  <div className="text-[10px] text-emerald-700 font-bold truncate">
+                    {isDaily11pmCompletedToday
+                      ? (autoConfig.lastDaily11pmTimestamp ? formatDateTime(autoConfig.lastDaily11pmTimestamp) : (language === 'EN' ? 'Completed for today' : 'आज पूर्ण झाला'))
+                      : (language === 'EN' ? 'Runs daily even if manual backup taken' : 'मॅन्युअल बॅकअप घेतला तरीही होणार')}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 bg-white rounded-2xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-3 sm:col-span-2 lg:col-span-1">
                 <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#0F7A5C] flex items-center justify-center shrink-0">
                   <ShieldCheck className="w-4 h-4" />
                 </div>
@@ -860,12 +896,12 @@ export const BackupManager: React.FC = () => {
               1
             </div>
             <h4 className="text-xs font-black text-slate-900">
-              {language === 'EN' ? 'Fully Automatic Backup' : 'पूर्णपणे स्वयंचलित बॅकअप'}
+              {language === 'EN' ? 'Daily 11:00 PM Automatic Backup' : 'दररोज रात्री ११:०० वा. स्वयंचलित बॅकअप'}
             </h4>
             <p className="text-[11px] text-[#5F6E68] font-medium leading-relaxed">
               {language === 'EN'
-                ? 'The software automatically saves your full database directly to Google Drive folder "Sushant_Bishi_Backups" every night at 11:00 PM. Your client does not have to click anything or download any file.'
-                : 'सॉफ्टवेअर दररोज रात्री ११:०० वाजता आपोआप संपूर्ण डेटा गुगल ड्राईव्हवर सेव्ह करते. क्लायंटला कोणतीही फाईल डाऊनलोड करावी लागत नाही.'}
+                ? 'The software automatically saves your full database directly to Google Drive folder "Sushant_Bishi_Backups" every night at 11:00 PM — even if you or someone else performed manual backups earlier that day! Your client does not have to click anything or download any file.'
+                : 'सॉफ्टवेअर दररोज रात्री ११:०० वाजता आपोआप संपूर्ण डेटा गुगल ड्राईव्हवर सेव्ह करते — दिवसभरात मॅन्युअल बॅकअप घेतला तरीही रात्री ११ चा बॅकअप न चुकता होतो! क्लायंटला कोणतीही फाईल डाऊनलोड करावी लागत नाही.'}
             </p>
           </div>
 

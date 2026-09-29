@@ -22,6 +22,9 @@ export const syncBackupMetadataToCloud = async (info: {
   collectionCount?: number;
   loanCount?: number;
   sizeKb?: number;
+  lastDaily11pmDate?: string;
+  lastDaily11pmTimestamp?: number;
+  lastDaily11pmFilename?: string;
 }): Promise<void> => {
   try {
     const isoDate = new Date(info.timestamp).toISOString();
@@ -39,6 +42,11 @@ export const syncBackupMetadataToCloud = async (info: {
       lastBackupSizeKb: info.sizeKb,
       lastUpdated: isoDate,
     };
+    if (info.lastDaily11pmDate) {
+      payload.lastDaily11pmDate = info.lastDaily11pmDate;
+      payload.lastDaily11pmTimestamp = info.lastDaily11pmTimestamp || info.timestamp;
+      payload.lastDaily11pmFilename = info.lastDaily11pmFilename || info.filename;
+    }
     await updateDoc(statsRef, payload).catch(async () => {
       await setDoc(statsRef, payload, { merge: true });
     });
@@ -134,6 +142,9 @@ export const AutoBackupService = {
       if (config.backupHour === undefined) config.backupHour = 23;
       if (config.backupMinute === undefined) config.backupMinute = 0;
       if (parsed.intervalDays === 2 || !parsed.intervalDays) config.intervalDays = 1;
+      if (parsed.lastDaily11pmDate) config.lastDaily11pmDate = parsed.lastDaily11pmDate;
+      if (parsed.lastDaily11pmTimestamp) config.lastDaily11pmTimestamp = parsed.lastDaily11pmTimestamp;
+      if (parsed.lastDaily11pmFilename) config.lastDaily11pmFilename = parsed.lastDaily11pmFilename;
       return config;
     } catch {
       return DEFAULT_CONFIG;
@@ -412,9 +423,18 @@ export const AutoBackupService = {
   syncCloudBackup: (cloudData: Record<string, any>): boolean => {
     if (!cloudData) return false;
     const cloudTimestamp = Number(cloudData.lastDriveBackupTimestamp || cloudData.lastBackupTimestamp) || 0;
-    if (!cloudTimestamp) return false;
 
     const config = AutoBackupService.getConfig();
+    let hasChanged = false;
+
+    // Sync daily 11 PM backup status across devices
+    if (cloudData.lastDaily11pmDate && cloudData.lastDaily11pmDate !== config.lastDaily11pmDate) {
+      config.lastDaily11pmDate = cloudData.lastDaily11pmDate;
+      config.lastDaily11pmTimestamp = Number(cloudData.lastDaily11pmTimestamp) || config.lastDaily11pmTimestamp;
+      config.lastDaily11pmFilename = cloudData.lastDaily11pmFilename || config.lastDaily11pmFilename;
+      hasChanged = true;
+    }
+
     const localTime = Math.max(config.lastDriveBackupTimestamp || 0, config.lastBackupTimestamp || 0);
 
     if (cloudTimestamp > localTime) {
@@ -429,7 +449,7 @@ export const AutoBackupService = {
       config.lastBackupDate = isoDate;
       config.lastBackupFilename = filename;
       config.lastDriveBackupStatus = 'success';
-      AutoBackupService.saveConfig(config);
+      hasChanged = true;
 
       // Also ensure a snapshot exists locally matching this cloud backup
       const existing = AutoBackupService.getLocalSnapshots();
@@ -456,6 +476,10 @@ export const AutoBackupService = {
           } catch {}
         } catch (e) {}
       }
+    }
+
+    if (hasChanged) {
+      AutoBackupService.saveConfig(config);
       return true;
     }
     return false;
@@ -475,33 +499,42 @@ export const AutoBackupService = {
     return false;
   },
 
-  // Helper to determine if scheduled backup is due (runs at least once every 12 hours or at 11 PM)
-  isBackupDue: (config: AutoBackupConfig): boolean => {
-    if (!config.enabled && config.driveBackupEnabled === false) return false;
-
-    const now = new Date();
-    const lastBackup = Math.max(config.lastBackupTimestamp || 0, config.lastDriveBackupTimestamp || 0);
-
-    // If never backed up, run immediately
-    if (lastBackup === 0) return true;
-
-    // If more than 12 hours have passed since last backup, it is due
-    const twelveHoursMs = 12 * 60 * 60 * 1000;
-    if (now.getTime() - lastBackup > twelveHoursMs) {
-      return true;
-    }
-
+  // Determines which calendar day (YYYY-MM-DD) is currently due for the 11:00 PM backup
+  getTargetDailySlotDate: (config: AutoBackupConfig, now: Date = new Date()): string => {
     const targetHour = config.backupHour ?? 23;
     const targetMinute = config.backupMinute ?? 0;
 
-    const mostRecentSlot = new Date(now);
-    mostRecentSlot.setHours(targetHour, targetMinute, 0, 0);
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const targetMinutes = targetHour * 60 + targetMinute;
 
-    if (now.getTime() < mostRecentSlot.getTime()) {
-      mostRecentSlot.setDate(mostRecentSlot.getDate() - 1);
+    const slotDate = new Date(now);
+    // If we haven't reached target 11 PM today, the due slot is yesterday's date
+    if (currentMinutes < targetMinutes) {
+      slotDate.setDate(slotDate.getDate() - 1);
     }
 
-    return lastBackup < mostRecentSlot.getTime();
+    const yyyy = slotDate.getFullYear();
+    const mm = String(slotDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(slotDate.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  },
+
+  // Helper to determine if the 11:00 PM daily backup is due
+  // CRITICAL REQUIREMENT: The 11:00 PM backup MUST run every day even if manual backups were performed that day!
+  isBackupDue: (config: AutoBackupConfig): boolean => {
+    if (!config.enabled && config.driveBackupEnabled === false) return false;
+
+    // 1. Identify which calendar day's 11:00 PM slot is currently due
+    const targetSlotDate = AutoBackupService.getTargetDailySlotDate(config);
+
+    // 2. If the 11 PM backup for that target date has already been completed, it is NOT due
+    if (config.lastDaily11pmDate === targetSlotDate) {
+      return false;
+    }
+
+    // 3. Otherwise, today's (or yesterday's missed) 11:00 PM backup has NOT been performed yet.
+    // It is DUE now, regardless of how many manual backups were taken today!
+    return true;
   },
 
   // Checks and runs auto-backup silently to Google Drive and local snapshot (no annoying download popups)
@@ -515,19 +548,26 @@ export const AutoBackupService = {
       try {
         const data = StorageService.exportBackup();
         const hasData = (data.customers && data.customers.length > 0) || (data.collections && data.collections.length > 0);
+        const targetSlotDate = AutoBackupService.getTargetDailySlotDate(config);
+
         if (!hasData && config.lastBackupTimestamp === 0) {
           config.lastBackupTimestamp = Date.now();
+          config.lastDaily11pmDate = targetSlotDate;
           AutoBackupService.saveConfig(config);
           return false;
         }
 
         const now = Date.now();
-        const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_AutoBackup', new Date(now));
+        // Distinct filename clearly indicating the scheduled daily 11 PM backup
+        const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_AutoBackup_11PM', new Date(now));
 
         // 1. Store snapshot in local memory for instant 1-click restore without needing files
         const snapshot = AutoBackupService.saveSnapshotLocally(data, filename, now);
 
-        // 2. Update configuration timestamp
+        // 2. Mark the 11 PM backup for targetSlotDate as COMPLETED
+        config.lastDaily11pmDate = targetSlotDate;
+        config.lastDaily11pmTimestamp = now;
+        config.lastDaily11pmFilename = filename;
         config.lastBackupTimestamp = now;
         config.lastBackupDate = new Date(now).toISOString();
         config.lastBackupFilename = filename;
@@ -542,6 +582,19 @@ export const AutoBackupService = {
             console.warn('Silent auto drive backup background upload notice:', err);
           });
         }
+
+        // 4. Sync metadata to Firestore cloud so all other devices (Laptop, Phone) update instantly
+        syncBackupMetadataToCloud({
+          timestamp: now,
+          filename,
+          customerCount: data.customers?.length || 0,
+          collectionCount: data.collections?.length || 0,
+          loanCount: data.loans?.length || 0,
+          sizeKb: Math.round((JSON.stringify(data).length * 2) / 1024),
+          lastDaily11pmDate: targetSlotDate,
+          lastDaily11pmTimestamp: now,
+          lastDaily11pmFilename: filename,
+        });
 
         if (onSuccess) {
           onSuccess(snapshot, filename);
@@ -558,7 +611,7 @@ export const AutoBackupService = {
 
   // Calculate next scheduled backup date (Today at 11:00 PM or Tomorrow at 11:00 PM)
   getNextBackupDate: (config: AutoBackupConfig): Date | null => {
-    if (!config.enabled) return null;
+    if (!config.enabled && config.driveBackupEnabled === false) return null;
     const now = new Date();
     const targetHour = config.backupHour ?? 23;
     const targetMinute = config.backupMinute ?? 0;
