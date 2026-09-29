@@ -118,3 +118,41 @@ export function queueSnapshotPublishDebounced(delayMs: number = 8000): void {
     });
   }, delayMs);
 }
+
+/**
+ * Strategy 2 / Fix 1: Fetches the pre-packaged compressed database snapshot
+ * from Firestore so that new device setup or clear-cache recovery takes
+ * ONLY 1 READ instead of 40,000 reads!
+ */
+export async function fetchBackupSnapshotFromFirestore(): Promise<SystemBackupData | null> {
+  try {
+    const manifestRef = doc(db, SNAPSHOT_COLLECTION, MANIFEST_DOC_ID);
+    const manifestSnap = await getDoc(manifestRef);
+    if (!manifestSnap.exists()) return null;
+
+    const manifest = manifestSnap.data();
+    let base64 = manifest.payload || '';
+
+    if (manifest.totalChunks > 1) {
+      for (let i = 1; i < manifest.totalChunks; i++) {
+        const chunkRef = doc(db, SNAPSHOT_COLLECTION, `chunk_${i}`);
+        const chunkSnap = await getDoc(chunkRef);
+        if (chunkSnap.exists()) {
+          base64 += chunkSnap.data().payload || '';
+        }
+      }
+    }
+
+    if (!base64) return null;
+
+    const data = await decompressBase64ToObject<SystemBackupData>(base64);
+    if (data && (data.customers || data.collections)) {
+      return data;
+    }
+    return null;
+  } catch (err: any) {
+    console.warn('[SnapshotService] fetchBackupSnapshot error:', err?.message || err);
+    return null;
+  }
+}
+

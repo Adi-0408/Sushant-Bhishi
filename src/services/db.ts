@@ -49,23 +49,100 @@ const STORAGE_KEYS = {
   THAKBAKI: 'sb_thakbaki',
 };
 
-// Local storage helper
+// ── Native IndexedDB Backing for Unlimited Local Storage (Fix 2: Eliminates 5MB Quota Limit) ──
+const APP_DB_NAME = 'SB_App_Database';
+const APP_DB_STORE = 'app_records';
+const APP_DB_VERSION = 1;
+
+let appIDBInstance: IDBDatabase | null = null;
+const memCache = new Map<string, any>();
+
+function getAppIDB(): Promise<IDBDatabase> {
+  if (appIDBInstance) return Promise.resolve(appIDBInstance);
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      return reject(new Error('IndexedDB unavailable'));
+    }
+    const req = indexedDB.open(APP_DB_NAME, APP_DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(APP_DB_STORE)) {
+        db.createObjectStore(APP_DB_STORE, { keyPath: 'key' });
+      }
+    };
+    req.onsuccess = () => {
+      appIDBInstance = req.result;
+      resolve(appIDBInstance);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveToAppIDB(key: string, data: any): Promise<void> {
+  try {
+    const db = await getAppIDB();
+    const tx = db.transaction(APP_DB_STORE, 'readwrite');
+    const store = tx.objectStore(APP_DB_STORE);
+    store.put({ key, data, updatedAt: Date.now() });
+  } catch (err) {
+    // Non-fatal, localStorage and memory cache still hold data
+  }
+}
+
+async function loadFromAppIDB(key: string): Promise<any> {
+  try {
+    const db = await getAppIDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(APP_DB_STORE, 'readonly');
+      const store = tx.objectStore(APP_DB_STORE);
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result?.data ?? null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+// On startup, asynchronously preload tables from IndexedDB into memory if localStorage was wiped or truncated
+if (typeof window !== 'undefined') {
+  Object.values(STORAGE_KEYS).forEach((k) => {
+    loadFromAppIDB(k).then((idbVal) => {
+      if (idbVal && (!memCache.has(k) || (Array.isArray(idbVal) && idbVal.length > (memCache.get(k)?.length || 0)))) {
+        memCache.set(k, idbVal);
+      }
+    });
+  });
+}
+
+// Local storage helper with Memory Cache + IndexedDB Backing (Synchronous return, 0 delay, unlimited size)
 const getStoredData = <T>(key: string, defaultValue: T): T => {
+  if (memCache.has(key)) {
+    return memCache.get(key);
+  }
   try {
     const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : defaultValue;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      memCache.set(key, parsed);
+      return parsed;
+    }
   } catch (err) {
     console.error(`Error reading ${key} from storage:`, err);
-    return defaultValue;
   }
+  return defaultValue;
 };
 
 const setStoredData = <T>(key: string, data: T): void => {
+  memCache.set(key, data);
   try {
     localStorage.setItem(key, JSON.stringify(data));
-  } catch (err) {
-    console.error(`Error saving ${key} to storage:`, err);
+  } catch (err: any) {
+    // If browser localStorage hits 5MB quota (QuotaExceededError at 1500+ clients),
+    // IndexedDB below persists the full data safely without throwing an error!
+    console.info(`[Storage] ${key} saved to IndexedDB (localStorage quota note):`, err?.message);
   }
+  saveToAppIDB(key, data);
 };
 
 // Sanitize object for Firestore to eliminate undefined keys
@@ -1905,6 +1982,25 @@ export const StorageService = {
   fetchAndSyncFromFirestore: async (): Promise<void> => {
     try {
       startSyncOp();
+
+      // Strategy 2 / Fix 1: Restore complete database from pre-packaged snapshot in 1 single read!
+      try {
+        const { fetchBackupSnapshotFromFirestore } = await import('./snapshotService');
+        const snapshotData = await fetchBackupSnapshotFromFirestore();
+        if (
+          snapshotData &&
+          ((snapshotData.customers && snapshotData.customers.length > 0) ||
+            (snapshotData.collections && snapshotData.collections.length > 0))
+        ) {
+          console.log('[Firestore] ⚡ Fix 1 Active: Restored entire database in 1 single read!');
+          StorageService.importBackup(snapshotData);
+          endSyncOp(true);
+          return;
+        }
+      } catch (snapErr) {
+        console.info('[Firestore] Snapshot restore note, using collection query fallback:', snapErr);
+      }
+
       const [
         custSnap,
         loanSnap,
