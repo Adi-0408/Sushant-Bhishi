@@ -59,13 +59,27 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentAdmin } = useAuth();
   const [language, setLanguageState] = useState<Language>(() => {
-    const saved = localStorage.getItem('sushant_bishi_language');
-    return saved === 'EN' ? 'EN' : 'MR';
+    try {
+      // When opening the website (fresh session/window), always start in Marathi ('MR') by default
+      const sessionLang = sessionStorage.getItem('sushant_bishi_language');
+      if (sessionLang === 'EN' || sessionLang === 'MR') {
+        return sessionLang;
+      }
+      localStorage.setItem('sushant_bishi_language', 'MR');
+    } catch {
+      // ignore
+    }
+    return 'MR';
   });
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
-    localStorage.setItem('sushant_bishi_language', lang);
+    try {
+      sessionStorage.setItem('sushant_bishi_language', lang);
+      localStorage.setItem('sushant_bishi_language', lang);
+    } catch {
+      // ignore
+    }
   };
 
   const t = translations[language] || translations.MR;
