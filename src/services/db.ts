@@ -1888,6 +1888,14 @@ export const StorageService = {
         );
       }
       console.log('[Firestore] Complete batch synchronization finished.');
+
+      // Strategy 2: Pre-package backup snapshot in Firestore so 11 PM cloud backup uses only 1 Read!
+      try {
+        const { publishBackupSnapshotToFirestore } = await import('./snapshotService');
+        await publishBackupSnapshotToFirestore();
+      } catch (snapErr) {
+        console.warn('[Firestore] Snapshot package note:', snapErr);
+      }
     } catch (err) {
       console.warn('[Firestore] Sync all error:', err);
     }

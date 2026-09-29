@@ -21,6 +21,7 @@ import {
   deduplicateLoanPayments,
 } from './db';
 import { invalidateStatsCache } from './stats';
+import { queueSnapshotPublishDebounced } from './snapshotService';
 
 const LAST_SYNC_KEY = 'sb_last_synced_at';
 let isSyncInProgress = false;
@@ -55,6 +56,9 @@ export const touchSyncTimestamp = async (extraFields?: Record<string, any>): Pro
       await setDoc(statsRef, updatePayload, { merge: true });
     });
     localStorage.setItem(LAST_SYNC_KEY, now);
+
+    // Strategy 2: Pre-package database snapshot so 11 PM Cloud backup uses only 1 Read!
+    queueSnapshotPublishDebounced();
   } catch (err) {
     console.warn('[Sync] touchSyncTimestamp note:', err);
   }
