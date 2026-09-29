@@ -293,15 +293,17 @@ export const ReportManager: React.FC = () => {
     }
     if (viewMode === 'LEDGER_CARD' && activeLedgerCustomer) {
       const custLoan = loans.find((l) => l.customerId === activeLedgerCustomer.id);
-      generateMemberLedgerPDF(activeLedgerCustomer, collections, custLoan, loanPayments, showAllLedgerPeriods);
+      generateMemberLedgerPDF(activeLedgerCustomer, collections, custLoan, loanPayments, showAllLedgerPeriods, language);
     } else {
       const filteredCustomersToDownload = filteredRows.map((r) => r.customer);
       generateReportPDF(
-        customReportNote ? `${reportTitle} - ${customReportNote}` : reportTitle,
+        reportTitle,
         getOfficeNameMarathi(activeOffice, language),
         bishiFilter === 'ALL' ? t.allBishi : getBishiNameMarathi(bishiFilter, language),
         filteredCustomersToDownload,
-        collections
+        collections,
+        customReportNote,
+        language
       );
     }
   };

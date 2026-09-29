@@ -417,7 +417,7 @@ export const CustomerDetail: React.FC = () => {
 
           {/* Download PDF - Requirement 25: Clean PDF without Branding */}
           <button
-            onClick={() => generateCustomerPDF(customer, collections, loan, loanPayments)}
+            onClick={() => generateCustomerPDF(customer, collections, loan, loanPayments, language)}
             className="px-3.5 py-2 min-h-[44px] rounded-xl bg-brand-50 text-brand-700 border border-brand-200 font-bold text-xs hover:bg-brand-100 transition-colors flex items-center space-x-1.5 touch-target cursor-pointer"
           >
             <Download className="w-4 h-4" />
