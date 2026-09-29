@@ -1,0 +1,32 @@
+name: Automated Daily 11 PM Cloud Backup
+
+on:
+  schedule:
+    # 17:30 UTC = 23:00 (11:00 PM) Indian Standard Time (IST) every day
+    - cron: '30 17 * * *'
+  # Allows manual 1-click trigger from GitHub Actions tab anytime
+  workflow_dispatch:
+
+jobs:
+  cloud-backup:
+    name: Run Cloud Backup to Google Drive
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Execute 11:00 PM Cloud Backup
+        env:
+          DRIVE_WEBHOOK_URL: ${{ secrets.DRIVE_WEBHOOK_URL }}
+        run: node scripts/cloud-backup.js
