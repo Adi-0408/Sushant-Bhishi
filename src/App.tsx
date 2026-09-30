@@ -41,15 +41,27 @@ const ProtectedLayout: React.FC = () => {
       // 1. Sync latest cloud backup metadata from Firestore first (so cloud runs like 11 PM / 3 AM are recognized)
       await AutoBackupService.fetchCloudBackupMetadata();
 
-      // 2. Only run auto backup if genuinely missed everywhere
-      AutoBackupService.checkAndRunAutoBackup((snapshot, filename) => {
+      // 2. Check and run First-Open backup of the day (security backup when site is opened for 1st time today)
+      const ranFirstOpen = await AutoBackupService.checkAndRunFirstOpenBackup((snapshot, filename) => {
         showToast(
           language === 'EN'
-            ? `Daily 11:00 PM backup saved: ${filename}`
-            : `दररोज रात्री ११:०० वा. चा स्वयंचलित बॅकअप सेव्ह झाला: ${filename}`,
+            ? `Daily first-open backup saved: ${filename}`
+            : `आजच्या दिवसाचा पहिला सुरक्षित बॅकअप सेव्ह झाला: ${filename}`,
           'success'
         );
       });
+
+      // 3. Run scheduled 11 PM check if first-open didn't just run
+      if (!ranFirstOpen) {
+        AutoBackupService.checkAndRunAutoBackup((snapshot, filename) => {
+          showToast(
+            language === 'EN'
+              ? `Daily 11:00 PM backup saved: ${filename}`
+              : `दररोज रात्री ११:०० वा. चा स्वयंचलित बॅकअप सेव्ह झाला: ${filename}`,
+            'success'
+          );
+        });
+      }
     };
 
     // Check shortly after app loads (runs if last night's 11 PM backup was genuinely missed)

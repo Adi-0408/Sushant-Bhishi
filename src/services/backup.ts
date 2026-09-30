@@ -25,6 +25,9 @@ export const syncBackupMetadataToCloud = async (info: {
   lastDaily11pmDate?: string;
   lastDaily11pmTimestamp?: number;
   lastDaily11pmFilename?: string;
+  lastDailyFirstOpenDate?: string;
+  lastDailyFirstOpenTimestamp?: number;
+  lastDailyFirstOpenFilename?: string;
 }): Promise<void> => {
   try {
     const isoDate = new Date(info.timestamp).toISOString();
@@ -46,6 +49,11 @@ export const syncBackupMetadataToCloud = async (info: {
       payload.lastDaily11pmDate = info.lastDaily11pmDate;
       payload.lastDaily11pmTimestamp = info.lastDaily11pmTimestamp || info.timestamp;
       payload.lastDaily11pmFilename = info.lastDaily11pmFilename || info.filename;
+    }
+    if (info.lastDailyFirstOpenDate) {
+      payload.lastDailyFirstOpenDate = info.lastDailyFirstOpenDate;
+      payload.lastDailyFirstOpenTimestamp = info.lastDailyFirstOpenTimestamp || info.timestamp;
+      payload.lastDailyFirstOpenFilename = info.lastDailyFirstOpenFilename || info.filename;
     }
     await updateDoc(statsRef, payload).catch(async () => {
       await setDoc(statsRef, payload, { merge: true });
@@ -145,6 +153,9 @@ export const AutoBackupService = {
       if (parsed.lastDaily11pmDate) config.lastDaily11pmDate = parsed.lastDaily11pmDate;
       if (parsed.lastDaily11pmTimestamp) config.lastDaily11pmTimestamp = parsed.lastDaily11pmTimestamp;
       if (parsed.lastDaily11pmFilename) config.lastDaily11pmFilename = parsed.lastDaily11pmFilename;
+      if (parsed.lastDailyFirstOpenDate) config.lastDailyFirstOpenDate = parsed.lastDailyFirstOpenDate;
+      if (parsed.lastDailyFirstOpenTimestamp) config.lastDailyFirstOpenTimestamp = parsed.lastDailyFirstOpenTimestamp;
+      if (parsed.lastDailyFirstOpenFilename) config.lastDailyFirstOpenFilename = parsed.lastDailyFirstOpenFilename;
       return config;
     } catch {
       return DEFAULT_CONFIG;
@@ -459,6 +470,14 @@ export const AutoBackupService = {
       hasChanged = true;
     }
 
+    // Sync daily first-open backup status across devices
+    if (cloudData.lastDailyFirstOpenDate && cloudData.lastDailyFirstOpenDate !== config.lastDailyFirstOpenDate) {
+      config.lastDailyFirstOpenDate = cloudData.lastDailyFirstOpenDate;
+      config.lastDailyFirstOpenTimestamp = Number(cloudData.lastDailyFirstOpenTimestamp) || config.lastDailyFirstOpenTimestamp;
+      config.lastDailyFirstOpenFilename = cloudData.lastDailyFirstOpenFilename || config.lastDailyFirstOpenFilename;
+      hasChanged = true;
+    }
+
     const localTime = Math.max(config.lastDriveBackupTimestamp || 0, config.lastBackupTimestamp || 0);
 
     if (cloudTimestamp >= localTime || daily11pmTime > 0) {
@@ -651,6 +670,97 @@ export const AutoBackupService = {
     }
 
     return false;
+  },
+
+  // Helper to format today's calendar date in IST (YYYY-MM-DD)
+  getTodayDateString: (now: Date = new Date()): string => {
+    try {
+      const istFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+      return istFormatter.format(now);
+    } catch {
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+  },
+
+  // Checks and runs auto-backup silently when the website is opened for the 1st time of the day
+  checkAndRunFirstOpenBackup: async (
+    onSuccess?: (snapshot: LocalBackupSnapshot, filename: string) => void
+  ): Promise<boolean> => {
+    const config = AutoBackupService.getConfig();
+    if (!config.enabled && config.driveBackupEnabled === false) return false;
+
+    const todayStr = AutoBackupService.getTodayDateString();
+
+    // If today's first-open backup has already been performed today, skip!
+    if (config.lastDailyFirstOpenDate === todayStr) {
+      return false;
+    }
+
+    try {
+      const data = StorageService.exportBackup();
+      const hasData = (data.customers && data.customers.length > 0) || (data.collections && data.collections.length > 0);
+
+      if (!hasData && config.lastBackupTimestamp === 0) {
+        config.lastDailyFirstOpenDate = todayStr;
+        AutoBackupService.saveConfig(config);
+        return false;
+      }
+
+      const now = Date.now();
+      const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_DailyOpen_Backup', new Date(now));
+
+      // 1. Store snapshot in local memory for instant 1-click restore
+      const snapshot = AutoBackupService.saveSnapshotLocally(data, filename, now);
+
+      // 2. Mark today's first-open backup as COMPLETED
+      config.lastDailyFirstOpenDate = todayStr;
+      config.lastDailyFirstOpenTimestamp = now;
+      config.lastDailyFirstOpenFilename = filename;
+      config.lastBackupTimestamp = now;
+      config.lastBackupDate = new Date(now).toISOString();
+      config.lastBackupFilename = filename;
+      config.lastDriveBackupTimestamp = now;
+      config.lastDriveBackupDate = new Date(now).toISOString();
+      config.lastDriveBackupFilename = filename;
+      config.lastDriveBackupStatus = 'success';
+      AutoBackupService.saveConfig(config);
+
+      // 3. Automatically push directly to Google Drive in background
+      if (config.driveBackupEnabled !== false) {
+        await AutoBackupService.uploadToGoogleDrive(config.driveWebhookUrl, data, filename, now).catch((err) => {
+          console.warn('Silent first-open drive backup background upload notice:', err);
+        });
+      }
+
+      // 4. Sync metadata to Firestore cloud so all devices know today's first-open backup is done
+      syncBackupMetadataToCloud({
+        timestamp: now,
+        filename,
+        customerCount: data.customers?.length || 0,
+        collectionCount: data.collections?.length || 0,
+        loanCount: data.loans?.length || 0,
+        sizeKb: Math.round((JSON.stringify(data).length * 2) / 1024),
+        lastDailyFirstOpenDate: todayStr,
+        lastDailyFirstOpenTimestamp: now,
+        lastDailyFirstOpenFilename: filename,
+      });
+
+      if (onSuccess) {
+        onSuccess(snapshot, filename);
+      }
+      return true;
+    } catch (err) {
+      console.error('Silent first-open auto backup failed:', err);
+      return false;
+    }
   },
 
   // Calculate next scheduled backup date (Today at 11:00 PM or Tomorrow at 11:00 PM)

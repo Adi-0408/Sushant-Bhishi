@@ -270,5 +270,8 @@ export interface AutoBackupConfig {
   lastDaily11pmDate?: string; // YYYY-MM-DD slot date for which daily 11 PM backup was completed
   lastDaily11pmTimestamp?: number;
   lastDaily11pmFilename?: string;
+  lastDailyFirstOpenDate?: string; // YYYY-MM-DD date when first-open backup was taken today
+  lastDailyFirstOpenTimestamp?: number;
+  lastDailyFirstOpenFilename?: string;
 }
 
