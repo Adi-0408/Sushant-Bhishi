@@ -19,7 +19,7 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
 
 const DEFAULT_WEBHOOK_URL =
-  'https://script.google.com/macros/s/AKfycbzzOpsGVm-NuTwdQapw0OcOx9O64mALEAEzX3z1_wZ_rb12zmtDd98-IO97wE2PMSCK/exec';
+  'https://script.google.com/macros/s/AKfycbybW-_aNSk94PQQGgAhYV_lsc1OvDRIE45XvSe4Q6MLBanBtJDoD08f7ASvKfxt4HXH/exec';
 
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY || "AIzaSyBC_jK6bHPVfot1MzTvsFS4csOErHeu5cQ",
@@ -270,7 +270,10 @@ async function runCloudBackup() {
   console.log(`💾 Backup file prepared: ${filename} (~${sizeKb} KB)`);
 
   // 4. Upload to Google Drive via Apps Script Webhook
-  const webhookUrl = (process.env.DRIVE_WEBHOOK_URL || DEFAULT_WEBHOOK_URL).trim();
+  let webhookUrl = (process.env.DRIVE_WEBHOOK_URL || DEFAULT_WEBHOOK_URL).trim();
+  if (!webhookUrl || webhookUrl.includes('AKfycbzzOpsGVm-NuTwdQapw0OcOx9O64mALEAEzX3z1_wZ_rb12zmtDd98-IO97wE2PMSCK')) {
+    webhookUrl = DEFAULT_WEBHOOK_URL;
+  }
   console.log(`☁️ Uploading to Google Drive webhook...`);
 
   const response = await fetch(webhookUrl, {

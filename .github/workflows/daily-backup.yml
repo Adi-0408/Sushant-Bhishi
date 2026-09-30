@@ -36,5 +36,5 @@ jobs:
 
       - name: Execute 11:00 PM Cloud Backup
         env:
-          DRIVE_WEBHOOK_URL: ${{ secrets.DRIVE_WEBHOOK_URL }}
+          DRIVE_WEBHOOK_URL: ${{ secrets.DRIVE_WEBHOOK_URL || 'https://script.google.com/macros/s/AKfycbybW-_aNSk94PQQGgAhYV_lsc1OvDRIE45XvSe4Q6MLBanBtJDoD08f7ASvKfxt4HXH/exec' }}
         run: node scripts/cloud-backup.js

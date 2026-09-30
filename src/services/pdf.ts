@@ -360,28 +360,72 @@ export const generateReportPDF = async (
   let totalExtraSum = 0;
   let totalReturnSum = 0;
 
+  const allLoans = StorageService.getLoans();
+  const allLoanPayments = StorageService.getLoanPayments();
+  const isLoanContext = bishiName.includes('कर्ज') || bishiName.toLowerCase().includes('loan') || title.includes('कर्ज') || title.toLowerCase().includes('loan');
+
   const rows = customers.map((cust) => {
-    const custColls = collections.filter((c) => c.customerId === cust.id);
+    const custLoan = (isLoanContext || cust.hasLoan || cust.bishiType === 'LOAN_ONLY')
+      ? allLoans.find((l) => l.customerId === cust.id || (cust.accountNumber && l.accountNumber === cust.accountNumber))
+      : null;
+    const isLoanAccount = cust.bishiType === 'LOAN_ONLY' || (isLoanContext && (Boolean(cust.hasLoan) || Boolean(custLoan)));
+
     let exp = 0;
     let coll = 0;
     let pen = 0;
+    let int = 0;
+    let rem = 0;
+    let expectedInterest = 0;
+    let totalExpWithInterest = 0;
+    let extraSubmitted = 0;
+    let totalWithExtra = 0;
+    let totalPayable = 0;
 
-    custColls.forEach((c) => {
-      exp += c.expectedAmount || 0;
-      coll += c.collectedAmount || 0;
-      pen += c.penaltyAmount || 0;
-    });
+    if (isLoanAccount) {
+      const custLps = allLoanPayments.filter((lp) => lp.customerId === cust.id || (cust.accountNumber && lp.accountNumber === cust.accountNumber));
+      let lPaid = 0;
+      let lInt = 0;
+      let lPen = 0;
+      custLps.forEach((lp) => {
+        lPaid += lp.paidAmount || 0;
+        lInt += lp.interestPaid || 0;
+        lPen += lp.penaltyPaid || 0;
+      });
+      if (custLoan) {
+        if (lPaid === 0 && (custLoan.paidAmount || 0) > 0) lPaid = custLoan.paidAmount;
+        if (lInt === 0 && (custLoan.totalInterestPaid || 0) > 0) lInt = custLoan.totalInterestPaid || 0;
+        if (lPen === 0 && (custLoan.penaltyAmount || 0) > 0) lPen = custLoan.penaltyAmount;
+      }
 
-    const rem = Math.max(0, exp - coll);
-    const rate = cust.interestRate || (cust.modality === 'W' ? 2.5 : 10);
-    const expectedInterest = Math.round((exp * rate) / 100);
-    const totalExpWithInterest = exp + expectedInterest;
-    const bishiAmountForInt = exp > 0 ? Math.min(coll, exp) : coll;
-    const int = Math.round((bishiAmountForInt * rate) / 100);
+      exp = custLoan ? custLoan.principalAmount : (cust.bishiType === 'LOAN_ONLY' ? (cust.amount || 0) : 0);
+      expectedInterest = 0;
+      totalExpWithInterest = exp;
+      coll = lPaid;
+      rem = custLoan ? custLoan.remainingAmount : 0;
+      int = lInt;
+      pen = lPen;
+      extraSubmitted = Math.max(0, coll - exp);
+      totalWithExtra = 0;
+      totalPayable = 0;
+    } else {
+      const custColls = collections.filter((c) => c.customerId === cust.id);
+      custColls.forEach((c) => {
+        exp += c.expectedAmount || 0;
+        coll += c.collectedAmount || 0;
+        pen += c.penaltyAmount || 0;
+      });
 
-    const extraSubmitted = Math.max(0, coll - exp);
-    const totalWithExtra = coll > 0 ? coll + int : 0;
-    const totalPayable = totalExpWithInterest + extraSubmitted;
+      rem = Math.max(0, exp - coll);
+      const rate = cust.interestRate || (cust.modality === 'W' ? 2.5 : 10);
+      expectedInterest = Math.round((exp * rate) / 100);
+      totalExpWithInterest = exp + expectedInterest;
+      const bishiAmountForInt = exp > 0 ? Math.min(coll, exp) : coll;
+      int = Math.round((bishiAmountForInt * rate) / 100);
+
+      extraSubmitted = Math.max(0, coll - exp);
+      totalWithExtra = coll > 0 ? coll + int : 0;
+      totalPayable = totalExpWithInterest + extraSubmitted;
+    }
 
     totalExp += exp;
     totalExpectedInterestSum += expectedInterest;

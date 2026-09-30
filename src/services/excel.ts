@@ -215,9 +215,9 @@ export const exportGeneralReportToExcel = (
         const expInt = r.expectedInterest ?? Math.round((r.exp * rate) / 100);
         const totalExpWithInt = r.totalExpWithInterest ?? (r.exp + expInt);
         const intAmt = r.int || 0;
-        const payableAmt = r.totalPayable || (totalExpWithInt + (r.extraSubmitted || 0));
+        const payableAmt = r.totalPayable !== undefined ? r.totalPayable : (totalExpWithInt + (r.extraSubmitted || 0));
         const extraAmt = r.extraSubmitted || 0;
-        const returnAmt = r.totalWithExtra || (r.coll + intAmt);
+        const returnAmt = r.totalWithExtra !== undefined ? r.totalWithExtra : (r.coll + intAmt);
 
         return `
         <tr>
@@ -255,10 +255,10 @@ export const exportGeneralReportToExcel = (
   const totalPayable = rows.reduce((a, r) => {
     const rate = r.customer.interestRate || (r.customer.modality === 'W' ? 2.5 : 10);
     const expWithInt = r.totalExpWithInterest ?? (r.exp + Math.round((r.exp * rate) / 100));
-    return a + (r.totalPayable ?? (expWithInt + (r.extraSubmitted || 0)));
+    return a + (r.totalPayable !== undefined ? r.totalPayable : (expWithInt + (r.extraSubmitted || 0)));
   }, 0);
   const totalExtra = rows.reduce((a, r) => a + (r.extraSubmitted || 0), 0);
-  const totalReturn = rows.reduce((a, r) => a + (r.totalWithExtra || 0), 0);
+  const totalReturn = rows.reduce((a, r) => a + (r.totalWithExtra !== undefined ? r.totalWithExtra : (r.coll + (r.int || 0))), 0);
 
   const excelHtml = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">

@@ -90,7 +90,14 @@ export const ReportManager: React.FC = () => {
   // Office & filter filtered customers strictly for the General Summary Report tab
   const officeCustomers = customers.filter((c) => {
     if (activeOffice !== 'ALL' && c.officeId !== activeOffice) return false;
-    if (bishiFilter !== 'ALL' && c.bishiType !== bishiFilter) return false;
+    if (bishiFilter !== 'ALL') {
+      if (bishiFilter === 'LOAN_ONLY') {
+        const isBorrower = c.bishiType === 'LOAN_ONLY' || Boolean(c.hasLoan) || loans.some((l) => (l.customerId === c.id || (c.accountNumber && l.accountNumber === c.accountNumber)));
+        if (!isBorrower) return false;
+      } else if (c.bishiType !== bishiFilter) {
+        return false;
+      }
+    }
     if (modalityFilter !== 'ALL' && c.modality !== modalityFilter) return false;
     return true;
   });
@@ -173,9 +180,9 @@ export const ReportManager: React.FC = () => {
     const bishiAmountForInt = exp > 0 ? Math.min(coll, exp) : coll;
     const bishiInterest = Math.round((bishiAmountForInt * effectiveCustRate) / 100);
 
-    const custLoan = loans.find((l) => l.customerId === cust.id);
+    const custLoan = loans.find((l) => l.customerId === cust.id || (cust.accountNumber && l.accountNumber === cust.accountNumber));
     const custLoanPayments = loanPayments.filter((lp) => {
-      if (lp.customerId !== cust.id) return false;
+      if (lp.customerId !== cust.id && !(cust.accountNumber && lp.accountNumber === cust.accountNumber)) return false;
       return isDateInPeriod(lp.paymentDate, timePeriodFilter);
     });
 
@@ -188,13 +195,26 @@ export const ReportManager: React.FC = () => {
       loanPenPaid += lp.penaltyPaid || 0;
     });
 
-    const isLoanOnly = cust.bishiType === 'LOAN_ONLY';
-    const totalExpBase = isLoanOnly ? (custLoan ? custLoan.principalAmount : 0) : exp;
-    const totalExpWithInterest = isLoanOnly ? (custLoan ? custLoan.principalAmount : 0) : (exp + expectedBishiInterest);
-    const totalColl = isLoanOnly ? loanPaid : coll;
-    const totalRem = isLoanOnly ? (custLoan ? custLoan.remainingAmount : 0) : rem;
-    const totalInt = isLoanOnly ? loanIntPaid : bishiInterest;
-    const totalPen = isLoanOnly ? loanPenPaid : pen;
+    if (timePeriodFilter === 'ALL' && custLoan) {
+      if (loanPaid === 0 && (custLoan.paidAmount || 0) > 0) {
+        loanPaid = custLoan.paidAmount;
+      }
+      if (loanIntPaid === 0 && (custLoan.totalInterestPaid || 0) > 0) {
+        loanIntPaid = custLoan.totalInterestPaid || 0;
+      }
+      if (loanPenPaid === 0 && (custLoan.penaltyAmount || 0) > 0) {
+        loanPenPaid = custLoan.penaltyAmount;
+      }
+    }
+
+    const isLoanReport = bishiFilter === 'LOAN_ONLY' || statusFilter === 'LOAN_ONLY';
+    const isLoanRow = cust.bishiType === 'LOAN_ONLY' || (isLoanReport && (Boolean(cust.hasLoan) || Boolean(custLoan)));
+    const totalExpBase = isLoanRow ? (custLoan ? custLoan.principalAmount : (cust.bishiType === 'LOAN_ONLY' ? (cust.amount || 0) : 0)) : exp;
+    const totalExpWithInterest = isLoanRow ? totalExpBase : (exp + expectedBishiInterest);
+    const totalColl = isLoanRow ? loanPaid : coll;
+    const totalRem = isLoanRow ? (custLoan ? custLoan.remainingAmount : 0) : rem;
+    const totalInt = isLoanRow ? loanIntPaid : bishiInterest;
+    const totalPen = isLoanRow ? loanPenPaid : pen;
 
     const isPaid = totalRem === 0 && (totalExpBase > 0 || totalColl > 0);
     const isPending = totalRem > 0;
@@ -204,13 +224,13 @@ export const ReportManager: React.FC = () => {
     // Field 2: Extra submitted amount over expected
     // Field 3: Grand total payout = extra submitted + total amount (sum of collected + interest)
     const extraSubmitted = Math.max(0, totalColl - totalExpBase);
-    const totalWithExtra = isLoanOnly ? 0 : (totalColl > 0 ? totalColl + totalInt : 0);
-    const totalPayable = isLoanOnly ? 0 : (totalExpWithInterest + extraSubmitted);
+    const totalWithExtra = isLoanRow ? 0 : (totalColl > 0 ? totalColl + totalInt : 0);
+    const totalPayable = isLoanRow ? 0 : (totalExpWithInterest + extraSubmitted);
 
     return {
       customer: cust,
       exp: totalExpBase,
-      expectedInterest: expectedBishiInterest,
+      expectedInterest: isLoanRow ? 0 : expectedBishiInterest,
       totalExpWithInterest,
       coll: totalColl,
       rem: totalRem,
@@ -234,7 +254,15 @@ export const ReportManager: React.FC = () => {
     if (statusFilter === 'PENDING') return r.isPending;
     if (statusFilter === 'PAID') return r.isPaid;
     if (statusFilter === 'PARTIAL') return r.isPartial;
-    if (statusFilter === 'LOAN_ONLY') return r.customer.bishiType === 'LOAN_ONLY' || r.customer.hasLoan;
+    if (statusFilter === 'LOAN_ONLY') return r.customer.bishiType === 'LOAN_ONLY' || Boolean(r.customer.hasLoan) || Boolean(r.custLoan);
+    if (bishiFilter !== 'ALL') {
+      if (bishiFilter === 'LOAN_ONLY') {
+        const isBorrower = r.customer.bishiType === 'LOAN_ONLY' || Boolean(r.customer.hasLoan) || Boolean(r.custLoan);
+        if (!isBorrower) return false;
+      } else if (r.customer.bishiType !== bishiFilter) {
+        return false;
+      }
+    }
     return true;
   });
 
@@ -1068,6 +1096,7 @@ export const ReportManager: React.FC = () => {
                         <td className="p-3 print:p-1 print:px-1 text-center border border-emerald-800">{language === 'EN' ? 'TOTAL' : 'एकूण'}</td>
                         <td className="p-3 print:p-1 print:px-1.5 border border-emerald-800">{language === 'EN' ? 'Accounts:' : 'खातेदार:'} {filteredRows.length}</td>
                         <td className="p-3 print:p-1 border border-emerald-800">-</td>
+                        <td className="p-3 print:p-1 border border-emerald-800 text-center">-</td>
                         <td className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 text-emerald-200 font-black">
                           <div className="text-sm font-black text-white">{formatCurrency(grandTotalExpWithInterest, language)}</div>
                           <div className="text-[10px] text-emerald-300 font-bold">

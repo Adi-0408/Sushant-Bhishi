@@ -9,7 +9,7 @@ const BACKUP_STORAGE_KEYS = {
 };
 
 export const DEFAULT_DRIVE_WEBHOOK_URL =
-  'https://script.google.com/macros/s/AKfycbzzOpsGVm-NuTwdQapw0OcOx9O64mALEAEzX3z1_wZ_rb12zmtDd98-IO97wE2PMSCK/exec';
+  'https://script.google.com/macros/s/AKfycbybW-_aNSk94PQQGgAhYV_lsc1OvDRIE45XvSe4Q6MLBanBtJDoD08f7ASvKfxt4HXH/exec';
 
 /**
  * Pushes backup metadata (timestamp, filename, record counts) to Firestore stats/summary
@@ -156,6 +156,9 @@ export const AutoBackupService = {
       if (parsed.lastDailyFirstOpenDate) config.lastDailyFirstOpenDate = parsed.lastDailyFirstOpenDate;
       if (parsed.lastDailyFirstOpenTimestamp) config.lastDailyFirstOpenTimestamp = parsed.lastDailyFirstOpenTimestamp;
       if (parsed.lastDailyFirstOpenFilename) config.lastDailyFirstOpenFilename = parsed.lastDailyFirstOpenFilename;
+      if (!config.driveWebhookUrl || config.driveWebhookUrl.includes('AKfycbzzOpsGVm-NuTwdQapw0OcOx9O64mALEAEzX3z1_wZ_rb12zmtDd98-IO97wE2PMSCK')) {
+        config.driveWebhookUrl = DEFAULT_DRIVE_WEBHOOK_URL;
+      }
       return config;
     } catch {
       return DEFAULT_CONFIG;
