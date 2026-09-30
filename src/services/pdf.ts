@@ -418,21 +418,27 @@ export const generateReportPDF = async (
       totalPayable = 0;
     } else {
       const custColls = collections.filter((c) => c.customerId === cust.id);
+      let recordedColl = 0;
+      let recordedExtra = 0;
       custColls.forEach((c) => {
         exp += c.expectedAmount || 0;
-        coll += c.collectedAmount || 0;
+        recordedColl += c.collectedAmount || 0;
+        recordedExtra += c.extraAmount || 0;
         pen += c.penaltyAmount || 0;
       });
 
-      rem = Math.max(0, exp - coll);
+      const overpaymentSurplus = exp > 0 ? Math.max(0, recordedColl - exp) : 0;
+      const regularBishiColl = exp > 0 ? Math.min(recordedColl, exp) : recordedColl;
+      extraSubmitted = recordedExtra + overpaymentSurplus;
+      coll = regularBishiColl + extraSubmitted;
+      rem = Math.max(0, exp - regularBishiColl);
+
       const rate = cust.interestRate || (cust.modality === 'W' ? 2.5 : 10);
       expectedInterest = Math.round((exp * rate) / 100);
       totalExpWithInterest = exp + expectedInterest;
-      const bishiAmountForInt = exp > 0 ? Math.min(coll, exp) : coll;
-      int = Math.round((bishiAmountForInt * rate) / 100);
+      int = Math.round((regularBishiColl * rate) / 100);
 
-      extraSubmitted = Math.max(0, coll - exp);
-      const bishiGrossReturn = coll > 0 ? (coll + int) : totalExpWithInterest;
+      const bishiGrossReturn = coll > 0 ? (regularBishiColl + int + extraSubmitted) : totalExpWithInterest;
       loanDeduction = Math.min(bishiGrossReturn, unpaidLoan);
       totalWithExtra = bishiGrossReturn;
       totalPayable = totalExpWithInterest + extraSubmitted;

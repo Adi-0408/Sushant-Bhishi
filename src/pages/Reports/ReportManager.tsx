@@ -182,29 +182,33 @@ export const ReportManager: React.FC = () => {
     });
 
     let exp = 0;
-    let coll = 0;
+    let recordedColl = 0;
+    let recordedExtra = 0;
     let rem = 0;
-    let int = 0;
     let pen = 0;
 
     custColls.forEach((c) => {
-      const expAmt = c.expectedAmount || 0;
-      const collAmt = c.collectedAmount || 0;
-      exp += expAmt;
-      coll += collAmt;
+      exp += c.expectedAmount || 0;
+      recordedColl += c.collectedAmount || 0;
+      recordedExtra += c.extraAmount || 0;
       pen += c.penaltyAmount || 0;
     });
 
-    // Compute overall scheme remaining as (totalExpected − totalCollected).
-    // This correctly reflects overpayments and avoids inflating remaining
-    // by counting future unpaid installments that haven't been due yet.
-    rem = Math.max(0, exp - coll);
+    // Compute regular bishi deposit vs extra submitted:
+    // If recordedColl exceeds exp, the surplus is also overpayment extra
+    const overpaymentSurplus = exp > 0 ? Math.max(0, recordedColl - exp) : 0;
+    const regularBishiColl = exp > 0 ? Math.min(recordedColl, exp) : recordedColl;
+    const extraSubmitted = recordedExtra + overpaymentSurplus;
+    // Total deposited by customer across bishi and extra
+    const totalDeposited = regularBishiColl + extraSubmitted;
+
+    // Remaining scheme bishi
+    rem = Math.max(0, exp - regularBishiColl);
 
     // Interest is calculated STRICTLY on the regular Bishi collected amount (NEVER on extra amount)
     const effectiveCustRate = cust.interestRate || (cust.modality === 'W' ? 2.5 : 10);
     const expectedBishiInterest = cust.bishiType === 'LOAN_ONLY' ? 0 : Math.round((exp * effectiveCustRate) / 100);
-    const bishiAmountForInt = exp > 0 ? Math.min(coll, exp) : coll;
-    const bishiInterest = Math.round((bishiAmountForInt * effectiveCustRate) / 100);
+    const bishiInterest = Math.round((regularBishiColl * effectiveCustRate) / 100);
 
     const custLoans = loans.filter((l) => {
       if (l.customerId === cust.id) return true;
@@ -267,7 +271,7 @@ export const ReportManager: React.FC = () => {
 
     const totalExpBase = isLoanOnly ? (custLoan ? custLoan.principalAmount : (cust.amount || 0)) : exp;
     const totalExpWithInterest = isLoanOnly ? totalExpBase : (exp + expectedBishiInterest);
-    const totalColl = isLoanOnly ? loanPaid : coll;
+    const totalColl = isLoanOnly ? loanPaid : totalDeposited;
     const totalRem = isLoanOnly ? (custLoan ? custLoan.remainingAmount : 0) : rem;
     const totalInt = isLoanOnly ? loanIntPaid : bishiInterest;
     const totalPen = isLoanOnly ? loanPenPaid : pen;
@@ -276,14 +280,12 @@ export const ReportManager: React.FC = () => {
     const isPending = totalRem > 0;
     const isPartial = totalColl > 0 && totalRem > 0;
 
-    const extraSubmitted = Math.max(0, totalColl - totalExpBase);
-
     // Bishi gross return:
-    // If customer has made deposits, their return is coll + interest.
+    // Regular bishi deposited + interest earned + extra submitted (customer's own savings/trust)
     // If customer hasn't deposited yet in this period, scheme target return is totalExpWithInterest.
     const bishiGrossReturn = isLoanOnly
       ? 0
-      : (totalColl > 0 ? (totalColl + totalInt) : totalExpWithInterest);
+      : (totalColl > 0 ? (regularBishiColl + totalInt + extraSubmitted) : totalExpWithInterest);
 
     // Unpaid loan deduction against bishi return
     const loanDeduction = isLoanOnly ? 0 : Math.min(bishiGrossReturn, unpaidLoan);
@@ -1132,17 +1134,17 @@ export const ReportManager: React.FC = () => {
                               {isLoanOnly ? '-' : bishiGrossReturn > 0 ? formatCurrency(bishiGrossReturn, language) : '-'}
                             </span>
                             {!isLoanOnly && unpaidLoan > 0 && bishiGrossReturn > 0 && (
-                              <div className="text-[10px] text-rose-600 font-extrabold leading-tight mt-0.5">
-                                <div>
-                                  - कर्ज: {formatCurrency(unpaidLoan, language)}
-                                </div>
+                              <div className="flex flex-col items-center text-[10px] mt-1 space-y-0.5">
+                                <span className="text-rose-600 font-bold">
+                                  - {language === 'EN' ? 'Loan: ' : 'कर्ज: '}{formatCurrency(unpaidLoan, language)}
+                                </span>
                                 {unpaidLoan >= bishiGrossReturn ? (
-                                  <span className="text-amber-700 block text-[9px] font-bold">
-                                    (बाकी: {formatCurrency(unpaidLoan - bishiGrossReturn, language)})
+                                  <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-black text-[9px] border border-amber-300">
+                                    {language === 'EN' ? 'Bal Due: ' : 'बाकी देणे: '}{formatCurrency(unpaidLoan - bishiGrossReturn, language)}
                                   </span>
                                 ) : (
-                                  <span className="text-emerald-700 block text-[9px] font-bold">
-                                    (हात: {formatCurrency(netReturn, language)})
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 font-black text-[10px] border border-emerald-300">
+                                    {language === 'EN' ? 'Net: ' : 'हात परतावा: '}{formatCurrency(netReturn, language)}
                                   </span>
                                 )}
                               </div>
@@ -1319,25 +1321,22 @@ export const ReportManager: React.FC = () => {
                             {isLoanOnly ? (
                               <span className="text-slate-400 font-bold">-</span>
                             ) : bishiGrossReturn > 0 ? (
-                              <div className="flex flex-col items-end text-right whitespace-nowrap">
-                                <span className="font-black text-emerald-950 text-xs sm:text-sm">
+                              <div className="flex flex-col items-end text-right whitespace-nowrap leading-tight">
+                                <span className="font-black text-slate-900 text-xs sm:text-sm">
                                   {formatCurrency(bishiGrossReturn, language)}
                                 </span>
                                 {unpaidLoan > 0 && (
-                                  <div className="text-[10px] text-rose-600 font-extrabold mt-0.5 leading-tight text-right whitespace-nowrap">
-                                    <span>
-                                      {language === 'EN' ? '- Loan: ' : '- कर्ज: '}
-                                      {formatCurrency(unpaidLoan, language)}
+                                  <div className="flex flex-col items-end text-[10px] mt-1 space-y-0.5 whitespace-nowrap">
+                                    <span className="text-rose-600 font-bold">
+                                      - {language === 'EN' ? 'Loan: ' : 'कर्ज: '}{formatCurrency(unpaidLoan, language)}
                                     </span>
                                     {unpaidLoan >= bishiGrossReturn ? (
-                                      <span className="text-amber-700 block text-[9px] font-bold whitespace-nowrap">
-                                        ({language === 'EN' ? 'Bal Due: ' : 'बाकी देणे: '}
-                                        {formatCurrency(unpaidLoan - bishiGrossReturn, language)})
+                                      <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-black text-[9px] border border-amber-300">
+                                        {language === 'EN' ? 'Bal Due: ' : 'बाकी देणे: '}{formatCurrency(unpaidLoan - bishiGrossReturn, language)}
                                       </span>
                                     ) : (
-                                      <span className="text-emerald-700 block text-[9px] font-bold whitespace-nowrap">
-                                        ({language === 'EN' ? 'Net Payout: ' : 'हात परतावा: '}
-                                        {formatCurrency(netReturn, language)})
+                                      <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 font-black text-[10px] border border-emerald-300">
+                                        {language === 'EN' ? 'Net Payout: ' : 'हात परतावा: '}{formatCurrency(netReturn, language)}
                                       </span>
                                     )}
                                   </div>
