@@ -2,10 +2,18 @@ name: Automated Daily 11 PM Cloud Backup
 
 on:
   schedule:
-    # 17:30 UTC = 23:00 (11:00 PM) Indian Standard Time (IST) every day
-    - cron: '30 17 * * *'
-  # Allows manual 1-click trigger from GitHub Actions tab anytime
+    # Staggered schedules around 11:00 PM IST (UTC + 5:30) using off-peak minutes
+    # to avoid GitHub Actions runner queue congestion (which causes 2-4 hour delays on :00 and :30)
+    # 17:25 UTC = 22:55 (10:55 PM) IST
+    - cron: '25 17 * * *'
+    # 17:35 UTC = 23:05 (11:05 PM) IST (fallback)
+    - cron: '35 17 * * *'
+    # 18:05 UTC = 23:35 (11:35 PM) IST (catch-up)
+    - cron: '5 18 * * *'
+  # Allows manual 1-click trigger from GitHub Actions tab or external webhook anytime
   workflow_dispatch:
+  repository_dispatch:
+    types: [trigger-backup]
 
 jobs:
   cloud-backup:

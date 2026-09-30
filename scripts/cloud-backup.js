@@ -45,6 +45,34 @@ async function fetchCollection(db, collectionName) {
   }
 }
 
+function getTargetDailySlotDate(now = new Date()) {
+  const istFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+  });
+  const parts = istFormatter.formatToParts(now);
+  const getPart = (type) => parts.find((p) => p.type === type)?.value;
+  const hour = parseInt(getPart('hour') || '23', 10);
+  const year = parseInt(getPart('year'), 10);
+  const month = parseInt(getPart('month'), 10) - 1;
+  const day = parseInt(getPart('day'), 10);
+
+  // If the run occurs between 00:00 and 11:59 AM IST (e.g. overnight runner delay),
+  // it is fulfilling the 11:00 PM slot for the previous calendar day.
+  const d = new Date(Date.UTC(year, month, day));
+  if (hour < 12) {
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 async function runCloudBackup() {
   const startTime = Date.now();
   console.log('====================================================');
@@ -56,6 +84,21 @@ async function runCloudBackup() {
   console.log('📡 Connecting to Cloud Firestore...');
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+
+  const targetSlotDate = getTargetDailySlotDate(new Date());
+  console.log(`🎯 Target Daily 11 PM Slot Date: ${targetSlotDate}`);
+
+  // Idempotency check: Skip if already completed for this slot
+  try {
+    const statsRef = doc(db, 'stats', 'summary');
+    const statsSnap = await getDoc(statsRef);
+    if (statsSnap.exists() && statsSnap.data().lastDaily11pmDate === targetSlotDate) {
+      console.log(`✅ Daily 11 PM backup for ${targetSlotDate} is already completed. Skipping redundant run.`);
+      process.exit(0);
+    }
+  } catch (checkErr) {
+    console.warn('⚠️ Idempotency check warning:', checkErr.message);
+  }
 
   let backupData = null;
   let customersCount = 0;
@@ -218,14 +261,8 @@ async function runCloudBackup() {
   const isoNow = now.toISOString();
   backupData.exportedAt = isoNow;
 
-  // Determine current IST date (YYYY-MM-DD)
-  const istFormatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  const dateStr = istFormatter.format(now);
+  // Use the verified target 11 PM slot date (YYYY-MM-DD)
+  const dateStr = targetSlotDate;
   const filename = `Sushant_Bishi_AutoBackup_11PM_${dateStr}_2300.json`;
 
   const jsonString = JSON.stringify(backupData);

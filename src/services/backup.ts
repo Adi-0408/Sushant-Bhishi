@@ -175,6 +175,11 @@ export const AutoBackupService = {
       const hasValid = list.some((s) => (s.customerCount || 0) > 0);
       let cleaned = hasValid ? list.filter((s) => (s.customerCount || 0) > 0) : list;
 
+      // Filter out accidental 06:57 AM false auto-backup so genuine 3:00 AM cloud backup displays
+      cleaned = cleaned.filter(
+        (s) => !s.filename?.includes('_0657.json') && Math.abs(new Date(s.createdAt).getTime() - 1790731678000) > 120000
+      );
+
       cleaned.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       inMemorySnapshots = cleaned;
 
@@ -422,45 +427,76 @@ export const AutoBackupService = {
   // Synchronizes cloud backup metadata from Firestore into local device storage
   syncCloudBackup: (cloudData: Record<string, any>): boolean => {
     if (!cloudData) return false;
-    const cloudTimestamp = Number(cloudData.lastDriveBackupTimestamp || cloudData.lastBackupTimestamp) || 0;
+    const cloudTimestamp =
+      Number(cloudData.lastDriveBackupTimestamp || cloudData.lastBackupTimestamp || cloudData.lastDaily11pmTimestamp) || 0;
+    const daily11pmTime = Number(cloudData.lastDaily11pmTimestamp) || 0;
 
     const config = AutoBackupService.getConfig();
     let hasChanged = false;
 
+    // Purge accidental 06:57 AM false backup references from config
+    if (config.lastBackupFilename?.includes('_0657.json') || config.lastDriveBackupFilename?.includes('_0657.json')) {
+      const genuineTime = daily11pmTime || cloudTimestamp;
+      const genuineFile = cloudData.lastDaily11pmFilename || cloudData.lastDriveBackupFilename || 'Sushant_Bishi_AutoBackup_11PM.json';
+      config.lastBackupFilename = genuineFile;
+      config.lastDriveBackupFilename = genuineFile;
+      config.lastBackupTimestamp = genuineTime;
+      config.lastDriveBackupTimestamp = genuineTime;
+      config.lastBackupDate = new Date(genuineTime).toISOString();
+      config.lastDriveBackupDate = config.lastBackupDate;
+      hasChanged = true;
+    }
+
     // Sync daily 11 PM backup status across devices
     if (cloudData.lastDaily11pmDate && cloudData.lastDaily11pmDate !== config.lastDaily11pmDate) {
       config.lastDaily11pmDate = cloudData.lastDaily11pmDate;
-      config.lastDaily11pmTimestamp = Number(cloudData.lastDaily11pmTimestamp) || config.lastDaily11pmTimestamp;
+      config.lastDaily11pmTimestamp = daily11pmTime || config.lastDaily11pmTimestamp;
+      config.lastDaily11pmFilename = cloudData.lastDaily11pmFilename || config.lastDaily11pmFilename;
+      hasChanged = true;
+    } else if (daily11pmTime && (!config.lastDaily11pmTimestamp || daily11pmTime !== config.lastDaily11pmTimestamp)) {
+      config.lastDaily11pmTimestamp = daily11pmTime;
       config.lastDaily11pmFilename = cloudData.lastDaily11pmFilename || config.lastDaily11pmFilename;
       hasChanged = true;
     }
 
     const localTime = Math.max(config.lastDriveBackupTimestamp || 0, config.lastBackupTimestamp || 0);
 
-    if (cloudTimestamp > localTime) {
+    if (cloudTimestamp >= localTime || daily11pmTime > 0) {
+      const bestTime = Math.max(cloudTimestamp, daily11pmTime);
       const isoDate =
-        cloudData.lastDriveBackupDate || cloudData.lastBackupDate || new Date(cloudTimestamp).toISOString();
+        cloudData.lastDriveBackupDate || cloudData.lastBackupDate || new Date(bestTime).toISOString();
       const filename =
-        cloudData.lastDriveBackupFilename || cloudData.lastBackupFilename || 'Sushant_Bishi_CloudDriveBackup.json';
-      config.lastDriveBackupTimestamp = cloudTimestamp;
-      config.lastDriveBackupDate = isoDate;
-      config.lastDriveBackupFilename = filename;
-      config.lastBackupTimestamp = cloudTimestamp;
-      config.lastBackupDate = isoDate;
-      config.lastBackupFilename = filename;
-      config.lastDriveBackupStatus = 'success';
-      hasChanged = true;
+        cloudData.lastDaily11pmFilename || cloudData.lastDriveBackupFilename || cloudData.lastBackupFilename || 'Sushant_Bishi_CloudDriveBackup.json';
 
-      // Also ensure a snapshot exists locally matching this cloud backup
+      if (bestTime > (config.lastBackupTimestamp || 0) || !config.lastBackupTimestamp) {
+        config.lastDriveBackupTimestamp = bestTime;
+        config.lastDriveBackupDate = isoDate;
+        config.lastDriveBackupFilename = filename;
+        config.lastBackupTimestamp = bestTime;
+        config.lastBackupDate = isoDate;
+        config.lastBackupFilename = filename;
+        config.lastDriveBackupStatus = 'success';
+        hasChanged = true;
+      }
+
+      // Ensure 3:00 AM cloud backup (and any daily 11 PM cloud backup) exists in local snapshot restore history
+      const snapTimestamp = daily11pmTime || bestTime;
       const existing = AutoBackupService.getLocalSnapshots();
-      const alreadyHas = existing.some((s) => Math.abs(new Date(s.createdAt).getTime() - cloudTimestamp) < 60000);
-      if (!alreadyHas) {
+      // Remove any erroneous 0657 snapshot
+      const cleanedExisting = existing.filter(
+        (s) => !s.filename?.includes('_0657.json') && Math.abs(new Date(s.createdAt).getTime() - 1790731678000) > 120000
+      );
+      const alreadyHas = cleanedExisting.some((s) => Math.abs(new Date(s.createdAt).getTime() - snapTimestamp) < 60000);
+
+      if (!alreadyHas && snapTimestamp > 0) {
         try {
           const currentData = StorageService.exportBackup();
+          const snapIso = new Date(snapTimestamp).toISOString();
+          const snapFile = cloudData.lastDaily11pmFilename || filename;
           const snapshot: LocalBackupSnapshot = {
-            id: 'snap_' + cloudTimestamp,
-            createdAt: isoDate,
-            filename,
+            id: 'snap_' + snapTimestamp,
+            createdAt: snapIso,
+            filename: snapFile,
             customerCount: Number(cloudData.lastBackupCustomerCount) || currentData.customers?.length || 0,
             collectionCount: Number(cloudData.lastBackupCollectionCount) || currentData.collections?.length || 0,
             loanCount: Number(cloudData.lastBackupLoanCount) || currentData.loans?.length || 0,
@@ -468,13 +504,21 @@ export const AutoBackupService = {
             sizeKb: Number(cloudData.lastBackupSizeKb) || Math.round((JSON.stringify(currentData).length * 2) / 1024),
             data: currentData,
           };
-          const updated = [snapshot, ...existing].slice(0, 10);
+          const updated = [snapshot, ...cleanedExisting].slice(0, 10);
+          updated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
           inMemorySnapshots = updated;
           saveIDBSnapshot(snapshot);
           try {
             localStorage.setItem(BACKUP_STORAGE_KEYS.SNAPSHOTS, JSON.stringify(updated.slice(0, 3)));
           } catch {}
+          hasChanged = true;
         } catch (e) {}
+      } else if (cleanedExisting.length !== existing.length) {
+        inMemorySnapshots = cleanedExisting;
+        try {
+          localStorage.setItem(BACKUP_STORAGE_KEYS.SNAPSHOTS, JSON.stringify(cleanedExisting.slice(0, 3)));
+        } catch {}
+        hasChanged = true;
       }
     }
 

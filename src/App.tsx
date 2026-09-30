@@ -37,8 +37,11 @@ const ProtectedLayout: React.FC = () => {
   useEffect(() => {
     if (!currentAdmin) return;
 
-    // Check shortly after app loads (runs if last night's 11 PM backup was missed)
-    const timeoutId = setTimeout(() => {
+    const performScheduledCheck = async () => {
+      // 1. Sync latest cloud backup metadata from Firestore first (so cloud runs like 11 PM / 3 AM are recognized)
+      await AutoBackupService.fetchCloudBackupMetadata();
+
+      // 2. Only run auto backup if genuinely missed everywhere
       AutoBackupService.checkAndRunAutoBackup((snapshot, filename) => {
         showToast(
           language === 'EN'
@@ -47,20 +50,14 @@ const ProtectedLayout: React.FC = () => {
           'success'
         );
       });
-    }, 2500);
+    };
+
+    // Check shortly after app loads (runs if last night's 11 PM backup was genuinely missed)
+    const timeoutId = setTimeout(performScheduledCheck, 2500);
 
     // Periodic check every 60 seconds while the app remains open
     // Guarantees that at exactly 11:00 PM, the daily backup triggers immediately!
-    const intervalId = setInterval(() => {
-      AutoBackupService.checkAndRunAutoBackup((snapshot, filename) => {
-        showToast(
-          language === 'EN'
-            ? `Daily 11:00 PM backup saved: ${filename}`
-            : `दररोज रात्री ११:०० वा. चा स्वयंचलित बॅकअप सेव्ह झाला: ${filename}`,
-          'success'
-        );
-      });
-    }, 60 * 1000);
+    const intervalId = setInterval(performScheduledCheck, 60 * 1000);
 
     return () => {
       clearTimeout(timeoutId);

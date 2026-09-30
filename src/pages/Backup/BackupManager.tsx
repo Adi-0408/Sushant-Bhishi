@@ -103,11 +103,9 @@ export const BackupManager: React.FC = () => {
 
     syncFromCurrent();
 
-    // Check cloud backup metadata from Firestore on mount so Laptop immediately gets Mobile's latest backup time!
-    AutoBackupService.fetchCloudBackupMetadata().then((hasUpdate) => {
-      if (hasUpdate) {
-        syncFromCurrent();
-      }
+    // Check cloud backup metadata from Firestore on mount so Laptop immediately gets Mobile/Cloud latest backup time!
+    AutoBackupService.fetchCloudBackupMetadata().finally(() => {
+      syncFromCurrent();
     });
 
     // Listen for realtime backup synchronization events from AppContext
