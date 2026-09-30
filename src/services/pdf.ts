@@ -359,14 +359,22 @@ export const generateReportPDF = async (
   let totalPayableSum = 0;
   let totalExtraSum = 0;
   let totalReturnSum = 0;
+  let totalUnpaidLoanSum = 0;
 
   const allLoans = StorageService.getLoans();
   const allLoanPayments = StorageService.getLoanPayments();
   const isLoanContext = bishiName.includes('कर्ज') || bishiName.toLowerCase().includes('loan') || title.includes('कर्ज') || title.toLowerCase().includes('loan');
 
   const rows = customers.map((cust) => {
+    const custLoans = allLoans.filter((l) => l.customerId === cust.id || (cust.accountNumber && l.accountNumber === cust.accountNumber));
+    let unpaidLoan = 0;
+    custLoans.forEach((l) => {
+      if (l.status === 'COMPLETED' || l.status === 'CLOSED') return;
+      unpaidLoan += Math.max(0, l.remainingAmount ?? (l.principalAmount - (l.paidAmount || 0)));
+    });
+
     const custLoan = (isLoanContext || cust.hasLoan || cust.bishiType === 'LOAN_ONLY')
-      ? allLoans.find((l) => l.customerId === cust.id || (cust.accountNumber && l.accountNumber === cust.accountNumber))
+      ? custLoans[0] || null
       : null;
     const isLoanAccount = cust.bishiType === 'LOAN_ONLY' || (isLoanContext && (Boolean(cust.hasLoan) || Boolean(custLoan)));
 
@@ -380,6 +388,7 @@ export const generateReportPDF = async (
     let extraSubmitted = 0;
     let totalWithExtra = 0;
     let totalPayable = 0;
+    let loanDeduction = 0;
 
     if (isLoanAccount) {
       const custLps = allLoanPayments.filter((lp) => lp.customerId === cust.id || (cust.accountNumber && lp.accountNumber === cust.accountNumber));
@@ -423,7 +432,9 @@ export const generateReportPDF = async (
       int = Math.round((bishiAmountForInt * rate) / 100);
 
       extraSubmitted = Math.max(0, coll - exp);
-      totalWithExtra = coll > 0 ? coll + int : 0;
+      const bishiReturnBeforeLoan = coll > 0 ? coll + int : 0;
+      loanDeduction = Math.min(bishiReturnBeforeLoan, unpaidLoan);
+      totalWithExtra = Math.max(0, bishiReturnBeforeLoan - loanDeduction);
       totalPayable = totalExpWithInterest + extraSubmitted;
     }
 
@@ -434,6 +445,7 @@ export const generateReportPDF = async (
     totalRem += rem;
     totalInt += int;
     totalPen += pen;
+    totalUnpaidLoanSum += unpaidLoan;
     totalPayableSum += totalPayable;
     totalExtraSum += extraSubmitted;
     totalReturnSum += totalWithExtra;
@@ -456,6 +468,8 @@ export const generateReportPDF = async (
       rem,
       int,
       pen,
+      unpaidLoan,
+      loanDeduction,
       extraSubmitted,
       totalWithExtra,
       totalPayable,
@@ -505,9 +519,15 @@ export const generateReportPDF = async (
               ${r.pen > 0 ? `<span style="color: #b45309;">दंड: ${formatCurrency(r.pen, lang)}</span>` : ''}
               ${r.int === 0 && r.pen === 0 ? '-' : ''}
             </td>
+            <td style="padding: 5px 5px; border: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #92400e; background: #fffbeb;">
+              ${r.unpaidLoan > 0 ? formatCurrency(r.unpaidLoan, lang) : '-'}
+            </td>
             <td style="padding: 5px 5px; border: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #1e3a8a; background: #f0f7ff;">${r.totalPayable > 0 ? formatCurrency(r.totalPayable, lang) : '-'}</td>
             <td style="padding: 5px 5px; border: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #6b21a8; background: #faf5ff;">${r.extraSubmitted > 0 ? `+${formatCurrency(r.extraSubmitted, lang)}` : '-'}</td>
-            <td style="padding: 5px 5px; border: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #166534; background: #f0fdf4;">${r.totalWithExtra > 0 ? formatCurrency(r.totalWithExtra, lang) : '-'}</td>
+            <td style="padding: 5px 5px; border: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #166534; background: #f0fdf4;">
+              ${r.totalWithExtra > 0 ? formatCurrency(r.totalWithExtra, lang) : '-'}
+              ${r.loanDeduction > 0 ? `<br><span style="font-size: 7.5px; color: #be123c;">(-कर्ज: ${formatCurrency(r.loanDeduction, lang)})</span>` : ''}
+            </td>
             <td style="padding: 5px 4px; border: 1px solid #e2e8f0; text-align: center;">
               <span style="display: inline-block; padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: 800; background: ${r.statusBg}; color: ${r.statusColor};">
                 ${r.statusText}
@@ -523,17 +543,18 @@ export const generateReportPDF = async (
         <tr style="background: #064e3b; color: #ffffff; font-weight: 900;">
           <th style="padding: 6px 3px; border: 1px solid #065f46; text-align: center; width: 25px;">#</th>
           <th style="padding: 6px 4px; border: 1px solid #065f46; text-align: center; width: 55px;">${lang === 'EN' ? 'Acc No.' : 'खाते क्र.'}</th>
-          <th style="padding: 6px 6px; border: 1px solid #065f46; text-align: left; width: 120px;">${lang === 'EN' ? 'Customer Name' : 'खातेदाराचे नाव'}</th>
+          <th style="padding: 6px 6px; border: 1px solid #065f46; text-align: left; width: 110px;">${lang === 'EN' ? 'Customer Name' : 'खातेदाराचे नाव'}</th>
           <th style="padding: 6px 4px; border: 1px solid #065f46; text-align: center; width: 75px;">${lang === 'EN' ? 'Mobile' : 'मोबाईल'}</th>
-          <th style="padding: 6px 4px; border: 1px solid #065f46; text-align: center; width: 70px;">${lang === 'EN' ? 'Scheme' : 'योजना'}</th>
-          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 95px;">${lang === 'EN' ? 'Total (with Int) (₹)' : 'एकूण भिशी (व्याजासह) (₹)'}</th>
-          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 75px;">${lang === 'EN' ? 'Collected (₹)' : 'जमा (₹)'}</th>
-          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 75px;">${lang === 'EN' ? 'Remaining (₹)' : 'बाकी (₹)'}</th>
-          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 75px;">${lang === 'EN' ? 'Int/Pen (₹)' : 'व्याज/दंड (₹)'}</th>
-          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 75px; background: #043628;">${lang === 'EN' ? 'Total Payable (₹)' : 'एकूण देय (₹)'}</th>
-          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 70px; background: #043628;">${lang === 'EN' ? 'Extra (₹)' : 'जादा जमा (₹)'}</th>
-          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 80px; background: #043628;">${lang === 'EN' ? 'Total Return (₹)' : 'एकूण परतावा (₹)'}</th>
-          <th style="padding: 6px 4px; border: 1px solid #065f46; text-align: center; width: 65px;">${lang === 'EN' ? 'Status' : 'स्थिती'}</th>
+          <th style="padding: 6px 4px; border: 1px solid #065f46; text-align: center; width: 65px;">${lang === 'EN' ? 'Scheme' : 'योजना'}</th>
+          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 90px;">${lang === 'EN' ? 'Total (with Int) (₹)' : 'एकूण भिशी (व्याजासह) (₹)'}</th>
+          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 70px;">${lang === 'EN' ? 'Collected (₹)' : 'जमा (₹)'}</th>
+          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 70px;">${lang === 'EN' ? 'Remaining (₹)' : 'बाकी (₹)'}</th>
+          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 70px;">${lang === 'EN' ? 'Int/Pen (₹)' : 'व्याज/दंड (₹)'}</th>
+          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 70px; background: #043628;">${lang === 'EN' ? 'Loan (₹)' : 'कर्ज (₹)'}</th>
+          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 70px; background: #043628;">${lang === 'EN' ? 'Total Payable (₹)' : 'एकूण देय (₹)'}</th>
+          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 65px; background: #043628;">${lang === 'EN' ? 'Extra (₹)' : 'जादा जमा (₹)'}</th>
+          <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 75px; background: #043628;">${lang === 'EN' ? 'Total Return (₹)' : 'एकूण परतावा (₹)'}</th>
+          <th style="padding: 6px 4px; border: 1px solid #065f46; text-align: center; width: 60px;">${lang === 'EN' ? 'Status' : 'स्थिती'}</th>
         </tr>
       </thead>
     `;
@@ -604,6 +625,7 @@ export const generateReportPDF = async (
             <td style="padding: 6px 5px; border: 1px solid #065f46; text-align: right;">${formatCurrency(totalColl, lang)}</td>
             <td style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; color: #fecdd3;">${formatCurrency(totalRem, lang)}</td>
             <td style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; color: #fed7aa;">${formatCurrency(totalInt + totalPen, lang)}</td>
+            <td style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; color: #fef08a;">${totalUnpaidLoanSum > 0 ? formatCurrency(totalUnpaidLoanSum, lang) : '-'}</td>
             <td style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; color: #dbeafe;">${formatCurrency(totalPayableSum, lang)}</td>
             <td style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; color: #f3e8ff;">${formatCurrency(totalExtraSum, lang)}</td>
             <td style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; color: #bbf7d0;">${formatCurrency(totalReturnSum, lang)}</td>

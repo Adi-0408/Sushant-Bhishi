@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { BishiType, CollectionEntry, Modality } from '../../types';
 import { StorageService } from '../../services/db';
@@ -137,6 +138,8 @@ export const ReportManager: React.FC = () => {
   let grandRemaining = 0;
   let grandInterest = 0;
   let grandPenalty = 0;
+  let grandUnpaidLoan = 0;
+  let grandLoanDeduction = 0;
   let grandPayable = 0;
   let grandExtraSubmitted = 0;
   let grandFinalReturn = 0;
@@ -180,7 +183,19 @@ export const ReportManager: React.FC = () => {
     const bishiAmountForInt = exp > 0 ? Math.min(coll, exp) : coll;
     const bishiInterest = Math.round((bishiAmountForInt * effectiveCustRate) / 100);
 
-    const custLoan = loans.find((l) => l.customerId === cust.id || (cust.accountNumber && l.accountNumber === cust.accountNumber));
+    const custLoans = loans.filter((l) => l.customerId === cust.id || (cust.accountNumber && l.accountNumber === cust.accountNumber));
+    const custLoan = custLoans.find((l) => l.status === 'ACTIVE')
+      || [...custLoans].sort((a, b) => (b.updatedAt || b.issueDate || '').localeCompare(a.updatedAt || a.issueDate || ''))[0]
+      || null;
+
+    // Total unpaid/remaining loan for this customer across all active/pending loans
+    const unpaidLoan = custLoans.reduce((sum, l) => {
+      if (l.status === 'COMPLETED' || l.status === 'CLOSED') return sum;
+      return sum + Math.max(0, l.remainingAmount || 0);
+    }, 0);
+    const totalPrincipalLoan = custLoans.reduce((sum, l) => sum + (l.principalAmount || 0), 0);
+    const hasLoan = custLoans.length > 0 || Boolean(cust.hasLoan) || cust.bishiType === 'LOAN_ONLY';
+
     const custLoanPayments = loanPayments.filter((lp) => {
       if (lp.customerId !== cust.id && !(cust.accountNumber && lp.accountNumber === cust.accountNumber)) return false;
       return isDateInPeriod(lp.paymentDate, timePeriodFilter);
@@ -223,8 +238,12 @@ export const ReportManager: React.FC = () => {
     // Field 1: Total payable to customer with interest (scheme target payout)
     // Field 2: Extra submitted amount over expected
     // Field 3: Grand total payout = extra submitted + total amount (sum of collected + interest)
+    // CRITICAL USER REQUIREMENT:
+    // If that customer has unpaid loan, the loan amount should be taken from the bhishi amount at the end of the bhishi!
     const extraSubmitted = Math.max(0, totalColl - totalExpBase);
-    const totalWithExtra = isLoanRow ? 0 : (totalColl > 0 ? totalColl + totalInt : 0);
+    const bishiReturnBeforeLoan = isLoanRow ? 0 : (totalColl > 0 ? totalColl + totalInt : 0);
+    const loanDeduction = isLoanRow ? 0 : Math.min(bishiReturnBeforeLoan, unpaidLoan);
+    const totalWithExtra = Math.max(0, bishiReturnBeforeLoan - loanDeduction);
     const totalPayable = isLoanRow ? 0 : (totalExpWithInterest + extraSubmitted);
 
     return {
@@ -242,6 +261,11 @@ export const ReportManager: React.FC = () => {
       loanPaid,
       loanIntPaid,
       custLoan,
+      hasLoan,
+      unpaidLoan,
+      totalPrincipalLoan,
+      loanDeduction,
+      bishiReturnBeforeLoan,
       totalPayable,
       extraSubmitted,
       totalWithExtra,
@@ -274,6 +298,8 @@ export const ReportManager: React.FC = () => {
     grandRemaining += r.rem;
     grandInterest += r.int;
     grandPenalty += r.pen;
+    grandUnpaidLoan += r.unpaidLoan;
+    grandLoanDeduction += r.loanDeduction;
     grandPayable += r.totalPayable;
     grandExtraSubmitted += r.extraSubmitted;
     grandFinalReturn += r.totalWithExtra;
@@ -935,7 +961,7 @@ export const ReportManager: React.FC = () => {
               <>
                 {/* Mobile Cards View (< md screens, hidden in print) */}
                 <div className="block md:hidden print:hidden space-y-3 p-3 bg-slate-50/50">
-                  {filteredRows.map(({ customer: cust, exp, expectedInterest, totalExpWithInterest, coll, rem, int, pen, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
+                  {filteredRows.map(({ customer: cust, exp, expectedInterest, totalExpWithInterest, coll, rem, int, pen, hasLoan, unpaidLoan, totalPrincipalLoan, loanDeduction, bishiReturnBeforeLoan, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
                     <div key={cust.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                         <div className="flex items-center space-x-2">
@@ -989,8 +1015,24 @@ export const ReportManager: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* 3 New Fields in Mobile Card */}
-                      <div className="bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100 grid grid-cols-3 gap-2 text-center text-xs">
+                      {/* 4 Fields in Mobile Card */}
+                      <div className="bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                        <div>
+                          <span className="text-[9px] text-amber-800 font-extrabold block">
+                            {language === 'EN' ? 'Loan (Unpaid)' : 'कर्ज (बाकी)'}
+                          </span>
+                          <span className="font-black text-amber-900">
+                            {unpaidLoan > 0 ? (
+                              <Link to={`/customers/${cust.id}`} className="underline hover:text-amber-700">
+                                {formatCurrency(unpaidLoan, language)}
+                              </Link>
+                            ) : hasLoan ? (
+                              '₹0'
+                            ) : (
+                              '-'
+                            )}
+                          </span>
+                        </div>
                         <div>
                           <span className="text-[9px] text-slate-500 font-bold block">
                             {language === 'EN' ? 'Total Payable' : 'एकूण देय'}
@@ -1014,6 +1056,11 @@ export const ReportManager: React.FC = () => {
                           <span className="font-black text-emerald-800">
                             {totalWithExtra > 0 ? formatCurrency(totalWithExtra, language) : '-'}
                           </span>
+                          {loanDeduction > 0 && (
+                            <span className="text-[9px] text-rose-600 font-bold block">
+                              (-कर्ज: {formatCurrency(loanDeduction, language)})
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1034,6 +1081,7 @@ export const ReportManager: React.FC = () => {
                         <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800">{t.colCollectedAmount}</th>
                         <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800">{t.colRemainingAmount}</th>
                         <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800">{language === 'EN' ? 'Interest/Penalty (₹)' : 'व्याज/दंड (₹)'}</th>
+                        <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 bg-amber-950/40 print:bg-amber-950/20">{language === 'EN' ? 'Loan (₹)' : 'कर्ज (₹)'}</th>
                         <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 bg-emerald-950/40 print:bg-emerald-950/20">{language === 'EN' ? 'Total Payable (₹)' : 'एकूण देय (₹)'}</th>
                         <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 bg-emerald-950/40 print:bg-emerald-950/20">{language === 'EN' ? 'Extra Submitted (₹)' : 'जादा जमा (₹)'}</th>
                         <th className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 bg-emerald-950/40 print:bg-emerald-950/20">{language === 'EN' ? 'Total Return (₹)' : 'एकूण परतावा (₹)'}</th>
@@ -1041,7 +1089,7 @@ export const ReportManager: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 font-medium">
-                      {filteredRows.map(({ customer: cust, exp, expectedInterest, totalExpWithInterest, coll, rem, int, pen, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
+                      {filteredRows.map(({ customer: cust, exp, expectedInterest, totalExpWithInterest, coll, rem, int, pen, hasLoan, unpaidLoan, totalPrincipalLoan, loanDeduction, bishiReturnBeforeLoan, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
                         <tr key={cust.id} className="hover:bg-slate-50 transition-colors odd:bg-white even:bg-slate-50/50 break-inside-avoid">
                           <td className="p-3 print:p-1 text-center font-bold text-slate-700 border border-slate-300">{idx + 1}</td>
                           <td className="p-3 print:p-1 print:px-1 text-center font-extrabold text-slate-900 border border-slate-300">{cust.accountNumber}</td>
@@ -1061,6 +1109,33 @@ export const ReportManager: React.FC = () => {
                             {pen > 0 && <div className="text-amber-800 font-bold">{language === 'EN' ? 'Pen: ' : 'दंड: '}{formatCurrency(pen, language)}</div>}
                             {int === 0 && pen === 0 && '-'}
                           </td>
+                          <td className="p-3 print:p-1 print:px-1 text-right border border-slate-300 bg-amber-50/20">
+                            {unpaidLoan > 0 ? (
+                              <Link
+                                to={`/customers/${cust.id}`}
+                                className="group block hover:opacity-80 transition-opacity"
+                                title={language === 'EN' ? 'Click to view / pay loan' : 'कर्ज पाहण्यासाठी किंवा परतफेड करण्यासाठी क्लिक करा'}
+                              >
+                                <div className="font-extrabold text-amber-900 group-hover:text-amber-700 underline decoration-amber-300">
+                                  {formatCurrency(unpaidLoan, language)}
+                                </div>
+                                <div className="text-[10px] text-amber-700 font-semibold print:text-[7px]">
+                                  {totalPrincipalLoan > unpaidLoan
+                                    ? `${language === 'EN' ? 'Bal: ' : 'शिल्लक: '}${formatCurrency(unpaidLoan, language)}`
+                                    : (language === 'EN' ? 'Unpaid' : 'बाकी कर्ज')}
+                                </div>
+                              </Link>
+                            ) : hasLoan ? (
+                              <div>
+                                <span className="font-bold text-emerald-700 text-xs">₹0</span>
+                                <span className="block text-[9px] text-emerald-600 font-bold print:text-[7px]">
+                                  {language === 'EN' ? '✅ Paid' : '✅ पूर्ण फेड'}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 font-bold">-</span>
+                            )}
+                          </td>
                           <td className="p-3 print:p-1 print:px-1 text-right font-bold text-blue-900 border border-slate-300 bg-blue-50/20">
                             {totalPayable > 0 ? formatCurrency(totalPayable, language) : '-'}
                           </td>
@@ -1072,7 +1147,25 @@ export const ReportManager: React.FC = () => {
                             ) : '-'}
                           </td>
                           <td className="p-3 print:p-1 print:px-1 text-right font-black text-emerald-800 border border-slate-300 bg-emerald-50/30">
-                            {totalWithExtra > 0 ? formatCurrency(totalWithExtra, language) : '-'}
+                            {totalWithExtra > 0 ? (
+                              <div>
+                                <div>{formatCurrency(totalWithExtra, language)}</div>
+                                {loanDeduction > 0 && (
+                                  <div className="text-[9px] text-rose-600 font-extrabold print:text-[7px]">
+                                    ({language === 'EN' ? '-Loan: ' : '-कर्ज: '}{formatCurrency(loanDeduction, language)})
+                                  </div>
+                                )}
+                              </div>
+                            ) : bishiReturnBeforeLoan > 0 && loanDeduction >= bishiReturnBeforeLoan ? (
+                              <div>
+                                <span className="text-slate-700 font-bold">₹0</span>
+                                <div className="text-[9px] text-rose-600 font-extrabold print:text-[7px]">
+                                  ({language === 'EN' ? 'Adjusted in loan' : 'कर्जात वर्ग'})
+                                </div>
+                              </div>
+                            ) : (
+                              '-'
+                            )}
                           </td>
                           <td className="p-3 print:p-1 print:px-1 text-center border border-slate-300">
                             <span
@@ -1109,6 +1202,9 @@ export const ReportManager: React.FC = () => {
                           {grandInterest > 0 && <div>{language === 'EN' ? 'Int: ' : 'व्याज: '}{formatCurrency(grandInterest, language)}</div>}
                           {grandPenalty > 0 && <div>{language === 'EN' ? 'Pen: ' : 'दंड: '}{formatCurrency(grandPenalty, language)}</div>}
                           {grandInterest === 0 && grandPenalty === 0 && '-'}
+                        </td>
+                        <td className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 text-amber-200 font-black">
+                          {grandUnpaidLoan > 0 ? formatCurrency(grandUnpaidLoan, language) : '-'}
                         </td>
                         <td className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 text-blue-200 font-black">
                           {formatCurrency(grandPayable, language)}

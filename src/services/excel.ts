@@ -206,6 +206,8 @@ export const exportGeneralReportToExcel = (
     extraSubmitted?: number;
     totalWithExtra?: number;
     isPaid: boolean;
+    unpaidLoan?: number;
+    loanDeduction?: number;
   }[]
 ) => {
   const tableRowsHtml = rows
@@ -218,6 +220,8 @@ export const exportGeneralReportToExcel = (
         const payableAmt = r.totalPayable !== undefined ? r.totalPayable : (totalExpWithInt + (r.extraSubmitted || 0));
         const extraAmt = r.extraSubmitted || 0;
         const returnAmt = r.totalWithExtra !== undefined ? r.totalWithExtra : (r.coll + intAmt);
+        const loanAmt = r.unpaidLoan || 0;
+        const loanDed = r.loanDeduction || 0;
 
         return `
         <tr>
@@ -233,9 +237,10 @@ export const exportGeneralReportToExcel = (
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #15803d;">${r.coll}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #be123c;">${r.rem}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; color: #1d4ed8;">${intAmt > 0 ? intAmt : '-'}</td>
+          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #92400e; background-color: #fffbeb;">${loanAmt > 0 ? loanAmt : '-'}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #1e3a8a;">${payableAmt > 0 ? payableAmt : '-'}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #581c87;">${extraAmt > 0 ? `+${extraAmt}` : '-'}</td>
-          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #166534; background-color: #f0fdf4;">${returnAmt > 0 ? returnAmt : '-'}</td>
+          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #166534; background-color: #f0fdf4;">${returnAmt > 0 ? returnAmt : '-'}${loanDed > 0 ? ` (-कर्ज: ${loanDed})` : ''}</td>
           <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${r.isPaid ? 'पूर्ण जमा' : r.coll > 0 ? 'अंशतः जमा' : 'बाकी'}</td>
         </tr>
       `;
@@ -252,6 +257,7 @@ export const exportGeneralReportToExcel = (
   const totalColl = rows.reduce((a, r) => a + r.coll, 0);
   const totalRem = rows.reduce((a, r) => a + r.rem, 0);
   const totalInt = rows.reduce((a, r) => a + (r.int || 0), 0);
+  const totalUnpaidLoan = rows.reduce((a, r) => a + (r.unpaidLoan || 0), 0);
   const totalPayable = rows.reduce((a, r) => {
     const rate = r.customer.interestRate || (r.customer.modality === 'W' ? 2.5 : 10);
     const expWithInt = r.totalExpWithInterest ?? (r.exp + Math.round((r.exp * rate) / 100));
@@ -290,6 +296,7 @@ export const exportGeneralReportToExcel = (
             <th>जमा (₹)</th>
             <th>बाकी (₹)</th>
             <th>जमा व्याज (₹)</th>
+            <th>कर्ज (₹)</th>
             <th>एकूण देय (₹)</th>
             <th>जादा जमा (₹)</th>
             <th>एकूण परतावा (₹)</th>
@@ -308,6 +315,7 @@ export const exportGeneralReportToExcel = (
             <td style="text-align:right;">${totalColl}</td>
             <td style="text-align:right;">${totalRem}</td>
             <td style="text-align:right;">${totalInt}</td>
+            <td style="text-align:right; font-weight:bold; color:#fde68a;">${totalUnpaidLoan > 0 ? totalUnpaidLoan : '-'}</td>
             <td style="text-align:right;">${totalPayable}</td>
             <td style="text-align:right;">${totalExtra}</td>
             <td style="text-align:right; font-weight:bold; color:#a7f3d0;">${totalReturn}</td>
