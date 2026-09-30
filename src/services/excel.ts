@@ -240,7 +240,7 @@ export const exportGeneralReportToExcel = (
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #92400e; background-color: #fffbeb;">${loanAmt > 0 ? loanAmt : '-'}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #1e3a8a;">${payableAmt > 0 ? payableAmt : '-'}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #581c87;">${extraAmt > 0 ? `+${extraAmt}` : '-'}</td>
-          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #166534; background-color: #f0fdf4;">${returnAmt > 0 ? returnAmt : '-'}${loanDed > 0 ? ` (-कर्ज: ${loanDed})` : ''}</td>
+          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #166534; background-color: #f0fdf4;">${returnAmt > 0 ? (loanAmt > 0 ? `${returnAmt} (-कर्ज: ${loanAmt}${loanAmt >= returnAmt ? ` | बाकी: ${loanAmt - returnAmt}` : ` | हात: ${returnAmt - loanAmt}`})` : returnAmt) : '-'}</td>
           <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${r.isPaid ? 'पूर्ण जमा' : r.coll > 0 ? 'अंशतः जमा' : 'बाकी'}</td>
         </tr>
       `;

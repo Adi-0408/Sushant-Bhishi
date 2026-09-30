@@ -93,7 +93,29 @@ export const ReportManager: React.FC = () => {
     if (activeOffice !== 'ALL' && c.officeId !== activeOffice) return false;
     if (bishiFilter !== 'ALL') {
       if (bishiFilter === 'LOAN_ONLY') {
-        const isBorrower = c.bishiType === 'LOAN_ONLY' || Boolean(c.hasLoan) || loans.some((l) => (l.customerId === c.id || (c.accountNumber && l.accountNumber === c.accountNumber)));
+        const isBorrower =
+          c.bishiType === 'LOAN_ONLY' ||
+          Boolean(c.hasLoan) ||
+          loans.some((l) => {
+            if (l.customerId === c.id) return true;
+            if (!c.accountNumber || !l.accountNumber) return false;
+            const strA = String(c.accountNumber).trim();
+            const strB = String(l.accountNumber).trim();
+            if (strA === strB) return true;
+            const numA = Number(strA);
+            const numB = Number(strB);
+            return !isNaN(numA) && !isNaN(numB) && numA === numB;
+          }) ||
+          loanPayments.some((lp) => {
+            if (lp.customerId === c.id) return true;
+            if (!c.accountNumber || !lp.accountNumber) return false;
+            const strA = String(c.accountNumber).trim();
+            const strB = String(lp.accountNumber).trim();
+            if (strA === strB) return true;
+            const numA = Number(strA);
+            const numB = Number(strB);
+            return !isNaN(numA) && !isNaN(numB) && numA === numB;
+          });
         if (!isBorrower) return false;
       } else if (c.bishiType !== bishiFilter) {
         return false;
@@ -142,6 +164,7 @@ export const ReportManager: React.FC = () => {
   let grandLoanDeduction = 0;
   let grandPayable = 0;
   let grandExtraSubmitted = 0;
+  let grandGrossReturn = 0;
   let grandFinalReturn = 0;
 
   const allRows = (summarySearch.trim() ? customers : officeCustomers).map((cust) => {
@@ -183,7 +206,17 @@ export const ReportManager: React.FC = () => {
     const bishiAmountForInt = exp > 0 ? Math.min(coll, exp) : coll;
     const bishiInterest = Math.round((bishiAmountForInt * effectiveCustRate) / 100);
 
-    const custLoans = loans.filter((l) => l.customerId === cust.id || (cust.accountNumber && l.accountNumber === cust.accountNumber));
+    const custLoans = loans.filter((l) => {
+      if (l.customerId === cust.id) return true;
+      if (!cust.accountNumber || !l.accountNumber) return false;
+      const strA = String(cust.accountNumber).trim();
+      const strB = String(l.accountNumber).trim();
+      if (strA === strB) return true;
+      const numA = Number(strA);
+      const numB = Number(strB);
+      return !isNaN(numA) && !isNaN(numB) && numA === numB;
+    });
+
     const custLoan = custLoans.find((l) => l.status === 'ACTIVE')
       || [...custLoans].sort((a, b) => (b.updatedAt || b.issueDate || '').localeCompare(a.updatedAt || a.issueDate || ''))[0]
       || null;
@@ -194,11 +227,16 @@ export const ReportManager: React.FC = () => {
       return sum + Math.max(0, l.remainingAmount || 0);
     }, 0);
     const totalPrincipalLoan = custLoans.reduce((sum, l) => sum + (l.principalAmount || 0), 0);
-    const hasLoan = custLoans.length > 0 || Boolean(cust.hasLoan) || cust.bishiType === 'LOAN_ONLY';
 
     const custLoanPayments = loanPayments.filter((lp) => {
-      if (lp.customerId !== cust.id && !(cust.accountNumber && lp.accountNumber === cust.accountNumber)) return false;
-      return isDateInPeriod(lp.paymentDate, timePeriodFilter);
+      if (lp.customerId === cust.id) return true;
+      if (!cust.accountNumber || !lp.accountNumber) return false;
+      const strA = String(cust.accountNumber).trim();
+      const strB = String(lp.accountNumber).trim();
+      if (strA === strB) return true;
+      const numA = Number(strA);
+      const numB = Number(strB);
+      return !isNaN(numA) && !isNaN(numB) && numA === numB;
     });
 
     let loanPaid = 0;
@@ -222,34 +260,41 @@ export const ReportManager: React.FC = () => {
       }
     }
 
-    const isLoanReport = bishiFilter === 'LOAN_ONLY' || statusFilter === 'LOAN_ONLY';
-    const isLoanRow = cust.bishiType === 'LOAN_ONLY' || (isLoanReport && (Boolean(cust.hasLoan) || Boolean(custLoan)));
-    const totalExpBase = isLoanRow ? (custLoan ? custLoan.principalAmount : (cust.bishiType === 'LOAN_ONLY' ? (cust.amount || 0) : 0)) : exp;
-    const totalExpWithInterest = isLoanRow ? totalExpBase : (exp + expectedBishiInterest);
-    const totalColl = isLoanRow ? loanPaid : coll;
-    const totalRem = isLoanRow ? (custLoan ? custLoan.remainingAmount : 0) : rem;
-    const totalInt = isLoanRow ? loanIntPaid : bishiInterest;
-    const totalPen = isLoanRow ? loanPenPaid : pen;
+    const hasLoan = custLoans.length > 0 || Boolean(cust.hasLoan) || cust.bishiType === 'LOAN_ONLY' || totalPrincipalLoan > 0 || loanPaid > 0;
+
+    // PURE loan-only customer (who does not belong to any regular bishi scheme)
+    const isLoanOnly = cust.bishiType === 'LOAN_ONLY';
+
+    const totalExpBase = isLoanOnly ? (custLoan ? custLoan.principalAmount : (cust.amount || 0)) : exp;
+    const totalExpWithInterest = isLoanOnly ? totalExpBase : (exp + expectedBishiInterest);
+    const totalColl = isLoanOnly ? loanPaid : coll;
+    const totalRem = isLoanOnly ? (custLoan ? custLoan.remainingAmount : 0) : rem;
+    const totalInt = isLoanOnly ? loanIntPaid : bishiInterest;
+    const totalPen = isLoanOnly ? loanPenPaid : pen;
 
     const isPaid = totalRem === 0 && (totalExpBase > 0 || totalColl > 0);
     const isPending = totalRem > 0;
     const isPartial = totalColl > 0 && totalRem > 0;
 
-    // Field 1: Total payable to customer with interest (scheme target payout)
-    // Field 2: Extra submitted amount over expected
-    // Field 3: Grand total payout = extra submitted + total amount (sum of collected + interest)
-    // CRITICAL USER REQUIREMENT:
-    // If that customer has unpaid loan, the loan amount should be taken from the bhishi amount at the end of the bhishi!
     const extraSubmitted = Math.max(0, totalColl - totalExpBase);
-    const bishiReturnBeforeLoan = isLoanRow ? 0 : (totalColl > 0 ? totalColl + totalInt : 0);
-    const loanDeduction = isLoanRow ? 0 : Math.min(bishiReturnBeforeLoan, unpaidLoan);
-    const totalWithExtra = Math.max(0, bishiReturnBeforeLoan - loanDeduction);
-    const totalPayable = isLoanRow ? 0 : (totalExpWithInterest + extraSubmitted);
+
+    // Bishi gross return:
+    // If customer has made deposits, their return is coll + interest.
+    // If customer hasn't deposited yet in this period, scheme target return is totalExpWithInterest.
+    const bishiGrossReturn = isLoanOnly
+      ? 0
+      : (totalColl > 0 ? (totalColl + totalInt) : totalExpWithInterest);
+
+    // Unpaid loan deduction against bishi return
+    const loanDeduction = isLoanOnly ? 0 : Math.min(bishiGrossReturn, unpaidLoan);
+    const netReturn = isLoanOnly ? 0 : Math.max(0, bishiGrossReturn - unpaidLoan);
+    const totalWithExtra = isLoanOnly ? 0 : bishiGrossReturn;
+    const totalPayable = isLoanOnly ? 0 : (totalExpWithInterest + extraSubmitted);
 
     return {
       customer: cust,
       exp: totalExpBase,
-      expectedInterest: isLoanRow ? 0 : expectedBishiInterest,
+      expectedInterest: isLoanOnly ? 0 : expectedBishiInterest,
       totalExpWithInterest,
       coll: totalColl,
       rem: totalRem,
@@ -258,6 +303,7 @@ export const ReportManager: React.FC = () => {
       isPaid,
       isPending,
       isPartial,
+      isLoanOnly,
       loanPaid,
       loanIntPaid,
       custLoan,
@@ -265,7 +311,8 @@ export const ReportManager: React.FC = () => {
       unpaidLoan,
       totalPrincipalLoan,
       loanDeduction,
-      bishiReturnBeforeLoan,
+      bishiGrossReturn,
+      netReturn,
       totalPayable,
       extraSubmitted,
       totalWithExtra,
@@ -278,10 +325,27 @@ export const ReportManager: React.FC = () => {
     if (statusFilter === 'PENDING') return r.isPending;
     if (statusFilter === 'PAID') return r.isPaid;
     if (statusFilter === 'PARTIAL') return r.isPartial;
-    if (statusFilter === 'LOAN_ONLY') return r.customer.bishiType === 'LOAN_ONLY' || Boolean(r.customer.hasLoan) || Boolean(r.custLoan);
+    if (statusFilter === 'LOAN_ONLY') {
+      return (
+        r.customer.bishiType === 'LOAN_ONLY' ||
+        Boolean(r.customer.hasLoan) ||
+        r.hasLoan ||
+        r.unpaidLoan > 0 ||
+        r.totalPrincipalLoan > 0 ||
+        r.loanPaid > 0 ||
+        Boolean(r.custLoan)
+      );
+    }
     if (bishiFilter !== 'ALL') {
       if (bishiFilter === 'LOAN_ONLY') {
-        const isBorrower = r.customer.bishiType === 'LOAN_ONLY' || Boolean(r.customer.hasLoan) || Boolean(r.custLoan);
+        const isBorrower =
+          r.customer.bishiType === 'LOAN_ONLY' ||
+          Boolean(r.customer.hasLoan) ||
+          r.hasLoan ||
+          r.unpaidLoan > 0 ||
+          r.totalPrincipalLoan > 0 ||
+          r.loanPaid > 0 ||
+          Boolean(r.custLoan);
         if (!isBorrower) return false;
       } else if (r.customer.bishiType !== bishiFilter) {
         return false;
@@ -302,7 +366,8 @@ export const ReportManager: React.FC = () => {
     grandLoanDeduction += r.loanDeduction;
     grandPayable += r.totalPayable;
     grandExtraSubmitted += r.extraSubmitted;
-    grandFinalReturn += r.totalWithExtra;
+    grandGrossReturn += r.bishiGrossReturn;
+    grandFinalReturn += r.netReturn;
   });
 
   const pendingCount = allRows.filter((r) => r.isPending).length;
@@ -939,10 +1004,12 @@ export const ReportManager: React.FC = () => {
                 {language === 'EN' ? 'Total Return / Payable' : 'एकूण परतावा / देय'}
               </span>
               <span className="text-xl font-black text-blue-950 mt-0.5 block">
-                {formatCurrency(grandFinalReturn, language)}
+                {formatCurrency(grandGrossReturn, language)}
               </span>
               <span className="text-[10px] font-semibold text-blue-700 block mt-0.5">
-                {language === 'EN' ? 'Earned Int: +' : 'जमा व्याज: +'}{formatCurrency(grandInterest, language)}
+                {grandLoanDeduction > 0
+                  ? `(${language === 'EN' ? 'Net after loan: ' : 'कर्ज वजा करून: '}${formatCurrency(grandFinalReturn, language)})`
+                  : `${language === 'EN' ? 'Earned Int: +' : 'जमा व्याज: +'}${formatCurrency(grandInterest, language)}`}
               </span>
             </div>
           </div>
@@ -961,7 +1028,7 @@ export const ReportManager: React.FC = () => {
               <>
                 {/* Mobile Cards View (< md screens, hidden in print) */}
                 <div className="block md:hidden print:hidden space-y-3 p-3 bg-slate-50/50">
-                  {filteredRows.map(({ customer: cust, exp, expectedInterest, totalExpWithInterest, coll, rem, int, pen, hasLoan, unpaidLoan, totalPrincipalLoan, loanDeduction, bishiReturnBeforeLoan, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
+                  {filteredRows.map(({ customer: cust, exp, expectedInterest, totalExpWithInterest, coll, rem, int, pen, hasLoan, unpaidLoan, totalPrincipalLoan, loanDeduction, bishiGrossReturn, netReturn, isLoanOnly, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
                     <div key={cust.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                         <div className="flex items-center space-x-2">
@@ -1054,11 +1121,20 @@ export const ReportManager: React.FC = () => {
                             {language === 'EN' ? 'Total Return' : 'एकूण परतावा'}
                           </span>
                           <span className="font-black text-emerald-800">
-                            {totalWithExtra > 0 ? formatCurrency(totalWithExtra, language) : '-'}
+                            {isLoanOnly ? '-' : bishiGrossReturn > 0 ? formatCurrency(bishiGrossReturn, language) : '-'}
                           </span>
-                          {loanDeduction > 0 && (
-                            <span className="text-[9px] text-rose-600 font-bold block">
-                              (-कर्ज: {formatCurrency(loanDeduction, language)})
+                          {!isLoanOnly && unpaidLoan > 0 && bishiGrossReturn > 0 && (
+                            <span className="text-[9px] text-rose-600 font-bold block leading-tight mt-0.5">
+                              - कर्ज: {formatCurrency(unpaidLoan, language)}
+                              {unpaidLoan >= bishiGrossReturn ? (
+                                <span className="text-amber-700 block text-[8px]">
+                                  (बाकी: {formatCurrency(unpaidLoan - bishiGrossReturn, language)})
+                                </span>
+                              ) : (
+                                <span className="text-emerald-700 block text-[8px]">
+                                  (हात: {formatCurrency(netReturn, language)})
+                                </span>
+                              )}
                             </span>
                           )}
                         </div>
@@ -1089,7 +1165,7 @@ export const ReportManager: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 font-medium">
-                      {filteredRows.map(({ customer: cust, exp, expectedInterest, totalExpWithInterest, coll, rem, int, pen, hasLoan, unpaidLoan, totalPrincipalLoan, loanDeduction, bishiReturnBeforeLoan, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
+                      {filteredRows.map(({ customer: cust, exp, expectedInterest, totalExpWithInterest, coll, rem, int, pen, hasLoan, unpaidLoan, totalPrincipalLoan, loanDeduction, bishiGrossReturn, netReturn, isLoanOnly, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
                         <tr key={cust.id} className="hover:bg-slate-50 transition-colors odd:bg-white even:bg-slate-50/50 break-inside-avoid">
                           <td className="p-3 print:p-1 text-center font-bold text-slate-700 border border-slate-300">{idx + 1}</td>
                           <td className="p-3 print:p-1 print:px-1 text-center font-extrabold text-slate-900 border border-slate-300">{cust.accountNumber}</td>
@@ -1147,24 +1223,35 @@ export const ReportManager: React.FC = () => {
                             ) : '-'}
                           </td>
                           <td className="p-3 print:p-1 print:px-1 text-right font-black text-emerald-800 border border-slate-300 bg-emerald-50/30">
-                            {totalWithExtra > 0 ? (
+                            {isLoanOnly ? (
+                              <span className="text-slate-400 font-bold">-</span>
+                            ) : bishiGrossReturn > 0 ? (
                               <div>
-                                <div>{formatCurrency(totalWithExtra, language)}</div>
-                                {loanDeduction > 0 && (
-                                  <div className="text-[9px] text-rose-600 font-extrabold print:text-[7px]">
-                                    ({language === 'EN' ? '-Loan: ' : '-कर्ज: '}{formatCurrency(loanDeduction, language)})
+                                <div className="font-black text-emerald-950 text-xs sm:text-sm">
+                                  {formatCurrency(bishiGrossReturn, language)}
+                                </div>
+                                {unpaidLoan > 0 && (
+                                  <div className="text-[10px] text-rose-600 font-extrabold print:text-[7px] mt-0.5 leading-tight">
+                                    <div>
+                                      {language === 'EN' ? '- Loan: ' : '- कर्ज: '}
+                                      {formatCurrency(unpaidLoan, language)}
+                                    </div>
+                                    {unpaidLoan >= bishiGrossReturn ? (
+                                      <span className="text-[9px] text-amber-700 font-bold print:text-[6px] block">
+                                        ({language === 'EN' ? 'Bal Due: ' : 'बाकी देणे: '}
+                                        {formatCurrency(unpaidLoan - bishiGrossReturn, language)})
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] text-emerald-700 font-bold print:text-[6px] block">
+                                        ({language === 'EN' ? 'Net Payout: ' : 'हात परतावा: '}
+                                        {formatCurrency(netReturn, language)})
+                                      </span>
+                                    )}
                                   </div>
                                 )}
                               </div>
-                            ) : bishiReturnBeforeLoan > 0 && loanDeduction >= bishiReturnBeforeLoan ? (
-                              <div>
-                                <span className="text-slate-700 font-bold">₹0</span>
-                                <div className="text-[9px] text-rose-600 font-extrabold print:text-[7px]">
-                                  ({language === 'EN' ? 'Adjusted in loan' : 'कर्जात वर्ग'})
-                                </div>
-                              </div>
                             ) : (
-                              '-'
+                              <span className="text-slate-400 font-bold">-</span>
                             )}
                           </td>
                           <td className="p-3 print:p-1 print:px-1 text-center border border-slate-300">
@@ -1213,7 +1300,12 @@ export const ReportManager: React.FC = () => {
                           {formatCurrency(grandExtraSubmitted, language)}
                         </td>
                         <td className="p-3 print:p-1 print:px-1 text-right border border-emerald-800 text-emerald-300 font-black">
-                          {formatCurrency(grandFinalReturn, language)}
+                          <div>{formatCurrency(grandGrossReturn, language)}</div>
+                          {grandLoanDeduction > 0 && (
+                            <div className="text-[10px] text-rose-300 font-bold">
+                              (-कर्ज: {formatCurrency(grandLoanDeduction, language)} | {language === 'EN' ? 'Net: ' : 'हात: '}{formatCurrency(grandFinalReturn, language)})
+                            </div>
+                          )}
                         </td>
                         <td className="p-3 print:p-1 text-center border border-emerald-800">-</td>
                       </tr>

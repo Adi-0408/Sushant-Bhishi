@@ -376,7 +376,7 @@ export const generateReportPDF = async (
     const custLoan = (isLoanContext || cust.hasLoan || cust.bishiType === 'LOAN_ONLY')
       ? custLoans[0] || null
       : null;
-    const isLoanAccount = cust.bishiType === 'LOAN_ONLY' || (isLoanContext && (Boolean(cust.hasLoan) || Boolean(custLoan)));
+    const isLoanAccount = cust.bishiType === 'LOAN_ONLY';
 
     let exp = 0;
     let coll = 0;
@@ -432,9 +432,9 @@ export const generateReportPDF = async (
       int = Math.round((bishiAmountForInt * rate) / 100);
 
       extraSubmitted = Math.max(0, coll - exp);
-      const bishiReturnBeforeLoan = coll > 0 ? coll + int : 0;
-      loanDeduction = Math.min(bishiReturnBeforeLoan, unpaidLoan);
-      totalWithExtra = Math.max(0, bishiReturnBeforeLoan - loanDeduction);
+      const bishiGrossReturn = coll > 0 ? (coll + int) : totalExpWithInterest;
+      loanDeduction = Math.min(bishiGrossReturn, unpaidLoan);
+      totalWithExtra = bishiGrossReturn;
       totalPayable = totalExpWithInterest + extraSubmitted;
     }
 
@@ -526,7 +526,11 @@ export const generateReportPDF = async (
             <td style="padding: 5px 5px; border: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #6b21a8; background: #faf5ff;">${r.extraSubmitted > 0 ? `+${formatCurrency(r.extraSubmitted, lang)}` : '-'}</td>
             <td style="padding: 5px 5px; border: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #166534; background: #f0fdf4;">
               ${r.totalWithExtra > 0 ? formatCurrency(r.totalWithExtra, lang) : '-'}
-              ${r.loanDeduction > 0 ? `<br><span style="font-size: 7.5px; color: #be123c;">(-कर्ज: ${formatCurrency(r.loanDeduction, lang)})</span>` : ''}
+              ${r.unpaidLoan > 0 && r.totalWithExtra > 0 ? (
+                r.unpaidLoan >= r.totalWithExtra
+                  ? `<br><span style="font-size: 7.5px; color: #be123c;">-कर्ज: ${formatCurrency(r.unpaidLoan, lang)} (बाकी: ${formatCurrency(r.unpaidLoan - r.totalWithExtra, lang)})</span>`
+                  : `<br><span style="font-size: 7.5px; color: #be123c;">-कर्ज: ${formatCurrency(r.unpaidLoan, lang)} (हात: ${formatCurrency(r.totalWithExtra - r.unpaidLoan, lang)})</span>`
+              ) : ''}
             </td>
             <td style="padding: 5px 4px; border: 1px solid #e2e8f0; text-align: center;">
               <span style="display: inline-block; padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: 800; background: ${r.statusBg}; color: ${r.statusColor};">
