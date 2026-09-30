@@ -93,7 +93,7 @@ const ProtectedLayout: React.FC = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col lg:pl-64 min-w-0 bg-[#F4F6F5]">
         <Header onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)} />
-        <main className="flex-1 p-3 sm:p-6 pb-6 max-w-7xl w-full mx-auto bg-[#F4F6F5]">
+        <main className="flex-1 p-3 sm:p-6 pb-6 max-w-[1600px] w-full mx-auto bg-[#F4F6F5] min-w-0 overflow-x-hidden">
           <div key={location.pathname} className="animate-page-enter">
             <Routes location={location}>
               <Route path="/dashboard" element={<Dashboard />} />
