@@ -388,6 +388,7 @@ export const AutoBackupService = {
         body: JSON.stringify({
           filename,
           data,
+          maxBackups: 10,
         }),
       });
 

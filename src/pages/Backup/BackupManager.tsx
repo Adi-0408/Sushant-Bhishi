@@ -27,8 +27,89 @@ import {
   Trash2,
   Smartphone,
   Check,
+  Code,
+  Copy,
 } from 'lucide-react';
 import { ModalPortal } from '../../components/common/ModalPortal';
+
+const APPS_SCRIPT_CODE = `/**
+ * SUSHANT BHISHI - GOOGLE DRIVE AUTO-BACKUP SCRIPT
+ * - Automatically saves database backups in folder: Sushant_Bishi_Backups
+ * - STRICT 10-FILE ROLLING LIMIT: Deletes the 1st (oldest) backup file
+ *   automatically when the 11th backup is uploaded!
+ */
+function doPost(e) {
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return respondJson({ status: 'error', success: false, message: 'No payload received' });
+    }
+    var payload = JSON.parse(e.postData.contents);
+    var data = payload.data || {};
+    var maxBackups = Number(payload.maxBackups) || 10;
+    var timestampStr = Utilities.formatDate(new Date(), 'Asia/Kolkata', 'yyyy-MM-dd_HHmm');
+    var filename = payload.filename || ('Sushant_Bishi_CloudDriveBackup_' + timestampStr + '.json');
+
+    var folderName = 'Sushant_Bishi_Backups';
+    var folders = DriveApp.getFoldersByName(folderName);
+    var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
+
+    var fileContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    var newFile = folder.createFile(filename, fileContent, MimeType.PLAIN_TEXT);
+
+    // Enforce 10-backup rolling limit:
+    var fileIterator = folder.getFiles();
+    var backupFiles = [];
+    while (fileIterator.hasNext()) {
+      var f = fileIterator.next();
+      var fName = f.getName();
+      if (fName.indexOf('Sushant_Bishi_') !== -1 || fName.toLowerCase().endsWith('.json')) {
+        backupFiles.push({ file: f, name: fName, created: f.getDateCreated().getTime() });
+      }
+    }
+
+    // Sort ascending (oldest first)
+    backupFiles.sort(function(a, b) {
+      return a.created !== b.created ? a.created - b.created : a.name.localeCompare(b.name);
+    });
+
+    // Delete oldest files if count exceeds 10
+    var deletedFiles = [];
+    while (backupFiles.length > maxBackups) {
+      var oldest = backupFiles.shift(); // 1st (oldest) file
+      try {
+        oldest.file.setTrashed(true);
+        deletedFiles.push(oldest.name);
+      } catch (err) {
+        Logger.log('Could not trash: ' + oldest.name);
+      }
+    }
+
+    return respondJson({
+      status: 'success',
+      success: true,
+      message: 'Backup uploaded. Kept latest ' + maxBackups + ' backups.',
+      fileId: newFile.getId(),
+      fileName: filename,
+      totalFilesInFolder: backupFiles.length,
+      deletedOldestFiles: deletedFiles
+    });
+  } catch (err) {
+    return respondJson({ status: 'error', success: false, message: err.toString() });
+  }
+}
+
+function doGet(e) {
+  return respondJson({
+    status: 'ok',
+    service: 'Sushant Bhishi Google Drive Backup Webhook',
+    maxBackupsLimit: 10,
+    policy: 'Strict rolling 10-backup limit. Deletes 1st (oldest) backup file after uploading 11th file.'
+  });
+}
+
+function respondJson(data) {
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+}`;
 
 export const BackupManager: React.FC = () => {
   const {
@@ -68,9 +149,21 @@ export const BackupManager: React.FC = () => {
   const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
   const [showDriveSettings, setShowDriveSettings] = useState(false);
   const [showNewDeviceRestore, setShowNewDeviceRestore] = useState(false);
+  const [showScriptCode, setShowScriptCode] = useState(false);
+  const [scriptCopied, setScriptCopied] = useState(false);
   const [customWebhookUrl, setCustomWebhookUrl] = useState(
     () => AutoBackupService.getConfig().driveWebhookUrl || DEFAULT_DRIVE_WEBHOOK_URL
   );
+
+  const handleCopyScript = () => {
+    navigator.clipboard.writeText(APPS_SCRIPT_CODE);
+    setScriptCopied(true);
+    showToast(
+      language === 'EN' ? 'Google Apps Script code copied to clipboard!' : 'गुगल अ‍ॅप्स स्क्रिप्ट कोड क्लिपबोर्डवर कॉपी झाला!',
+      'success'
+    );
+    setTimeout(() => setScriptCopied(false), 2500);
+  };
 
   useEffect(() => {
     const syncFromCurrent = () => {
@@ -577,8 +670,8 @@ export const BackupManager: React.FC = () => {
                   <div className="text-xs font-black text-[#10241E] truncate">
                     Sushant_Bishi_Backups
                   </div>
-                  <div className="text-[10px] text-emerald-700 font-bold">
-                    {language === 'EN' ? 'Safe Cloud Storage' : 'सुरक्षित क्लाउड साठा'}
+                  <div className="text-[10px] text-emerald-700 font-bold truncate">
+                    {language === 'EN' ? 'Max 10 Backups (Auto-prunes oldest)' : 'कमाल १० बॅकअप (जुनी फाईल आपोआप डिलीट)'}
                   </div>
                 </div>
               </div>
@@ -663,6 +756,65 @@ export const BackupManager: React.FC = () => {
               >
                 {language === 'EN' ? 'Save URL' : 'URL सेव्ह करा'}
               </button>
+            </div>
+
+            {/* Rolling 10-backup limit notice */}
+            <div className="p-3 bg-emerald-50/80 rounded-2xl border border-emerald-200 text-xs text-emerald-900 font-bold flex items-start space-x-2.5">
+              <ShieldCheck className="w-4 h-4 text-[#0F7A5C] shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-black text-[#0B5C45]">
+                  {language === 'EN'
+                    ? 'Automatic 10-File Rolling Retention:'
+                    : 'स्वयंचलित १०-फाईल्स रोलिंग नियम:'}
+                </div>
+                <div className="text-[11px] leading-relaxed text-[#0F7A5C]">
+                  {language === 'EN'
+                    ? 'Google Drive automatically maintains a strict maximum of 10 backup files. When the 11th backup is uploaded, the 1st (oldest) backup file is automatically deleted so your Drive folder stays clean and organized.'
+                    : 'गुगल ड्राईव्हवर जास्तीत जास्त १० बॅकअप फाईल्स ठेवल्या जातात. ११ वी फाईल अपलोड होताच पहिली (सर्वात जुनी) फाईल आपोआप डिलीट केली जाते, जेणेकरून ड्राईव्हवर गर्दी होत नाही.'}
+                </div>
+              </div>
+            </div>
+
+            {/* Expandable Script Code Box */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowScriptCode(!showScriptCode)}
+                className="text-xs font-black text-[#0F7A5C] hover:text-[#0B5C45] flex items-center space-x-1.5 cursor-pointer underline underline-offset-4"
+              >
+                <Code className="w-3.5 h-3.5" />
+                <span>
+                  {showScriptCode
+                    ? (language === 'EN' ? 'Hide Google Apps Script Code' : 'गुगल अ‍ॅप्स स्क्रिप्ट कोड लपवा')
+                    : (language === 'EN' ? 'View & Copy Google Apps Script Code (10-file rolling prune)' : 'गुगल अ‍ॅप्स स्क्रिप्ट कोड पहा व कॉपी करा (१० फाईल्स रोलिंग डिलीटसह)')}
+                </span>
+              </button>
+
+              {showScriptCode && (
+                <div className="mt-3 p-4 bg-slate-900 rounded-2xl text-slate-100 space-y-3 font-mono text-xs animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between border-b border-slate-700 pb-2">
+                    <span className="text-slate-400 text-[11px] font-sans font-bold">
+                      {language === 'EN' ? 'Google Apps Script (doPost & 10-file auto delete)' : 'गुगल अ‍ॅप्स स्क्रिप्ट कोड'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCopyScript}
+                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-sans font-black rounded-lg transition-colors flex items-center space-x-1 cursor-pointer"
+                    >
+                      {scriptCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      <span>{scriptCopied ? (language === 'EN' ? 'Copied!' : 'कॉपी झाले!') : (language === 'EN' ? 'Copy Code' : 'कोड कॉपी करा')}</span>
+                    </button>
+                  </div>
+                  <pre className="max-h-60 overflow-y-auto text-[11px] leading-relaxed text-emerald-300 font-mono">
+                    {APPS_SCRIPT_CODE}
+                  </pre>
+                  <p className="text-[10px] text-slate-400 font-sans leading-relaxed pt-1 border-t border-slate-800">
+                    {language === 'EN'
+                      ? 'Tip: Paste this script in your Google Apps Script editor (https://script.google.com), click "Deploy" -> "New deployment" as Web App (Execute as: Me, Access: Anyone), and save the Web App URL above.'
+                      : 'सूचना: हा कोड https://script.google.com वर जाऊन पेस्ट करा, "Deploy" -> "New deployment" करा (Execute as: Me, Access: Anyone), आणि वरील बॉक्समध्ये Web App URL सेव्ह करा.'}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -898,8 +1050,8 @@ export const BackupManager: React.FC = () => {
             </h4>
             <p className="text-[11px] text-[#5F6E68] font-medium leading-relaxed">
               {language === 'EN'
-                ? 'The software automatically saves your full database directly to Google Drive folder "Sushant_Bishi_Backups" every night at 11:00 PM — even if you or someone else performed manual backups earlier that day! Your client does not have to click anything or download any file.'
-                : 'सॉफ्टवेअर दररोज रात्री ११:०० वाजता आपोआप संपूर्ण डेटा गुगल ड्राईव्हवर सेव्ह करते — दिवसभरात मॅन्युअल बॅकअप घेतला तरीही रात्री ११ चा बॅकअप न चुकता होतो! क्लायंटला कोणतीही फाईल डाऊनलोड करावी लागत नाही.'}
+                ? 'The software automatically saves your full database directly to Google Drive folder "Sushant_Bishi_Backups" every night at 11:00 PM. It automatically retains only the 10 most recent backups — deleting the 1st (oldest) backup file whenever the 11th is uploaded so Google Drive stays clean and organized.'
+                : 'सॉफ्टवेअर दररोज रात्री ११:०० वाजता आपोआप संपूर्ण डेटा गुगल ड्राईव्हवर "Sushant_Bishi_Backups" फोल्डरमध्ये सेव्ह करते. गुगल ड्राईव्हवर नेहमी फक्त १० नवीनतम बॅकअप राहतात — ११ वी फाईल आल्यावर पहिली जुनी फाईल आपोआप डिलीट होते.'}
             </p>
           </div>
 

@@ -284,6 +284,7 @@ async function runCloudBackup() {
     body: JSON.stringify({
       filename,
       data: backupData,
+      maxBackups: 10,
     }),
   });
 
