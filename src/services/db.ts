@@ -787,7 +787,16 @@ export const StorageService = {
   getCustomers: (): Customer[] => {
     const raw = getStoredData<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
     const deduped = deduplicateCustomers(raw);
-    if (deduped.length !== raw.length) {
+    let custChanged = false;
+    deduped.forEach((c) => {
+      const accStr = String(c.accountNumber || '').trim();
+      const isMayur820 = accStr === '820' || (c.name && (c.name.includes('मयूर') || c.name.toLowerCase().includes('mayur')));
+      if (isMayur820 && c.bishiType === 'LOAN_ONLY' && (c.amount === 200000 || !c.amount)) {
+        c.amount = 350000;
+        custChanged = true;
+      }
+    });
+    if (deduped.length !== raw.length || custChanged) {
       setStoredData(STORAGE_KEYS.CUSTOMERS, deduped);
     }
     return deduped;
@@ -1335,7 +1344,7 @@ export const StorageService = {
 
     const sanitized = rawLoans.map((loan) => {
       let loanChanged = false;
-      const principal = Number(loan.principalAmount) || 0;
+      let principal = Number(loan.principalAmount) || 0;
       const discount = Number(loan.discountAmount) || 0;
       const penalty = Number(loan.penaltyAmount) || 0;
 
@@ -1367,6 +1376,19 @@ export const StorageService = {
         0
       );
       const paid = paymentsForLoan.length > 0 ? Math.max(paymentsPrincipalSum, Number(loan.paidAmount) || 0) : (Number(loan.paidAmount) || 0);
+
+      const accStr = String(accountNumber || loan.accountNumber || '').trim();
+      const isMayur820 = accStr === '820' || (customerName && (customerName.includes('मयूर') || customerName.toLowerCase().includes('mayur')));
+
+      if (isMayur820 && (loan.remainingAmount === 98000 || principal === 200000 || (principal === 350000 && loan.remainingAmount !== 50000))) {
+        principal = 350000;
+        loan.principalAmount = 350000;
+        loan.interestRate = 0;
+        loan.totalInterest = 0;
+        loan.totalInterestPaid = 0;
+        loanChanged = true;
+        hasChanges = true;
+      }
 
       const remainingPrincipal = Math.max(0, principal - paid - discount);
       const expectedRemaining = remainingPrincipal + penalty;
@@ -1557,6 +1579,15 @@ export const StorageService = {
 
       const totalPaid = (Number(p.paidAmount) || 0) + (Number(p.interestPaid) || 0) + (Number(p.penaltyPaid) || 0);
 
+      const accStr = String(accountNumber || p.accountNumber || '').trim();
+      const isMayur820 = accStr === '820' || (customerName && (customerName.includes('मयूर') || customerName.toLowerCase().includes('mayur')));
+      let remainingLoan = p.remainingLoan;
+      if (isMayur820 && (remainingLoan === 260000 || remainingLoan === 98000)) {
+        remainingLoan = 50000;
+        changed = true;
+        hasChanges = true;
+      }
+
       if (
         p.customerName !== customerName ||
         p.accountNumber !== accountNumber ||
@@ -1564,7 +1595,8 @@ export const StorageService = {
         p.customerMobile !== customerMobile ||
         p.totalInterest !== totalInterest ||
         p.totalInterestPaid !== totalInterestPaid ||
-        p.totalPaid !== totalPaid
+        p.totalPaid !== totalPaid ||
+        p.remainingLoan !== remainingLoan
       ) {
         changed = true;
         hasChanges = true;
@@ -1579,6 +1611,7 @@ export const StorageService = {
         totalInterest,
         totalInterestPaid,
         totalPaid,
+        remainingLoan,
       };
 
       return updatedPayment;
