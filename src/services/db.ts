@@ -905,9 +905,15 @@ export const StorageService = {
             }
           }
         } else {
+          const newRate = typeof customers[index].interestRate === 'number' && !isNaN(customers[index].interestRate)
+            ? customers[index].interestRate
+            : (customers[index].modality === 'W' ? 2.5 : 10);
+
           const updatedColls = allColls.map((c) => {
             if (c.customerId === id || (oldCustomer.accountNumber && c.accountNumber === oldCustomer.accountNumber)) {
               collsChanged = true;
+              const bishiCol = Math.min(c.collectedAmount || 0, c.expectedAmount || 0);
+              const intAmt = bishiCol > 0 ? Math.round((bishiCol * newRate) / 100) : 0;
               return {
                 ...c,
                 customerId: id,
@@ -915,6 +921,8 @@ export const StorageService = {
                 accountNumber: customers[index].accountNumber,
                 officeId: customers[index].officeId,
                 bishiType: customers[index].bishiType,
+                historicalInterestRate: newRate,
+                interestAmount: intAmt,
               };
             }
             return c;
@@ -1393,9 +1401,10 @@ export const StorageService = {
       const remainingPrincipal = Math.max(0, principal - paid - discount);
       const expectedRemaining = remainingPrincipal + penalty;
 
+      const rate = Number(loan.interestRate) || 0;
       const accruedInterest = calculateLoanTotalAccruedInterest(loan);
-      const initialInterest = Math.round((principal * (loan.interestRate || 0)) / 100);
-      const totalInterest = Math.max(Number(loan.totalInterest) || 0, accruedInterest, initialInterest);
+      const initialInterest = Math.round((principal * rate) / 100);
+      const totalInterest = rate === 0 ? 0 : Math.max(initialInterest, accruedInterest);
       const dueInterest = Math.max(0, totalInterest - totalInterestPaid);
 
       let status = loan.status;
@@ -1490,7 +1499,7 @@ export const StorageService = {
     const principal = Number(loanData.principalAmount) || 0;
     const rate = Number(loanData.interestRate) || 0;
     const initialInterest = Math.round((principal * rate) / 100);
-    const totalInterest = Number(loanData.totalInterest) > 0 ? Number(loanData.totalInterest) : initialInterest;
+    const totalInterest = rate === 0 ? 0 : (Number(loanData.totalInterest) > 0 ? Number(loanData.totalInterest) : initialInterest);
 
     const allLoanPayments = getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []);
     const paymentsForLoan = allLoanPayments.filter(

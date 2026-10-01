@@ -889,7 +889,9 @@ export const CustomerDetail: React.FC = () => {
                   </td>
                   <td className="p-3.5 print:py-1 print:px-1.5 text-right text-slate-700 print:text-[8.5px]">
                     {(() => {
-                      const entryRate = customer.interestRate || (customer.modality === 'W' ? 2.5 : 10);
+                      const entryRate = typeof customer.interestRate === 'number' && !isNaN(customer.interestRate)
+                        ? customer.interestRate
+                        : (customer.modality === 'W' ? 2.5 : 10);
                       const bishiCollected = Math.min(entry.collectedAmount || 0, entry.expectedAmount || 0);
                       const calcInt = bishiCollected > 0 ? Math.round((bishiCollected * entryRate) / 100) : 0;
                       return formatCurrency(calcInt, language);

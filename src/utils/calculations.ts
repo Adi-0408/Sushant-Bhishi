@@ -166,7 +166,7 @@ export const calculateCustomerFinancials = (
 
   // Effective interest rate for bishi (from customer or default for modality)
   const effectiveRate =
-    typeof customer.interestRate === 'number' && customer.interestRate > 0
+    typeof customer.interestRate === 'number' && !isNaN(customer.interestRate)
       ? customer.interestRate
       : (customer.modality === 'W' ? 2.5 : 10);
 
@@ -466,12 +466,20 @@ export const reconcileCustomerInstallments = (
     if (existing) {
       // Check if metadata or dates need refreshing
       const isPaid = existing.status === 'PAID';
+      const custRate = typeof customer.interestRate === 'number' && !isNaN(customer.interestRate)
+        ? customer.interestRate
+        : (customer.modality === 'W' ? 2.5 : 10);
+      const bishiCollected = Math.min(existing.collectedAmount || 0, existing.expectedAmount || 0);
+      const expectedInterestAmount = bishiCollected > 0 ? Math.round((bishiCollected * custRate) / 100) : 0;
+
       const needsUpdate =
         existing.customerName !== customer.name ||
         existing.accountNumber !== customer.accountNumber ||
         existing.bishiType !== customer.bishiType ||
         existing.officeId !== customer.officeId ||
         existing.periodLabel !== expectedLabel ||
+        existing.historicalInterestRate !== custRate ||
+        existing.interestAmount !== expectedInterestAmount ||
         (!isPaid && (existing.expectedAmount !== expAmount || existing.dueDate !== expectedDueDate));
 
       if (needsUpdate) {
@@ -493,6 +501,8 @@ export const reconcileCustomerInstallments = (
           dueDate: isPaid ? existing.dueDate : expectedDueDate,
           expectedAmount: newExpected,
           remainingAmount: newRemaining,
+          historicalInterestRate: custRate,
+          interestAmount: expectedInterestAmount,
           status: newStatus,
           updatedAt: new Date().toISOString(),
         });

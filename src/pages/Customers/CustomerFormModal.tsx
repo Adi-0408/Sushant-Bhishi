@@ -333,11 +333,11 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
         // Update Loan if applicable
         if (shouldHaveLoan && principalNum > 0) {
           const principal = principalNum;
-          const rate = Number(loanInterestRate) || 2;
+          const rate = loanInterestRate !== '' ? Number(loanInterestRate) : (existingLoan ? (Number(existingLoan.interestRate) || 0) : 2);
           const effectiveDate = loanIssueDate || bishiDate;
           const months = calculateElapsedMonths(effectiveDate);
           const monthlyInterest = Math.round((principal * rate) / 100);
-          const totalInterest = Math.max(monthlyInterest, months * monthlyInterest);
+          const totalInterest = rate > 0 ? Math.max(monthlyInterest, months * monthlyInterest) : 0;
 
           const paidPrin = loanPaidPrincipal !== '' ? Math.max(0, Number(loanPaidPrincipal) || 0) : (existingLoan ? (Number(existingLoan.paidAmount) || 0) : 0);
           const paidInt = loanPaidInterest !== '' ? Math.max(0, Number(loanPaidInterest) || 0) : (existingLoan ? (Number(existingLoan.totalInterestPaid) || 0) : 0);
@@ -425,6 +425,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
         const dateChanged = editingCustomer.bishiDate !== bishiDate;
         const modalityChanged = editingCustomer.modality !== modality;
         const amountChanged = Number(editingCustomer.amount) !== Number(amount);
+        const interestChanged = Number(editingCustomer.interestRate) !== Number(interestRate);
 
         if (bishiType !== 'LOAN_ONLY') {
           const allColls = StorageService.getCollections();
@@ -439,7 +440,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             targetInstallments
           );
 
-          if (reconciliation.hasChanges || dateChanged || modalityChanged || amountChanged) {
+          if (reconciliation.hasChanges || dateChanged || modalityChanged || amountChanged || interestChanged) {
             if (reconciliation.updatedCollections.length > 0) {
               StorageService.saveCollectionsBatch(reconciliation.updatedCollections);
             }

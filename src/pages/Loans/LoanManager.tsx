@@ -53,11 +53,11 @@ export const LoanManager: React.FC = () => {
     if (!editingLoan) return;
 
     const principal = Number(editPrincipal) || editingLoan.principalAmount;
-    const rate = Number(editRate) || editingLoan.interestRate;
+    const rate = editRate !== '' ? Number(editRate) : (Number(editingLoan.interestRate) || 0);
     const issueDate = editIssueDate || editingLoan.issueDate;
     const months = calculateElapsedMonths(issueDate);
     const monthlyInterest = Math.round((principal * rate) / 100);
-    const totalInterest = Math.max(monthlyInterest, months * monthlyInterest);
+    const totalInterest = rate > 0 ? Math.max(monthlyInterest, months * monthlyInterest) : 0;
     const paid = Number(editingLoan.paidAmount) || 0;
     const discount = Number(editingLoan.discountAmount) || 0;
     const penalty = Number(editingLoan.penaltyAmount) || 0;

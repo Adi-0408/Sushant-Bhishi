@@ -206,7 +206,9 @@ export const ReportManager: React.FC = () => {
     rem = Math.max(0, exp - regularBishiColl);
 
     // Interest is calculated STRICTLY on the regular Bishi collected amount (NEVER on extra amount)
-    const effectiveCustRate = cust.interestRate || (cust.modality === 'W' ? 2.5 : 10);
+    const effectiveCustRate = typeof cust.interestRate === 'number' && !isNaN(cust.interestRate)
+      ? cust.interestRate
+      : (cust.modality === 'W' ? 2.5 : 10);
     const expectedBishiInterest = cust.bishiType === 'LOAN_ONLY' ? 0 : Math.round((exp * effectiveCustRate) / 100);
     const bishiInterest = Math.round((regularBishiColl * effectiveCustRate) / 100);
 
