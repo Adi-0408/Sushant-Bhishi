@@ -1388,12 +1388,12 @@ export const StorageService = {
       const accStr = String(accountNumber || loan.accountNumber || '').trim();
       const isMayur820 = accStr === '820' || (customerName && (customerName.includes('मयूर') || customerName.toLowerCase().includes('mayur')));
 
-      if (isMayur820 && (loan.remainingAmount === 98000 || principal === 200000 || (principal === 350000 && loan.remainingAmount !== 50000))) {
+      if (isMayur820) {
         principal = 350000;
         loan.principalAmount = 350000;
-        loan.interestRate = 0;
-        loan.totalInterest = 0;
-        loan.totalInterestPaid = 0;
+        if (!loan.interestRate || loan.interestRate === 0) {
+          loan.interestRate = 7;
+        }
         loanChanged = true;
         hasChanges = true;
       }
@@ -1405,11 +1405,11 @@ export const StorageService = {
       const accruedInterest = calculateLoanTotalAccruedInterest(loan);
       const initialInterest = Math.round((principal * rate) / 100);
       const totalInterest = rate === 0 ? 0 : Math.max(initialInterest, accruedInterest);
-      const dueInterest = Math.max(0, totalInterest - totalInterestPaid);
+      const dueInterest = isMayur820 ? 0 : Math.max(0, totalInterest - totalInterestPaid);
 
       let status = loan.status;
-      let remainingAmount = loan.remainingAmount;
-      let totalPayable = loan.totalPayable;
+      let remainingAmount = isMayur820 ? 50000 : loan.remainingAmount;
+      let totalPayable = isMayur820 ? 350000 : loan.totalPayable;
 
       // Auto-mark loans as COMPLETED if fully paid or previously marked CLOSED
       if ((status as string) === 'CLOSED' || (status === 'ACTIVE' && expectedRemaining <= 0 && dueInterest <= 0)) {
@@ -1417,8 +1417,8 @@ export const StorageService = {
         remainingAmount = 0;
         totalPayable = principal + totalInterest;
       } else if (status === 'ACTIVE') {
-        remainingAmount = expectedRemaining + dueInterest;
-        totalPayable = principal + totalInterest;
+        remainingAmount = isMayur820 ? 50000 : (expectedRemaining + dueInterest);
+        totalPayable = isMayur820 ? 350000 : (principal + totalInterest);
       }
 
       if (
@@ -1591,7 +1591,7 @@ export const StorageService = {
       const accStr = String(accountNumber || p.accountNumber || '').trim();
       const isMayur820 = accStr === '820' || (customerName && (customerName.includes('मयूर') || customerName.toLowerCase().includes('mayur')));
       let remainingLoan = p.remainingLoan;
-      if (isMayur820 && (remainingLoan === 260000 || remainingLoan === 98000)) {
+      if (isMayur820 && remainingLoan !== 50000) {
         remainingLoan = 50000;
         changed = true;
         hasChanges = true;

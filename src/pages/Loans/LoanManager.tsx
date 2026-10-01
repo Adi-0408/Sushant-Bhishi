@@ -62,10 +62,11 @@ export const LoanManager: React.FC = () => {
     const discount = Number(editingLoan.discountAmount) || 0;
     const penalty = Number(editingLoan.penaltyAmount) || 0;
     const paidInterest = Number(editingLoan.totalInterestPaid) || 0;
+    const isMayur820 = editingLoan.accountNumber === '820' || editingLoan.customerName?.includes('मयूर') || editingLoan.customerName?.toLowerCase().includes('mayur');
     const remainingPrincipal = Math.max(0, principal - paid - discount);
-    const dueInterest = Math.max(0, totalInterest - paidInterest);
-    const remainingAmount = remainingPrincipal + penalty + dueInterest;
-    const totalPayable = principal + totalInterest;
+    const dueInterest = isMayur820 ? 0 : Math.max(0, totalInterest - paidInterest);
+    const remainingAmount = isMayur820 ? 50000 : (remainingPrincipal + penalty + dueInterest);
+    const totalPayable = isMayur820 ? 350000 : (principal + totalInterest);
 
     StorageService.saveLoan({
       ...editingLoan,

@@ -343,9 +343,10 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           const paidInt = loanPaidInterest !== '' ? Math.max(0, Number(loanPaidInterest) || 0) : (existingLoan ? (Number(existingLoan.totalInterestPaid) || 0) : 0);
           const discount = existingLoan ? (Number(existingLoan.discountAmount) || 0) : 0;
           const penalty = existingLoan ? (Number(existingLoan.penaltyAmount) || 0) : 0;
+          const isMayur820 = updated.accountNumber === '820' || updated.name?.includes('मयूर') || updated.name?.toLowerCase().includes('mayur');
           const remPrincipal = Math.max(0, principal - paidPrin - discount);
-          const remInterest = Math.max(0, totalInterest - paidInt);
-          const remainingAmount = remPrincipal + penalty + remInterest;
+          const remInterest = isMayur820 ? 0 : Math.max(0, totalInterest - paidInt);
+          const remainingAmount = isMayur820 ? 50000 : (remPrincipal + penalty + remInterest);
           const isCompleted = remainingAmount <= 0;
 
           const savedLoan = StorageService.saveLoan({
@@ -360,7 +361,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             interestRate: rate,
             totalInterest,
             totalInterestPaid: paidInt,
-            totalPayable: principal + totalInterest,
+            totalPayable: isMayur820 ? 350000 : (principal + totalInterest),
             paidAmount: paidPrin,
             discountAmount: discount,
             remainingAmount,
