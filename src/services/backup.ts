@@ -475,9 +475,14 @@ export const AutoBackupService = {
     }
 
     // Sync daily first-open backup status across devices
+    const cloudFirstOpenTime = Number(cloudData.lastDailyFirstOpenTimestamp) || 0;
     if (cloudData.lastDailyFirstOpenDate && cloudData.lastDailyFirstOpenDate !== config.lastDailyFirstOpenDate) {
       config.lastDailyFirstOpenDate = cloudData.lastDailyFirstOpenDate;
-      config.lastDailyFirstOpenTimestamp = Number(cloudData.lastDailyFirstOpenTimestamp) || config.lastDailyFirstOpenTimestamp;
+      config.lastDailyFirstOpenTimestamp = cloudFirstOpenTime || config.lastDailyFirstOpenTimestamp;
+      config.lastDailyFirstOpenFilename = cloudData.lastDailyFirstOpenFilename || config.lastDailyFirstOpenFilename;
+      hasChanged = true;
+    } else if (cloudFirstOpenTime > (config.lastDailyFirstOpenTimestamp || 0)) {
+      config.lastDailyFirstOpenTimestamp = cloudFirstOpenTime;
       config.lastDailyFirstOpenFilename = cloudData.lastDailyFirstOpenFilename || config.lastDailyFirstOpenFilename;
       hasChanged = true;
     }
@@ -694,7 +699,7 @@ export const AutoBackupService = {
     }
   },
 
-  // Checks and runs auto-backup silently when the website is opened for the 1st time of the day
+  // Checks and runs auto-backup when the website is opened
   checkAndRunFirstOpenBackup: async (
     onSuccess?: (snapshot: LocalBackupSnapshot, filename: string) => void
   ): Promise<boolean> => {
@@ -702,58 +707,84 @@ export const AutoBackupService = {
     if (!config.enabled && config.driveBackupEnabled === false) return false;
 
     const todayStr = AutoBackupService.getTodayDateString();
+    const sessionKey = 'sb_session_open_backup_done';
 
-    // If today's first-open backup has already been performed today, skip!
-    if (config.lastDailyFirstOpenDate === todayStr) {
+    // 1. Session debounce: Don't repeat on simple page reloads within the same browser session
+    const sessionDone = sessionStorage.getItem(sessionKey);
+    if (sessionDone) {
+      return false;
+    }
+
+    // 2. Debounce: Check if a backup was already saved in Google Drive or locally very recently (within 20 mins)
+    const lastBackupTime = Math.max(
+      config.lastDriveBackupTimestamp || 0,
+      config.lastBackupTimestamp || 0,
+      config.lastDailyFirstOpenTimestamp || 0
+    );
+    const now = Date.now();
+    const isVeryRecent = (now - lastBackupTime) < 20 * 60 * 1000;
+
+    // If today's first-open backup was already recorded for today AND a backup happened very recently, skip
+    if (config.lastDailyFirstOpenDate === todayStr && isVeryRecent) {
+      sessionStorage.setItem(sessionKey, 'skipped_recent');
       return false;
     }
 
     try {
-      const data = StorageService.exportBackup();
-      const hasData = (data.customers && data.customers.length > 0) || (data.collections && data.collections.length > 0);
+      let data = StorageService.exportBackup();
+      let hasData = (data.customers && data.customers.length > 0) || (data.collections && data.collections.length > 0);
+
+      // If data is still loading into memory, wait briefly for local/Firestore sync
+      if (!hasData) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        data = StorageService.exportBackup();
+        hasData = (data.customers && data.customers.length > 0) || (data.collections && data.collections.length > 0);
+      }
 
       if (!hasData && config.lastBackupTimestamp === 0) {
-        config.lastDailyFirstOpenDate = todayStr;
-        AutoBackupService.saveConfig(config);
+        sessionStorage.setItem(sessionKey, 'no_data');
         return false;
       }
 
-      const now = Date.now();
-      const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_DailyOpen_Backup', new Date(now));
+      const backupTime = Date.now();
+      const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_DailyOpen_Backup', new Date(backupTime));
 
-      // 1. Store snapshot in local memory for instant 1-click restore
-      const snapshot = AutoBackupService.saveSnapshotLocally(data, filename, now);
+      // 1. Store snapshot in local memory / IndexedDB for instant 1-click restore
+      const snapshot = AutoBackupService.saveSnapshotLocally(data, filename, backupTime);
 
-      // 2. Mark today's first-open backup as COMPLETED
+      // 2. Mark this browser session as completed so navigating/reloading doesn't re-trigger
+      sessionStorage.setItem(sessionKey, String(backupTime));
+
+      // 3. Update configuration
       config.lastDailyFirstOpenDate = todayStr;
-      config.lastDailyFirstOpenTimestamp = now;
+      config.lastDailyFirstOpenTimestamp = backupTime;
       config.lastDailyFirstOpenFilename = filename;
-      config.lastBackupTimestamp = now;
-      config.lastBackupDate = new Date(now).toISOString();
+      config.lastBackupTimestamp = backupTime;
+      config.lastBackupDate = new Date(backupTime).toISOString();
       config.lastBackupFilename = filename;
-      config.lastDriveBackupTimestamp = now;
-      config.lastDriveBackupDate = new Date(now).toISOString();
+      config.lastDriveBackupTimestamp = backupTime;
+      config.lastDriveBackupDate = new Date(backupTime).toISOString();
       config.lastDriveBackupFilename = filename;
       config.lastDriveBackupStatus = 'success';
       AutoBackupService.saveConfig(config);
 
-      // 3. Automatically push directly to Google Drive in background
+      // 4. Automatically push directly to Google Drive in background
       if (config.driveBackupEnabled !== false) {
-        await AutoBackupService.uploadToGoogleDrive(config.driveWebhookUrl, data, filename, now).catch((err) => {
+        await AutoBackupService.uploadToGoogleDrive(config.driveWebhookUrl, data, filename, backupTime).catch((err) => {
           console.warn('Silent first-open drive backup background upload notice:', err);
         });
       }
 
-      // 4. Sync metadata to Firestore cloud so all devices know today's first-open backup is done
+      // 5. Sync metadata to Firestore cloud so all devices know today's first-open backup is done
       syncBackupMetadataToCloud({
-        timestamp: now,
+        timestamp: backupTime,
         filename,
         customerCount: data.customers?.length || 0,
         collectionCount: data.collections?.length || 0,
         loanCount: data.loans?.length || 0,
         sizeKb: Math.round((JSON.stringify(data).length * 2) / 1024),
         lastDailyFirstOpenDate: todayStr,
-        lastDailyFirstOpenTimestamp: now,
+        lastDailyFirstOpenTimestamp: backupTime,
         lastDailyFirstOpenFilename: filename,
       });
 

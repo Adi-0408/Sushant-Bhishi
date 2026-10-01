@@ -271,6 +271,7 @@ export const BackupManager: React.FC = () => {
   }, []);
 
   const isDaily11pmCompletedToday = autoConfig.lastDaily11pmDate === todaySlotDate;
+  const isFirstOpenCompletedToday = autoConfig.lastDailyFirstOpenDate === todaySlotDate;
 
   // Manual trigger: Backup to Google Drive immediately and create a local restore point with CURRENT TIME
   const handleUploadToDrive = async () => {
@@ -620,7 +621,8 @@ export const BackupManager: React.FC = () => {
             </p>
 
             {/* Status Details */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+              {/* Card 1: Last Saved Backup */}
               <div className="p-3 bg-white rounded-2xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-3">
                 <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
                   <Clock className="w-4 h-4" />
@@ -632,12 +634,35 @@ export const BackupManager: React.FC = () => {
                   <div className="text-xs font-black text-[#10241E] truncate">
                     {formatDateTime(unifiedLatestTime)}
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono truncate max-w-[220px]" title={autoConfig.lastDriveBackupFilename || autoConfig.lastBackupFilename || latestSnapshot?.filename}>
+                  <div className="text-[10px] text-slate-500 font-mono truncate max-w-[180px]" title={autoConfig.lastDriveBackupFilename || autoConfig.lastBackupFilename || latestSnapshot?.filename}>
                     {autoConfig.lastDriveBackupFilename || autoConfig.lastBackupFilename || latestSnapshot?.filename || 'Safe cloud backup'}
                   </div>
                 </div>
               </div>
 
+              {/* Card 2: Daily Website-Opening Backup */}
+              <div className="p-3 bg-white rounded-2xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-3">
+                <div className={`w-9 h-9 rounded-xl ${isFirstOpenCompletedToday ? 'bg-emerald-50 text-[#0F7A5C]' : 'bg-teal-50 text-teal-700'} flex items-center justify-center shrink-0`}>
+                  <RotateCcw className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold text-[#5F6E68]">
+                    {language === 'EN' ? 'Site Opening Backup' : 'वेबसाइट उघडतानाचा बॅकअप'}
+                  </div>
+                  <div className="text-xs font-black text-[#10241E] truncate">
+                    {isFirstOpenCompletedToday
+                      ? (language === 'EN' ? "Today's Open: Saved" : 'आजचा सुरक्षित बॅकअप पूर्ण')
+                      : (language === 'EN' ? 'Runs on site open' : 'वेबसाइट उघडताना होतो')}
+                  </div>
+                  <div className="text-[10px] text-emerald-700 font-bold truncate max-w-[180px]" title={autoConfig.lastDailyFirstOpenFilename}>
+                    {autoConfig.lastDailyFirstOpenTimestamp
+                      ? formatDateTime(autoConfig.lastDailyFirstOpenTimestamp)
+                      : (language === 'EN' ? 'Auto safety backup' : 'सुरक्षित बॅकअप')}
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Daily 11:00 PM Backup */}
               <div className="p-3 bg-white rounded-2xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-3">
                 <div className={`w-9 h-9 rounded-xl ${isDaily11pmCompletedToday ? 'bg-emerald-50 text-[#0F7A5C]' : 'bg-amber-50 text-amber-700'} flex items-center justify-center shrink-0`}>
                   <Sparkles className="w-4 h-4" />
@@ -654,12 +679,13 @@ export const BackupManager: React.FC = () => {
                   <div className="text-[10px] text-emerald-700 font-bold truncate">
                     {isDaily11pmCompletedToday
                       ? (autoConfig.lastDaily11pmTimestamp ? formatDateTime(autoConfig.lastDaily11pmTimestamp) : (language === 'EN' ? 'Completed for today' : 'आज पूर्ण झाला'))
-                      : (language === 'EN' ? 'Runs daily even if manual backup taken' : 'मॅन्युअल बॅकअप घेतला तरीही होणार')}
+                      : (language === 'EN' ? 'Nightly cloud backup' : 'रात्री आपोआप बॅकअप')}
                   </div>
                 </div>
               </div>
 
-              <div className="p-3 bg-white rounded-2xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-3 sm:col-span-2 lg:col-span-1">
+              {/* Card 4: Google Drive Folder */}
+              <div className="p-3 bg-white rounded-2xl border border-[#E4EAE7] shadow-2xs flex items-center space-x-3">
                 <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#0F7A5C] flex items-center justify-center shrink-0">
                   <ShieldCheck className="w-4 h-4" />
                 </div>
@@ -671,7 +697,7 @@ export const BackupManager: React.FC = () => {
                     Sushant_Bishi_Backups
                   </div>
                   <div className="text-[10px] text-emerald-700 font-bold truncate">
-                    {language === 'EN' ? 'Max 10 Backups (Auto-prunes oldest)' : 'कमाल १० बॅकअप (जुनी फाईल आपोआप डिलीट)'}
+                    {language === 'EN' ? 'Max 10 Backups (Rolling)' : 'कमाल १० बॅकअप (रोलिंग)'}
                   </div>
                 </div>
               </div>

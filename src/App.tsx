@@ -33,39 +33,45 @@ const ProtectedLayout: React.FC = () => {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const location = useLocation();
 
-  // Automatic Daily 11:00 PM Backup Runner (Local + Google Drive Cloud)
+  // Automatic Daily Website-Opening & 11:00 PM Backup Runner (Local + Google Drive Cloud)
   useEffect(() => {
     if (!currentAdmin) return;
 
     const performScheduledCheck = async () => {
-      // 1. Sync latest cloud backup metadata from Firestore first (so cloud runs like 11 PM / 3 AM are recognized)
-      await AutoBackupService.fetchCloudBackupMetadata();
+      try {
+        // 1. Sync latest cloud backup metadata from Firestore first (so cloud runs like 11 PM are recognized)
+        await AutoBackupService.fetchCloudBackupMetadata().catch((err) => {
+          console.warn('[App] fetchCloudBackupMetadata error:', err);
+        });
 
-      // 2. Check and run First-Open backup of the day (security backup when site is opened for 1st time today)
-      const ranFirstOpen = await AutoBackupService.checkAndRunFirstOpenBackup((snapshot, filename) => {
-        showToast(
-          language === 'EN'
-            ? `Daily first-open backup saved: ${filename}`
-            : `आजच्या दिवसाचा पहिला सुरक्षित बॅकअप सेव्ह झाला: ${filename}`,
-          'success'
-        );
-      });
-
-      // 3. Run scheduled 11 PM check if first-open didn't just run
-      if (!ranFirstOpen) {
-        AutoBackupService.checkAndRunAutoBackup((snapshot, filename) => {
+        // 2. Check and run Opening backup of the day (security backup when site is opened)
+        const ranFirstOpen = await AutoBackupService.checkAndRunFirstOpenBackup((snapshot, filename) => {
           showToast(
             language === 'EN'
-              ? `Daily 11:00 PM backup saved: ${filename}`
-              : `दररोज रात्री ११:०० वा. चा स्वयंचलित बॅकअप सेव्ह झाला: ${filename}`,
+              ? `Daily website-opening backup saved: ${filename}`
+              : `वेबसाइट उघडतानाचा दैनंदिन बॅकअप सेव्ह झाला: ${filename}`,
             'success'
           );
         });
+
+        // 3. Run scheduled 11 PM check if first-open didn't just run
+        if (!ranFirstOpen) {
+          AutoBackupService.checkAndRunAutoBackup((snapshot, filename) => {
+            showToast(
+              language === 'EN'
+                ? `Daily 11:00 PM backup saved: ${filename}`
+                : `दररोज रात्री ११:०० वा. चा स्वयंचलित बॅकअप सेव्ह झाला: ${filename}`,
+              'success'
+            );
+          });
+        }
+      } catch (err) {
+        console.error('[App] performScheduledCheck failed:', err);
       }
     };
 
-    // Check shortly after app loads (runs if last night's 11 PM backup was genuinely missed)
-    const timeoutId = setTimeout(performScheduledCheck, 2500);
+    // Check shortly after app loads when opening the website
+    const timeoutId = setTimeout(performScheduledCheck, 1800);
 
     // Periodic check every 60 seconds while the app remains open
     // Guarantees that at exactly 11:00 PM, the daily backup triggers immediately!
