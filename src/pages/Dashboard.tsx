@@ -68,24 +68,6 @@ export const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<StatsSummary>(DEFAULT_STATS);
   const [isRefreshingStats, setIsRefreshingStats] = useState(false);
 
-  // Today's pending list computed locally from collections (0 Firestore reads!)
-  const todaysPendingList = React.useMemo(() => {
-    return collections
-      .filter((c) => {
-        if (c.status === 'PAID') return false;
-        if (activeOffice !== 'ALL' && c.officeId && c.officeId !== activeOffice) return false;
-        return c.dueDate <= todayStr;
-      })
-      .slice(0, 20)
-      .map((c) => ({
-        id: c.id,
-        customerId: c.customerId,
-        accountNumber: c.accountNumber,
-        customerName: c.customerName,
-        dueDate: c.dueDate,
-        amount: c.remainingAmount > 0 ? c.remainingAmount : c.expectedAmount,
-      })) as any[];
-  }, [collections, activeOffice, todayStr]);
 
   const [dashboardSearchResults, setDashboardSearchResults] = useState<Customer[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -139,20 +121,52 @@ export const Dashboard: React.FC = () => {
     });
   }, [customers, officeFilter, selectedBishiFilter, modalityFilter]);
 
+  const filteredCustomerIdentifiers = React.useMemo(() => {
+    const ids = new Set<string>();
+    const accs = new Set<string>();
+    for (const c of filteredCustomers) {
+      if (c.id) ids.add(c.id);
+      if (c.accountNumber) accs.add(String(c.accountNumber).trim());
+    }
+    return { ids, accs };
+  }, [filteredCustomers]);
+
   const filteredCollections = React.useMemo(() => {
-    return collections.filter((c) => {
-      if (officeFilter !== 'ALL' && c.officeId !== officeFilter) return false;
-      if (selectedBishiFilter !== 'ALL' && c.bishiType !== selectedBishiFilter) return false;
-      return true;
-    });
-  }, [collections, officeFilter, selectedBishiFilter]);
+    if (!isFilterActive) return collections;
+    return collections.filter(
+      (c) =>
+        filteredCustomerIdentifiers.ids.has(c.customerId) ||
+        (c.accountNumber && filteredCustomerIdentifiers.accs.has(String(c.accountNumber).trim()))
+    );
+  }, [collections, isFilterActive, filteredCustomerIdentifiers]);
 
   const filteredLoans = React.useMemo(() => {
-    return loans.filter((l) => {
-      if (officeFilter !== 'ALL' && l.officeId !== officeFilter) return false;
-      return true;
-    });
-  }, [loans, officeFilter]);
+    if (!isFilterActive) return loans;
+    return loans.filter(
+      (l) =>
+        filteredCustomerIdentifiers.ids.has(l.customerId) ||
+        (l.accountNumber && filteredCustomerIdentifiers.accs.has(String(l.accountNumber).trim()))
+    );
+  }, [loans, isFilterActive, filteredCustomerIdentifiers]);
+
+  // Today's pending list scoped to active filtered collections
+  const todaysPendingList = React.useMemo(() => {
+    return filteredCollections
+      .filter((c) => {
+        if (c.status === 'PAID') return false;
+        if (!isFilterActive && officeFilter !== 'ALL' && c.officeId && c.officeId !== officeFilter) return false;
+        return c.dueDate <= todayStr;
+      })
+      .slice(0, 20)
+      .map((c) => ({
+        id: c.id,
+        customerId: c.customerId,
+        accountNumber: c.accountNumber,
+        customerName: c.customerName,
+        dueDate: c.dueDate,
+        amount: c.remainingAmount > 0 ? c.remainingAmount : c.expectedAmount,
+      })) as any[];
+  }, [filteredCollections, isFilterActive, officeFilter, todayStr]);
 
   // Card 1: Total Customers — live from memory (66), or filtered count if filter is active
   const totalCustomersCount = isFilterActive
@@ -161,16 +175,31 @@ export const Dashboard: React.FC = () => {
 
   // Card 2: Today's Collection
   const todaysCollection = React.useMemo(() => {
+    if (isFilterActive) {
+      return filteredCollections
+        .filter((c) => c.paymentDate === todayStr)
+        .reduce((sum, c) => sum + (Number(c.collectedAmount) || 0), 0);
+    }
     if (filteredCollections.length > 0) {
       return filteredCollections
         .filter((c) => c.paymentDate === todayStr)
         .reduce((sum, c) => sum + (Number(c.collectedAmount) || 0), 0);
     }
     return stats.todaysCollection || 0;
-  }, [filteredCollections, todayStr, stats.todaysCollection]);
+  }, [filteredCollections, isFilterActive, todayStr, stats.todaysCollection]);
 
   // Card 3: Today's Due / Pending Amount
   const todaysPendingAmount = React.useMemo(() => {
+    if (isFilterActive) {
+      return filteredCollections
+        .filter((c) => c.dueDate <= todayStr && c.status !== 'PAID')
+        .reduce(
+          (sum, c) =>
+            sum +
+            (Number(c.remainingAmount) || Math.max(0, (Number(c.expectedAmount) || 0) - (Number(c.collectedAmount) || 0))),
+          0
+        );
+    }
     if (todaysPendingList.length > 0) {
       return todaysPendingList
         .filter((inst) => officeFilter === 'ALL' || inst.officeId === officeFilter)
@@ -178,7 +207,7 @@ export const Dashboard: React.FC = () => {
     }
     if (filteredCollections.length > 0) {
       return filteredCollections
-        .filter((c) => c.dueDate === todayStr && c.status !== 'PAID')
+        .filter((c) => c.dueDate <= todayStr && c.status !== 'PAID')
         .reduce(
           (sum, c) =>
             sum +
@@ -187,56 +216,77 @@ export const Dashboard: React.FC = () => {
         );
     }
     return stats.todaysDueAmount || 0;
-  }, [todaysPendingList, filteredCollections, officeFilter, todayStr, stats.todaysDueAmount]);
+  }, [todaysPendingList, filteredCollections, isFilterActive, officeFilter, todayStr, stats.todaysDueAmount]);
 
   // Card 4: Total Bishi Collected
   const totalCollectedBishi = React.useMemo(() => {
+    if (isFilterActive) {
+      return filteredCollections.reduce((sum, c) => sum + (Number(c.collectedAmount) || 0), 0);
+    }
     if (filteredCollections.length > 0) {
       return filteredCollections.reduce((sum, c) => sum + (Number(c.collectedAmount) || 0), 0);
     }
     return stats.totalBishiCollected || 0;
-  }, [filteredCollections, stats.totalBishiCollected]);
+  }, [filteredCollections, isFilterActive, stats.totalBishiCollected]);
 
   // Card 5: Total Loan Principal
   const totalLoanAmount = React.useMemo(() => {
+    if (isFilterActive) {
+      return filteredLoans
+        .filter((l) => l.status === 'ACTIVE')
+        .reduce((sum, l) => sum + (Number(l.principalAmount) || 0), 0);
+    }
     if (filteredLoans.length > 0) {
       return filteredLoans
         .filter((l) => l.status === 'ACTIVE')
         .reduce((sum, l) => sum + (Number(l.principalAmount) || 0), 0);
     }
     return stats.totalPrincipalLoans || 0;
-  }, [filteredLoans, stats.totalPrincipalLoans]);
+  }, [filteredLoans, isFilterActive, stats.totalPrincipalLoans]);
 
   // Card 6: Loan Remaining Balance
   const loanRemainingAmount = React.useMemo(() => {
+    if (isFilterActive) {
+      return filteredLoans
+        .filter((l) => l.status === 'ACTIVE')
+        .reduce((sum, l) => sum + (Number(l.remainingAmount) || 0), 0);
+    }
     if (filteredLoans.length > 0) {
       return filteredLoans
         .filter((l) => l.status === 'ACTIVE')
         .reduce((sum, l) => sum + (Number(l.remainingAmount) || 0), 0);
     }
     return stats.loanBalanceDue || 0;
-  }, [filteredLoans, stats.loanBalanceDue]);
+  }, [filteredLoans, isFilterActive, stats.loanBalanceDue]);
 
   // Card 7: Pending Installments Count
   const todaysPendingInstallmentsCount = React.useMemo(() => {
+    if (isFilterActive) {
+      return filteredCollections.filter((c) => c.dueDate <= todayStr && c.status !== 'PAID').length;
+    }
     if (todaysPendingList.length > 0) {
       return todaysPendingList.filter((inst) => officeFilter === 'ALL' || inst.officeId === officeFilter).length;
     }
     if (filteredCollections.length > 0) {
-      return filteredCollections.filter((c) => c.dueDate === todayStr && c.status !== 'PAID').length;
+      return filteredCollections.filter((c) => c.dueDate <= todayStr && c.status !== 'PAID').length;
     }
     return stats.todaysDueInstallments || 0;
-  }, [todaysPendingList, filteredCollections, officeFilter, todayStr, stats.todaysDueInstallments]);
+  }, [todaysPendingList, filteredCollections, isFilterActive, officeFilter, todayStr, stats.todaysDueInstallments]);
 
   // Card 8: Today's Penalty
   const todaysPenaltyAmount = React.useMemo(() => {
+    if (isFilterActive) {
+      return filteredCollections
+        .filter((c) => c.paymentDate === todayStr)
+        .reduce((sum, c) => sum + (Number(c.penaltyAmount) || 0), 0);
+    }
     if (filteredCollections.length > 0) {
       return filteredCollections
         .filter((c) => c.paymentDate === todayStr)
         .reduce((sum, c) => sum + (Number(c.penaltyAmount) || 0), 0);
     }
     return stats.todaysPenalty || 0;
-  }, [filteredCollections, todayStr, stats.todaysPenalty]);
+  }, [filteredCollections, isFilterActive, todayStr, stats.todaysPenalty]);
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 font-marathi min-h-screen flex flex-col justify-between bg-[#F4F6F5]">
