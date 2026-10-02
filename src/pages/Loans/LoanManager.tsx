@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, formatDateMarathi, getBishiNameMarathi, matchesCustomerSearch } from '../../utils/formatters';
-import { StorageService } from '../../services/db';
+import { StorageService, compareAccountNumbers } from '../../services/db';
 import { Landmark, Search, Plus, Wallet, ArrowUpRight, X, UserPlus, Edit3, Save, Calendar, Clock, RefreshCw, Calculator, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 import { CustomDropdown } from '../../components/common/CustomDropdown';
@@ -102,6 +102,14 @@ export const LoanManager: React.FC = () => {
       return matchesCustomerSearch(cust, searchTerm, l.accountNumber) || purposeMatch;
     }
     return true;
+  }).sort((a, b) => {
+    const custA = customers.find((c) => c.id === a.customerId || (a.accountNumber && c.accountNumber === a.accountNumber));
+    const custB = customers.find((c) => c.id === b.customerId || (b.accountNumber && c.accountNumber === b.accountNumber));
+    const accA = a.accountNumber || custA?.accountNumber || '';
+    const accB = b.accountNumber || custB?.accountNumber || '';
+    const comp = compareAccountNumbers(accA, accB);
+    if (comp !== 0) return comp;
+    return (b.issueDate || '').localeCompare(a.issueDate || '');
   });
 
   const resetAddLoanModal = () => {
@@ -589,6 +597,7 @@ export const LoanManager: React.FC = () => {
                     onChange={(val) => handleSelectCustomer(val)}
                     options={customers
                       .filter((c) => activeOffice === 'ALL' || c.officeId === activeOffice)
+                      .sort((a, b) => compareAccountNumbers(a.accountNumber, b.accountNumber))
                       .map((c) => {
                         const hasActiveLoan = loans.some(
                           (l) => (l.customerId === c.id || (c.accountNumber && l.accountNumber === c.accountNumber)) && (l.status === 'ACTIVE' || Number(l.remainingAmount) > 0)

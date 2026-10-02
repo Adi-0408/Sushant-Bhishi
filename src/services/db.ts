@@ -590,7 +590,9 @@ export const deduplicateLoans = (loans: Loan[]): Loan[] => {
     }
   });
 
-  return Array.from(map.values());
+  return Array.from(map.values()).sort((a, b) =>
+    compareAccountNumbers(a.accountNumber, b.accountNumber)
+  );
 };
 
 // Deduplicates loan payments
@@ -1456,6 +1458,7 @@ export const StorageService = {
       return updatedLoan;
     });
 
+    sanitized.sort((a, b) => compareAccountNumbers(a.accountNumber, b.accountNumber));
     if (hasChanges) {
       setStoredData(STORAGE_KEYS.LOANS, sanitized);
     }
