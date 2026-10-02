@@ -16,7 +16,7 @@ import { StorageService, deduplicateCustomers, compareAccountNumbers } from '../
 import { MarathiTextInput } from '../../components/common/MarathiTextInput';
 import { CustomDropdown } from '../../components/common/CustomDropdown';
 import { QuickCollectionModal } from '../../components/collections/QuickCollectionModal';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import {
   Search,
   UserPlus,
@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 
 export const CustomerList: React.FC = () => {
-  const { customers, collections, loans, bishiConfigs, activeOffice, setActiveOffice, refreshData, showToast, t, language, isRefreshing, refreshAllData } = useApp();
+  const { customers, collections, loans, bishiConfigs, activeOffice, setActiveOffice, selectedBishiFilter, setSelectedBishiFilter, refreshData, showToast, t, language, isRefreshing, refreshAllData } = useApp();
 
   // Sorting state (default: natural numeric order by Account Number)
   const [sortBy, setSortBy] = useState<'accountNumber' | 'name'>('accountNumber');
@@ -61,32 +61,78 @@ export const CustomerList: React.FC = () => {
     });
   }, [customers, sortBy, sortDirection]);
 
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Read initial filters from URL params, location.state, or AppContext selectedBishiFilter
+  const navBishi = (searchParams.get('bishi') as BishiType | null) || location.state?.bishiFilter || (selectedBishiFilter !== 'ALL' ? selectedBishiFilter : undefined);
+  const navModality = (searchParams.get('modality') as Modality | null) || location.state?.modalityFilter;
+  const navOffice = (searchParams.get('office') as OfficeId | null) || location.state?.officeFilter;
+
+  const [bishiFilter, setBishiFilter] = useState<'ALL' | BishiType>(navBishi || selectedBishiFilter || 'ALL');
+  const [modalityFilter, setModalityFilter] = useState<'ALL' | Modality>(navModality || 'ALL');
+  const [officeFilter, setOfficeFilter] = useState<'ALL' | OfficeId>(navOffice || activeOffice);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING' | 'BORROWER'>('ALL');
+
+  useEffect(() => {
+    const qBishi = (searchParams.get('bishi') as BishiType | null) || location.state?.bishiFilter || (selectedBishiFilter !== 'ALL' ? selectedBishiFilter : 'ALL');
+    if (qBishi) {
+      setBishiFilter(qBishi);
+      setSelectedBishiFilter(qBishi);
+    }
+    const qModality = (searchParams.get('modality') as Modality | null) || location.state?.modalityFilter || 'ALL';
+    setModalityFilter(qModality);
+
+    const qOffice = (searchParams.get('office') as OfficeId | null) || location.state?.officeFilter || activeOffice;
+    setOfficeFilter(qOffice);
+    if (qOffice !== 'ALL') {
+      setActiveOffice(qOffice);
+    }
+  }, [location.key]);
+
+  const handleBishiFilterChange = (val: 'ALL' | BishiType) => {
+    setBishiFilter(val);
+    setSelectedBishiFilter(val);
+    setDisplayLimit(20);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (val === 'ALL') next.delete('bishi');
+      else next.set('bishi', val);
+      return next;
+    }, { replace: true, state: null });
+  };
+
+  const handleModalityFilterChange = (val: 'ALL' | Modality) => {
+    setModalityFilter(val);
+    setDisplayLimit(20);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (val === 'ALL') next.delete('modality');
+      else next.set('modality', val);
+      return next;
+    }, { replace: true, state: null });
+  };
+
+  const handleOfficeFilterChange = (val: 'ALL' | OfficeId) => {
+    setOfficeFilter(val);
+    setActiveOffice(val);
+    setDisplayLimit(20);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (val === 'ALL') next.delete('office');
+      else next.set('office', val);
+      return next;
+    }, { replace: true, state: null });
+  };
+
   // ── Client-side pagination state (0 Firestore reads!) ──
   const [displayLimit, setDisplayLimit] = useState(20);
   const isLoading = false;
   const isLoadingMore = false;
   const isLoadingAll = false;
 
-  const hasMore = sortedCustomers.length > displayLimit;
-  const isAllLoaded = displayLimit >= sortedCustomers.length;
-
-  const paginatedCustomers = useMemo(() => {
-    return sortedCustomers.slice(0, displayLimit);
-  }, [sortedCustomers, displayLimit]);
-
   // Search state (0 Firestore reads; instant in-memory search)
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<Customer[] | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
-
-  const [bishiFilter, setBishiFilter] = useState<'ALL' | BishiType>('ALL');
-  const [modalityFilter, setModalityFilter] = useState<'ALL' | Modality>('ALL');
-  const [officeFilter, setOfficeFilter] = useState<'ALL' | OfficeId>(activeOffice);
-
-  useEffect(() => {
-    setOfficeFilter(activeOffice);
-  }, [activeOffice]);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING' | 'BORROWER'>('ALL');
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -94,41 +140,79 @@ export const CustomerList: React.FC = () => {
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
   const [collectCustomer, setCollectCustomer] = useState<Customer | null>(null);
 
+  const getCustomerStatusPaid = useCallback((cust: Customer): boolean => {
+    if (cust.summary) {
+      return cust.summary.pendingInstallments === 0;
+    }
+    const custColls = collections.filter(
+      (c) => c.customerId === cust.id || (cust.accountNumber && c.accountNumber === cust.accountNumber)
+    );
+    const fin = calculateCustomerFinancials(cust, custColls, null, bishiConfigs);
+    return fin.isCurrentDuePaid;
+  }, [collections, bishiConfigs]);
+
+  // 1. Filter full sorted customer list first
+  const allFilteredCustomers = useMemo(() => {
+    return sortedCustomers.filter((cust) => {
+      // Instant search across Name, Account No, Mobile
+      if (searchTerm.trim() && !matchesCustomerSearch(cust, searchTerm.trim())) {
+        return false;
+      }
+
+      // Office filter
+      if (officeFilter !== 'ALL' && cust.officeId !== officeFilter) {
+        return false;
+      }
+
+      // Bishi filter
+      if (bishiFilter !== 'ALL' && cust.bishiType !== bishiFilter) {
+        return false;
+      }
+
+      // Modality filter
+      if (modalityFilter !== 'ALL' && cust.modality !== modalityFilter) {
+        return false;
+      }
+
+      // Status filter
+      if (statusFilter !== 'ALL') {
+        const isPaid = getCustomerStatusPaid(cust);
+        if (statusFilter === 'BORROWER' && !cust.hasLoan && cust.bishiType !== 'LOAN_ONLY' && (!cust.loanDetails || cust.loanDetails.principal <= 0)) return false;
+        if (statusFilter === 'PAID' && !isPaid) return false;
+        if (statusFilter === 'PENDING' && isPaid) return false;
+      }
+
+      return true;
+    });
+  }, [sortedCustomers, searchTerm, officeFilter, bishiFilter, modalityFilter, statusFilter, getCustomerStatusPaid]);
+
+  // 2. Visible paginated slice from the filtered customers
+  const filteredCustomers = useMemo(() => {
+    return allFilteredCustomers.slice(0, displayLimit);
+  }, [allFilteredCustomers, displayLimit]);
+
+  const hasMore = allFilteredCustomers.length > displayLimit;
+  const isAllLoaded = displayLimit >= allFilteredCustomers.length;
+
   // Load more via client-side pagination (0 reads)
   const handleLoadMore = () => {
     setDisplayLimit((prev) => prev + 20);
   };
 
-  // Load ALL customers (0 reads!)
+  // Load ALL customers matching active filters (0 reads!)
   const handleLoadAll = () => {
-    setDisplayLimit(sortedCustomers.length);
+    setDisplayLimit(allFilteredCustomers.length);
   };
 
   const handleShowLess = () => {
     setDisplayLimit(20);
   };
 
-  // Instant client-side search across Name, Account No, Mobile (0 reads!)
-  useEffect(() => {
-    const term = searchTerm.trim();
-    if (!term) {
-      setSearchResults(null);
-      setIsSearching(false);
-      return;
-    }
-
-    const filtered = sortedCustomers.filter((c) => matchesCustomerSearch(c, term));
-    setSearchResults(filtered);
-    setIsSearching(false);
-  }, [searchTerm, sortedCustomers]);
-
-  const activeList = searchResults !== null ? searchResults : paginatedCustomers;
-
   // O(N) financials for visible items only (never whole collection scan)
   const customerFinancialsMap = useMemo(() => {
     const map = new Map<string, ReturnType<typeof calculateCustomerFinancials>>();
-    for (let i = 0; i < activeList.length; i++) {
-      const cust = activeList[i];
+    for (let i = 0; i < filteredCustomers.length; i++) {
+      const cust = filteredCustomers[i];
       if (cust.summary) {
         map.set(cust.id, {
           isCurrentDuePaid: cust.summary.pendingInstallments === 0,
@@ -153,37 +237,7 @@ export const CustomerList: React.FC = () => {
       }
     }
     return map;
-  }, [activeList, collections, loans, bishiConfigs]);
-
-  // Filtered List Computation
-  const filteredCustomers = useMemo(() => {
-    return activeList.filter((cust) => {
-      // Office filter
-      if (officeFilter !== 'ALL' && cust.officeId !== officeFilter) {
-        return false;
-      }
-
-      // Bishi filter
-      if (bishiFilter !== 'ALL' && cust.bishiType !== bishiFilter) {
-        return false;
-      }
-
-      // Modality filter
-      if (modalityFilter !== 'ALL' && cust.modality !== modalityFilter) {
-        return false;
-      }
-
-      // Status filter
-      if (statusFilter !== 'ALL') {
-        const financials = customerFinancialsMap.get(cust.id);
-        if (statusFilter === 'BORROWER' && !cust.hasLoan && cust.bishiType !== 'LOAN_ONLY' && (!financials || financials.loanPrincipal <= 0)) return false;
-        if (statusFilter === 'PAID' && !financials?.isCurrentDuePaid) return false;
-        if (statusFilter === 'PENDING' && financials?.isCurrentDuePaid) return false;
-      }
-
-      return true;
-    });
-  }, [activeList, officeFilter, bishiFilter, modalityFilter, statusFilter, customerFinancialsMap]);
+  }, [filteredCustomers, collections, loans, bishiConfigs]);
 
   const hasActiveFilter = officeFilter !== 'ALL' || bishiFilter !== 'ALL' || modalityFilter !== 'ALL' || statusFilter !== 'ALL';
 
@@ -192,9 +246,6 @@ export const CustomerList: React.FC = () => {
     try {
       await StorageService.deleteCustomer(customerToDelete.id);
       showToast(language === 'EN' ? 'Customer deleted successfully.' : 'खातेदाराची माहिती यशस्वीपणे हटवली.', 'success');
-      if (searchResults) {
-        setSearchResults((prev) => (prev ? prev.filter((c) => c.id !== customerToDelete.id) : null));
-      }
       refreshData();
       setCustomerToDelete(null);
     } catch {
@@ -211,10 +262,8 @@ export const CustomerList: React.FC = () => {
             <Users className="w-6 h-6 text-brand-700" />
             <span>
               {t.customerListTitle} (
-                {searchResults !== null
-                  ? filteredCustomers.length
-                  : hasActiveFilter
-                  ? filteredCustomers.length
+                {hasActiveFilter || searchTerm.trim()
+                  ? allFilteredCustomers.length
                   : customers.length}
               )
             </span>
@@ -277,7 +326,7 @@ export const CustomerList: React.FC = () => {
             <label className="block text-xs font-bold text-[#5F6E68] mb-1.5">{t.filterBishi}</label>
             <CustomDropdown<string>
               value={bishiFilter}
-              onChange={(val) => setBishiFilter(val as any)}
+              onChange={(val) => handleBishiFilterChange(val as any)}
               options={[
                 { value: 'ALL', label: t.allBishi },
                 ...bishiConfigs.map((cfg) => ({
@@ -295,7 +344,7 @@ export const CustomerList: React.FC = () => {
             <label className="block text-xs font-bold text-[#5F6E68] mb-1.5">{t.filterModality}</label>
             <CustomDropdown<string>
               value={modalityFilter}
-              onChange={(val) => setModalityFilter(val as any)}
+              onChange={(val) => handleModalityFilterChange(val as any)}
               options={[
                 { value: 'ALL', label: t.allModalities },
                 { value: 'W', label: t.modalityWeekly },
@@ -310,10 +359,7 @@ export const CustomerList: React.FC = () => {
             <label className="block text-xs font-bold text-[#5F6E68] mb-1.5">{t.filterOffice}</label>
             <CustomDropdown<OfficeId>
               value={officeFilter}
-              onChange={(val) => {
-                setOfficeFilter(val);
-                setActiveOffice(val);
-              }}
+              onChange={(val) => handleOfficeFilterChange(val)}
               options={[
                 { value: 'ALL', label: t.allOffices },
                 { value: 'MAIN', label: t.mainOffice },
@@ -328,7 +374,10 @@ export const CustomerList: React.FC = () => {
             <label className="block text-xs font-bold text-[#5F6E68] mb-1.5">{t.colStatus}</label>
             <CustomDropdown<string>
               value={statusFilter}
-              onChange={(val) => setStatusFilter(val as any)}
+              onChange={(val) => {
+                setStatusFilter(val as any);
+                setDisplayLimit(20);
+              }}
               options={[
                 { value: 'ALL', label: t.filterAllStatus },
                 { value: 'PAID', label: t.statusPaid },
@@ -716,16 +765,16 @@ export const CustomerList: React.FC = () => {
         )}
 
         {/* Cursor pagination: Load More & Load All Buttons */}
-        {searchResults === null && (hasMore || isAllLoaded || paginatedCustomers.length < customers.length) && (
+        {allFilteredCustomers.length > 20 && (
           <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 border-t border-slate-200">
             <div className="text-xs font-bold text-slate-600">
               {language === 'EN'
-                ? `Showing ${paginatedCustomers.length} of ${customers.length} customers`
-                : `${customers.length} पैकी ${paginatedCustomers.length} खातेदार दाखवले आहेत`}
+                ? `Showing ${filteredCustomers.length} of ${allFilteredCustomers.length} customers`
+                : `${allFilteredCustomers.length} पैकी ${filteredCustomers.length} खातेदार दाखवले आहेत`}
             </div>
 
             <div className="flex items-center space-x-2 self-end sm:self-auto">
-              {(hasMore || paginatedCustomers.length < customers.length) && (
+              {hasMore && (
                 <>
                   <button
                     type="button"
@@ -757,15 +806,15 @@ export const CustomerList: React.FC = () => {
                     ) : (
                       <span>
                         {language === 'EN'
-                          ? `Load All (${customers.length})`
-                          : `सर्व खातेदार दाखवा (${customers.length})`}
+                          ? `Load All (${allFilteredCustomers.length})`
+                          : `सर्व खातेदार दाखवा (${allFilteredCustomers.length})`}
                       </span>
                     )}
                   </button>
                 </>
               )}
 
-              {isAllLoaded && customers.length > 20 && (
+              {isAllLoaded && allFilteredCustomers.length > 20 && (
                 <button
                   type="button"
                   onClick={handleShowLess}

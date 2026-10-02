@@ -440,7 +440,20 @@ export const Dashboard: React.FC = () => {
           
           {/* Card 1: Total Customers */}
           <div 
-            onClick={() => navigate('/customers')}
+            onClick={() => {
+              const params = new URLSearchParams();
+              if (selectedBishiFilter !== 'ALL') params.set('bishi', selectedBishiFilter);
+              if (modalityFilter !== 'ALL') params.set('modality', modalityFilter);
+              if (officeFilter !== 'ALL') params.set('office', officeFilter);
+              const queryString = params.toString() ? `?${params.toString()}` : '';
+              navigate(`/customers${queryString}`, {
+                state: {
+                  bishiFilter: selectedBishiFilter,
+                  modalityFilter,
+                  officeFilter,
+                },
+              });
+            }}
             className="relative overflow-hidden bg-gradient-to-br from-[#b8860b] to-[#8c6705] p-3 sm:p-4 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-200 transform hover:-translate-y-1 group cursor-pointer"
           >
             <div className="absolute -top-3 -right-3 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/10 pointer-events-none group-hover:scale-125 transition-transform duration-300" />
