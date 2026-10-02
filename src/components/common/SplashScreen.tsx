@@ -95,17 +95,11 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
 
       {/* Logo Container with Pulse Rings */}
       <div className="relative flex items-center justify-center mb-6">
+        {/* Expanding Pulse Ring */}
         {!reducedMotion && (
-          <>
-            {/* Expanding Pulse Ring 1 */}
-            <div
-              className="absolute w-[88px] h-[88px] rounded-[24px] border-2 border-white/55 pointer-events-none animate-pulse-ring-1"
-            />
-            {/* Expanding Pulse Ring 2 */}
-            <div
-              className="absolute w-[88px] h-[88px] rounded-[24px] border-2 border-white/55 pointer-events-none animate-pulse-ring-2"
-            />
-          </>
+          <div
+            className="absolute w-[88px] h-[88px] rounded-[24px] border-2 border-white/55 pointer-events-none animate-pulse-ring-1"
+          />
         )}
 
         {/* 88x88px Logo Mark - Official Bank Emblem Badge */}
