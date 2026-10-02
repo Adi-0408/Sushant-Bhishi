@@ -465,7 +465,7 @@ export const reconcileCustomerInstallments = (
     const existing = map.get(i);
     if (existing) {
       // Check if metadata or dates need refreshing
-      const isPaid = existing.status === 'PAID';
+      const isPaid = existing.status === 'PAID' || (existing.collectedAmount || 0) > 0;
       const custRate = typeof customer.interestRate === 'number' && !isNaN(customer.interestRate)
         ? customer.interestRate
         : (customer.modality === 'W' ? 2.5 : 10);
@@ -480,16 +480,16 @@ export const reconcileCustomerInstallments = (
         existing.periodLabel !== expectedLabel ||
         existing.historicalInterestRate !== custRate ||
         existing.interestAmount !== expectedInterestAmount ||
-        (!isPaid && (existing.expectedAmount !== expAmount || existing.dueDate !== expectedDueDate));
+        (!isPaid && (existing.expectedAmount !== expAmount || (existing.dueDate !== expectedDueDate && !existing.dueDate)));
 
       if (needsUpdate) {
         hasChanges = true;
         const newExpected = isPaid ? existing.expectedAmount : expAmount;
         const newCollected = existing.collectedAmount || 0;
-        const newRemaining = isPaid ? 0 : Math.max(0, newExpected - newCollected);
-        const newStatus = isPaid
+        const newRemaining = isPaid ? (existing.remainingAmount ?? 0) : Math.max(0, newExpected - newCollected);
+        const newStatus = existing.status === 'PAID'
           ? 'PAID'
-          : (newCollected >= newExpected && newExpected > 0 ? 'PAID' : (newCollected > 0 ? 'PARTIAL' : 'PENDING'));
+          : (newCollected >= newExpected && newExpected > 0 ? 'PAID' : (newCollected > 0 ? 'PARTIAL' : existing.status || 'PENDING'));
 
         updatedCollections.push({
           ...existing,
@@ -498,7 +498,7 @@ export const reconcileCustomerInstallments = (
           officeId: customer.officeId,
           bishiType: customer.bishiType,
           periodLabel: expectedLabel,
-          dueDate: isPaid ? existing.dueDate : expectedDueDate,
+          dueDate: isPaid ? existing.dueDate : (existing.dueDate || expectedDueDate),
           expectedAmount: newExpected,
           remainingAmount: newRemaining,
           historicalInterestRate: custRate,
@@ -539,15 +539,9 @@ export const reconcileCustomerInstallments = (
   // 2. Entries beyond targetCount
   map.forEach((entry, idx) => {
     if (idx > targetCount) {
-      const isPaid = entry.status === 'PAID' || (entry.collectedAmount || 0) > 0;
-      if (!isPaid) {
-        // Unpaid extra entry -> Delete it!
-        deletedIds.push(entry.id);
-        hasChanges = true;
-      } else {
-        // If money was already paid on this extra installment, retain it to protect financials
-        updatedCollections.push(entry);
-      }
+      // Retain entries beyond targetCount in updatedCollections to prevent data loss
+      // especially when switching back and forth between Weekly and Monthly or editing scheme/customer
+      updatedCollections.push(entry);
     }
   });
 

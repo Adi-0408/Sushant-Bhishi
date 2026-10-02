@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { BishiConfig, BishiType, Modality } from '../../types';
+import { BishiConfig, BishiType, Modality, Customer } from '../../types';
 import { StorageService } from '../../services/db';
 import { formatDateMarathi, getOfficeNameMarathi } from '../../utils/formatters';
 import { Calendar, Save, Edit3, Plus, X, Trash2, RefreshCw } from 'lucide-react';
@@ -32,10 +32,12 @@ export const BishiManager: React.FC = () => {
     setEditingId(config.id);
     setEditingName(config.name);
     setStartDate(config.startDate);
-    setEndDate(config.endDate);
     const configModality = config.modality || (config.id === '26_JANUARY' ? 'M' : 'W');
     setModality(configModality);
-    setInstallments(config.totalInstallments || (configModality === 'M' ? 10 : 40));
+    const totalInst = config.totalInstallments || (configModality === 'M' ? 10 : 40);
+    setInstallments(totalInst);
+    const effectiveEnd = config.endDate || (config.startDate ? calculateEndDateFromInstallments(config.startDate, configModality, totalInst) : '');
+    setEndDate(effectiveEnd);
   };
 
   const handleSave = async (id: BishiType) => {
@@ -65,18 +67,23 @@ export const BishiManager: React.FC = () => {
 
     StorageService.saveBishiConfigs(updatedList);
 
-    // If total installments for the scheme changed, propagate and reconcile member customers
+    // If total installments or modality for the scheme changed, propagate and reconcile member customers safely
     const oldConfig = bishiConfigs.find((cfg) => cfg.id === id);
     const newInstallmentsNum = Number(installments);
-    if (oldConfig && oldConfig.totalInstallments !== newInstallmentsNum) {
+    if (oldConfig && (oldConfig.totalInstallments !== newInstallmentsNum || oldConfig.modality !== modality)) {
       try {
         const allCustomers = StorageService.getCustomers();
         const schemeCustomers = allCustomers.filter((c) => c.bishiType === id);
         schemeCustomers.forEach((cust) => {
+          const custUpdates: Partial<Customer> = {};
+          if (oldConfig.modality !== modality) {
+            custUpdates.modality = modality;
+          }
           if (!cust.totalInstallments || cust.totalInstallments === oldConfig.totalInstallments) {
-            StorageService.updateCustomer(cust.id, {
-              totalInstallments: newInstallmentsNum,
-            });
+            custUpdates.totalInstallments = newInstallmentsNum;
+          }
+          if (Object.keys(custUpdates).length > 0) {
+            StorageService.updateCustomer(cust.id, custUpdates);
           }
         });
       } catch (err) {
@@ -214,12 +221,19 @@ export const BishiManager: React.FC = () => {
 
   const handleModalityChangeInEdit = (m: Modality) => {
     setModality(m);
-    const defaultCount = m === 'M' ? 10 : 40;
-    setInstallments(defaultCount);
-    if (startDate) {
-      const calculatedEnd = calculateEndDateFromInstallments(startDate, m, defaultCount);
-      if (calculatedEnd) {
-        setEndDate(calculatedEnd);
+    if (startDate && endDate) {
+      const calculatedCount = calculateInstallmentsFromDates(startDate, endDate, m);
+      if (calculatedCount > 0) {
+        setInstallments(calculatedCount);
+      }
+    } else {
+      const defaultCount = m === 'M' ? 10 : 40;
+      setInstallments(defaultCount);
+      if (startDate) {
+        const calculatedEnd = calculateEndDateFromInstallments(startDate, m, defaultCount);
+        if (calculatedEnd) {
+          setEndDate(calculatedEnd);
+        }
       }
     }
   };
@@ -258,12 +272,19 @@ export const BishiManager: React.FC = () => {
 
   const handleModalityChangeInAdd = (m: Modality) => {
     setNewModality(m);
-    const defaultCount = m === 'M' ? 10 : 40;
-    setNewInstallments(defaultCount);
-    if (newStartDate) {
-      const calculatedEnd = calculateEndDateFromInstallments(newStartDate, m, defaultCount);
-      if (calculatedEnd) {
-        setNewEndDate(calculatedEnd);
+    if (newStartDate && newEndDate) {
+      const calculatedCount = calculateInstallmentsFromDates(newStartDate, newEndDate, m);
+      if (calculatedCount > 0) {
+        setNewInstallments(calculatedCount);
+      }
+    } else {
+      const defaultCount = m === 'M' ? 10 : 40;
+      setNewInstallments(defaultCount);
+      if (newStartDate) {
+        const calculatedEnd = calculateEndDateFromInstallments(newStartDate, m, defaultCount);
+        if (calculatedEnd) {
+          setNewEndDate(calculatedEnd);
+        }
       }
     }
   };

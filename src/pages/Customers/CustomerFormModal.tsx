@@ -106,7 +106,25 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
     }
   };
 
+  const isInitializedRef = React.useRef(false);
+  const lastCustomerIdRef = React.useRef<string | null | undefined>(undefined);
+
   useEffect(() => {
+    if (!isOpen) {
+      isInitializedRef.current = false;
+      lastCustomerIdRef.current = undefined;
+      return;
+    }
+
+    const currentId = editingCustomer ? editingCustomer.id : '__new__';
+    if (isInitializedRef.current && lastCustomerIdRef.current === currentId) {
+      // Already initialized for this modal session, DO NOT RESET when background dependencies change!
+      return;
+    }
+
+    isInitializedRef.current = true;
+    lastCustomerIdRef.current = currentId;
+
     if (editingCustomer) {
       setAccountNumber(editingCustomer.accountNumber);
       setName(editingCustomer.name);
@@ -820,6 +838,17 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                     if (!editingCustomer) {
                       setTotalInstallments(val === 'W' ? 40 : 10);
                       setInterestRate(val === 'W' ? defaultWeeklyRate : defaultMonthlyRate);
+                    } else {
+                      if (val === 'M' && (totalInstallments === 40 || totalInstallments === '')) {
+                        setTotalInstallments(10);
+                      } else if (val === 'W' && (totalInstallments === 10 || totalInstallments === '')) {
+                        setTotalInstallments(40);
+                      }
+                      if (val === 'M' && interestRate === defaultWeeklyRate) {
+                        setInterestRate(defaultMonthlyRate);
+                      } else if (val === 'W' && interestRate === defaultMonthlyRate) {
+                        setInterestRate(defaultWeeklyRate);
+                      }
                     }
                   }}
                   options={[
