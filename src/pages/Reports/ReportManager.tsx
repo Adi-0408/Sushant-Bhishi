@@ -749,7 +749,7 @@ export const ReportManager: React.FC = () => {
 
       {/* VIEW 1: MEMBER LEDGER CARD TEMPLATE (Matching physical photo & excel mockup) */}
       {viewMode === 'LEDGER_CARD' && (
-        <div className="bg-white rounded-2xl border border-amber-900/30 shadow-md p-4 sm:p-8 space-y-6 print:border-none print:shadow-none print:p-0">
+        <div className="bg-white rounded-2xl border border-amber-900/30 shadow-md p-4 sm:p-8 space-y-6 print:border-none print:shadow-none print:p-0 print-container print-landscape">
           {activeLedgerCustomer ? (
             <div className="border-4 border-double border-amber-900/40 p-4 sm:p-6 bg-[#fffdfa] rounded-xl space-y-5">
               {/* Header Box */}
@@ -954,7 +954,7 @@ export const ReportManager: React.FC = () => {
 
       {/* VIEW 2: GENERAL SUMMARY REPORT */}
       {viewMode === 'SUMMARY' && (
-        <>
+        <div className="space-y-4 print-container print-landscape w-full">
           {/* Print-Only Header for Summary Report */}
           <div className="print-only mb-6 border-b-2 border-emerald-900 pb-4">
             <div className="flex justify-between items-center">
@@ -1180,8 +1180,8 @@ export const ReportManager: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="hidden md:block print:block overflow-x-auto print:overflow-visible custom-scrollbar relative max-w-full">
-                  <table className="w-full text-left text-xs border-collapse print:text-[8px] print:leading-tight print-fit-table">
+                <div className="hidden md:block print:block overflow-x-auto print:overflow-visible custom-scrollbar relative max-w-full print:w-full print:max-w-none">
+                  <table className="w-full text-left text-xs border-collapse print:text-[7px] print:leading-tight print-fit-table print:w-full">
                     <thead className="bg-emerald-950 text-white font-extrabold print:bg-emerald-950 print:text-white print:table-header-group sticky top-0 z-20 shadow-xs">
                       <tr>
                         {/* Sticky Column 1: # */}
@@ -1468,7 +1468,7 @@ export const ReportManager: React.FC = () => {
               </div>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* ══ VIEW 3: THAKBAKI REPORT ══════════════════════════════════════════ */}
@@ -1481,7 +1481,7 @@ export const ReportManager: React.FC = () => {
         const clearedCount = thakbakiList.filter((e) => e.status === 'CLEARED').length;
 
         return (
-          <div className="space-y-4 print-container">
+          <div className="space-y-4 print-container print-landscape">
             {/* Summary Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 no-print">
               <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs text-center">

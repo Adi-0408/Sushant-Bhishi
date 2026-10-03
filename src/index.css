@@ -370,33 +370,96 @@ table tbody tr:hover {
     display: table-footer-group !important;
   }
 
-  /* Compact table typography for multi-column print reports */
+  /* Compact table typography & width normalization for multi-column print reports */
   .print-fit-table {
     width: 100% !important;
+    max-width: 100% !important;
     table-layout: auto !important;
+    border-collapse: collapse !important;
   }
 
   .print-fit-table th,
   .print-fit-table td {
-    padding: 3px 3px !important;
-    font-size: 8px !important;
+    padding: 2.5px 2px !important;
+    font-size: 7px !important;
+    line-height: 1.15 !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    width: auto !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    position: static !important;
+    left: auto !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: auto !important;
+    box-shadow: none !important;
+  }
+
+  /* Reset all nested children in print tables so min-widths and large font sizes never push columns out */
+  .print-fit-table th *,
+  .print-fit-table td * {
+    min-width: 0 !important;
+    max-width: none !important;
+    position: static !important;
+    box-shadow: none !important;
+    font-size: 7px !important;
     line-height: 1.15 !important;
   }
 
-  /* Standard margin setup; allow orientation selection or automatic page fitting */
+  .print-fit-table div,
+  .print-fit-table a {
+    white-space: normal !important;
+    min-width: 0 !important;
+  }
+
+  /* Ensure text wrapping on customer names and table headers */
+  .print-fit-table th,
+  .print-fit-table .truncate {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+  }
+
+  /* Keep core numeric amounts together so digits never split mid-number */
+  .print-fit-table span.font-black,
+  .print-fit-table td.font-black,
+  .print-fit-table strong {
+    white-space: nowrap !important;
+  }
+
+  /* Super compact subtext breakdown */
+  .print-fit-table [class*="text-[10px]"],
+  .print-fit-table [class*="text-[9px]"],
+  .print-fit-table [class*="text-[11px]"] {
+    font-size: 6px !important;
+    line-height: 1.05 !important;
+  }
+
+  /* Compact status badges and tags */
+  .print-fit-table [class*="rounded-full"],
+  .print-fit-table [class*="rounded-md"] {
+    padding: 1px 2px !important;
+    font-size: 6.5px !important;
+    line-height: 1 !important;
+  }
+
+  /* Standard margin setup: default to landscape for comprehensive reports */
   @page {
-    margin: 5mm 6mm;
-    size: auto;
+    size: landscape;
+    margin: 4mm 4mm;
   }
 
   @page landscape-mode {
     size: landscape;
-    margin: 5mm 5mm;
+    margin: 4mm 4mm;
   }
 
   @page portrait-mode {
     size: portrait;
-    margin: 6mm 8mm;
+    margin: 4mm 5mm;
   }
 
   .print-landscape {
