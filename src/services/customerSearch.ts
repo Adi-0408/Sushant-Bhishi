@@ -117,15 +117,19 @@ export const searchCustomerByAccountNumber = async (
  * Duplicate check for account number.
  * Costs 0 or 1 read, never a full collection scan!
  */
-export const checkAccountNumberExists = async (accountNumber: string): Promise<boolean> => {
+export const checkAccountNumberExists = async (accountNumber: string, bishiType?: string): Promise<boolean> => {
   const cleanAcc = accountNumber.trim();
   if (!cleanAcc) return false;
 
   try {
+    const constraints: any[] = [where('accountNumber', '==', cleanAcc)];
+    if (bishiType) {
+      constraints.push(where('bishiType', '==', bishiType));
+    }
+    constraints.push(limit(1));
     const q = query(
       collection(db, 'customers'),
-      where('accountNumber', '==', cleanAcc),
-      limit(1)
+      ...constraints
     );
     const snap = await getDocs(q);
     return !snap.empty;
@@ -133,7 +137,10 @@ export const checkAccountNumberExists = async (accountNumber: string): Promise<b
     console.warn('[CustomerSearch] checkAccountNumberExists check note:', err);
     try {
       const local = JSON.parse(localStorage.getItem('sb_customers') || '[]');
-      return local.some((c: Customer) => c.accountNumber.trim().toLowerCase() === cleanAcc.toLowerCase());
+      return local.some((c: Customer) =>
+        (!bishiType || c.bishiType === bishiType) &&
+        c.accountNumber.trim().toLowerCase() === cleanAcc.toLowerCase()
+      );
     } catch {
       return false;
     }

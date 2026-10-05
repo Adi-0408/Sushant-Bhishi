@@ -643,7 +643,7 @@ export const ReportManager: React.FC = () => {
                     options={displayedLedgerCustomers.map((cust) => ({
                       value: cust.id,
                       label: `#${cust.accountNumber} - ${cust.name}`,
-                      subLabel: cust.mobile ? `${cust.mobile} • ${getOfficeNameMarathi(cust.officeId, language)}` : getOfficeNameMarathi(cust.officeId, language),
+                      subLabel: `${getBishiNameMarathi(cust.bishiType, language, bishiConfigs)} • ${cust.mobile ? `${cust.mobile} • ` : ''}${getOfficeNameMarathi(cust.officeId, language)}`,
                       badge: cust.modality === 'W' ? (language === 'EN' ? 'Weekly' : 'साप्ताहिक') : (language === 'EN' ? 'Monthly' : 'मासिक'),
                     }))}
                     placeholder={language === 'EN' ? 'Select Customer' : 'खातेदार निवडा'}

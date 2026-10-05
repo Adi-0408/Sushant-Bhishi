@@ -55,7 +55,7 @@ export const CustomerDetail: React.FC = () => {
 
   const customer = customers.find((c) => c.id === id);
   const customerLoans = customer
-    ? loans.filter((l) => l.customerId === customer.id || (customer.accountNumber && l.accountNumber === customer.accountNumber))
+    ? loans.filter((l) => l.customerId === customer.id || (customer.accountNumber && l.accountNumber === customer.accountNumber && (!l.bishiType || l.bishiType === customer.bishiType)))
     : [];
   const loan = customerLoans.find((l) => l.status === 'ACTIVE')
     || [...customerLoans].sort((a, b) => (b.updatedAt || b.issueDate || '').localeCompare(a.updatedAt || a.issueDate || ''))[0]
@@ -66,7 +66,7 @@ export const CustomerDetail: React.FC = () => {
   const loanDueInterest = loan ? calculateLoanDueInterest(loan) : 0;
 
   const customerLoanPayments = customer
-    ? loanPayments.filter((lp) => lp.customerId === customer.id || (loan && lp.loanId === loan.id) || (customer.accountNumber && lp.accountNumber === customer.accountNumber))
+    ? loanPayments.filter((lp) => lp.customerId === customer.id || (loan && lp.loanId === loan.id) || (customer.accountNumber && lp.accountNumber === customer.accountNumber && (!lp.bishiType || lp.bishiType === customer.bishiType)))
     : [];
   const recordedInterestPaid = customerLoanPayments.reduce((sum, lp) => sum + (Number(lp.interestPaid) || 0), 0);
   const totalInterestPaid = recordedInterestPaid > 0 ? recordedInterestPaid : (Number(loan?.totalInterestPaid) || 0);

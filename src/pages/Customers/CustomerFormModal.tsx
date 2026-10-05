@@ -346,12 +346,12 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
         : '';
 
       if (!editingCustomer) {
-        const isDup = await checkAccountNumberExists(accountNumber.trim());
+        const isDup = await checkAccountNumberExists(accountNumber.trim(), bishiType);
         if (isDup) {
           setError(
             language === 'EN'
-              ? 'This account number already exists. Please use a unique number.'
-              : 'हा खाते क्रमांक आधीपासून वापरामध्ये आहे. कृपया वेगळा खाते क्रमांक वापरा.'
+              ? 'This account number already exists in this Bishi scheme. Please use a unique number.'
+              : 'या भिशी योजनेमध्ये हा खाते क्रमांक आधीपासून वापरामध्ये आहे. कृपया वेगळा खाते क्रमांक वापरा.'
           );
           setSubmitting(false);
           return;

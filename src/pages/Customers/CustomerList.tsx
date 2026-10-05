@@ -145,7 +145,7 @@ export const CustomerList: React.FC = () => {
       return cust.summary.pendingInstallments === 0;
     }
     const custColls = collections.filter(
-      (c) => c.customerId === cust.id || (cust.accountNumber && c.accountNumber === cust.accountNumber)
+      (c) => c.customerId === cust.id || (cust.accountNumber && c.accountNumber === cust.accountNumber && (!c.bishiType || c.bishiType === cust.bishiType))
     );
     const fin = calculateCustomerFinancials(cust, custColls, null, bishiConfigs);
     return fin.isCurrentDuePaid;
@@ -225,12 +225,12 @@ export const CustomerList: React.FC = () => {
         } as any);
       } else {
         const custColls = collections.filter(
-          (c) => c.customerId === cust.id || (cust.accountNumber && c.accountNumber === cust.accountNumber)
+          (c) => c.customerId === cust.id || (cust.accountNumber && c.accountNumber === cust.accountNumber && (!c.bishiType || c.bishiType === cust.bishiType))
         );
         const custLoan =
           loans.find(
             (l) =>
-              (l.customerId === cust.id || (cust.accountNumber && l.accountNumber === cust.accountNumber)) &&
+              (l.customerId === cust.id || (cust.accountNumber && l.accountNumber === cust.accountNumber && (!l.bishiType || l.bishiType === cust.bishiType))) &&
               l.status === 'ACTIVE'
           ) || null;
         map.set(cust.id, calculateCustomerFinancials(cust, custColls, custLoan, bishiConfigs));

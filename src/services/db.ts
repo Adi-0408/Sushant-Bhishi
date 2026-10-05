@@ -164,19 +164,24 @@ export const getFirestoreDocId = (collectionName: string, docId: string, data: a
 
   const acc = cleanDocString(data.accountNumber);
   const name = cleanDocString(data.customerName || data.name);
+  const bishi = cleanDocString(data.bishiType || data.bishiName);
 
   if (collectionName === 'customers') {
+    if (bishi && acc && name) return `${bishi}_${acc}_${name}`;
     if (acc && name) return `${acc}_${name}`;
     if (name) return name;
   } else if (collectionName === 'collections') {
     const period = String(data.periodIndex || 1).padStart(2, '0');
+    if (bishi && acc && name) return `${bishi}_${acc}_${name}_हप्ता_${period}`;
     if (acc && name) return `${acc}_${name}_हप्ता_${period}`;
     if (acc) return `${acc}_हप्ता_${period}`;
   } else if (collectionName === 'loans') {
+    if (bishi && acc && name) return `कर्ज_${bishi}_${acc}_${name}`;
     if (acc && name) return `कर्ज_${acc}_${name}`;
     if (acc) return `कर्ज_${acc}`;
   } else if (collectionName === 'loanPayments') {
     const dateStr = cleanDocString(data.paymentDate || docId);
+    if (bishi && acc && name) return `पावती_${bishi}_${acc}_${name}_${dateStr}`;
     if (acc && name) return `पावती_${acc}_${name}_${dateStr}`;
     if (acc) return `पावती_${acc}_${dateStr}`;
   }
@@ -820,10 +825,11 @@ export const StorageService = {
 
     const cleanAcc = customerData.accountNumber.trim();
     const exists = customers.some(
-      (c) => c.accountNumber.trim().toLowerCase() === cleanAcc.toLowerCase()
+      (c) => c.bishiType === customerData.bishiType &&
+             c.accountNumber.trim().toLowerCase() === cleanAcc.toLowerCase()
     );
     if (exists) {
-      throw new Error('हा खाते क्रमांक आधीपासून वापरामध्ये आहे. कृपया वेगळा खाते क्रमांक वापरा.');
+      throw new Error('या भिशी योजनेमध्ये हा खाते क्रमांक आधीपासून वापरामध्ये आहे. कृपया वेगळा खाते क्रमांक वापरा.');
     }
 
     const cleanName = (customerData.name || customerData.customerName || '').trim();
@@ -856,12 +862,15 @@ export const StorageService = {
     const index = customers.findIndex((c) => c.id === id);
     if (index === -1) throw new Error('खातेदार सापडला नाही.');
 
-    if (updates.accountNumber && updates.accountNumber !== customers[index].accountNumber) {
+    const targetType = updates.bishiType || customers[index].bishiType;
+    if (updates.accountNumber && (updates.accountNumber !== customers[index].accountNumber || updates.bishiType !== customers[index].bishiType)) {
       const exists = customers.some(
-        (c) => c.id !== id && c.accountNumber.trim().toLowerCase() === updates.accountNumber!.trim().toLowerCase()
+        (c) => c.id !== id &&
+               c.bishiType === targetType &&
+               c.accountNumber.trim().toLowerCase() === updates.accountNumber!.trim().toLowerCase()
       );
       if (exists) {
-        throw new Error('हा खाते क्रमांक आधीपासून वापरात आहे.');
+        throw new Error('या भिशी योजनेमध्ये हा खाते क्रमांक आधीपासून वापरात आहे.');
       }
     }
 
@@ -1025,61 +1034,44 @@ export const StorageService = {
   deleteCustomer: async (id: string): Promise<void> => {
     const customers = StorageService.getCustomers();
     const cleanId = String(id || '').trim();
-    const customerToDelete = customers.find(
-      (c) => c.id === cleanId || String(c.accountNumber || '').trim().toLowerCase() === cleanId.toLowerCase()
-    );
+    const customerToDelete = customers.find((c) => c.id === cleanId) ||
+      customers.find((c) => String(c.accountNumber || '').trim().toLowerCase() === cleanId.toLowerCase());
     const targetId = customerToDelete?.id || cleanId;
     const targetAcc = customerToDelete?.accountNumber || cleanId;
+    const targetBishi = customerToDelete?.bishiType;
 
-    const remainingCustomers = customers.filter(
-      (c) => c.id !== targetId && String(c.accountNumber || '').trim().toLowerCase() !== String(targetAcc).trim().toLowerCase()
-    );
+    const remainingCustomers = customers.filter((c) => c.id !== targetId);
     setStoredData(STORAGE_KEYS.CUSTOMERS, remainingCustomers);
 
-    // Delete associated collections, loans, and loan payments locally
+    // Delete associated collections, loans, and loan payments locally (strictly scoped to this customer and scheme)
     const collections = StorageService.getCollections();
     const toDeleteColls = collections.filter(
       (c) =>
         c.customerId === targetId ||
-        c.customerId === cleanId ||
-        (targetAcc && String(c.accountNumber).trim().toLowerCase() === String(targetAcc).trim().toLowerCase())
+        (targetAcc && String(c.accountNumber).trim().toLowerCase() === String(targetAcc).trim().toLowerCase() && (!targetBishi || c.bishiType === targetBishi))
     );
-    const remainingColls = collections.filter(
-      (c) =>
-        c.customerId !== targetId &&
-        c.customerId !== cleanId &&
-        (!targetAcc || String(c.accountNumber).trim().toLowerCase() !== String(targetAcc).trim().toLowerCase())
-    );
+    const toDeleteCollIds = new Set(toDeleteColls.map((c) => c.id));
+    const remainingColls = collections.filter((c) => !toDeleteCollIds.has(c.id));
     setStoredData(STORAGE_KEYS.COLLECTIONS, remainingColls);
 
     const loans = StorageService.getLoans();
     const toDeleteLoans = loans.filter(
       (l) =>
         l.customerId === targetId ||
-        l.customerId === cleanId ||
-        (targetAcc && String(l.accountNumber).trim().toLowerCase() === String(targetAcc).trim().toLowerCase())
+        (targetAcc && String(l.accountNumber).trim().toLowerCase() === String(targetAcc).trim().toLowerCase() && (!targetBishi || l.bishiType === targetBishi))
     );
-    const remainingLoans = loans.filter(
-      (l) =>
-        l.customerId !== targetId &&
-        l.customerId !== cleanId &&
-        (!targetAcc || String(l.accountNumber).trim().toLowerCase() !== String(targetAcc).trim().toLowerCase())
-    );
+    const toDeleteLoanIds = new Set(toDeleteLoans.map((l) => l.id));
+    const remainingLoans = loans.filter((l) => !toDeleteLoanIds.has(l.id));
     setStoredData(STORAGE_KEYS.LOANS, remainingLoans);
 
     const allLoanPayments = StorageService.getLoanPayments();
     const toDeletePayments = allLoanPayments.filter(
       (p) =>
         p.customerId === targetId ||
-        p.customerId === cleanId ||
-        (targetAcc && String(p.accountNumber).trim().toLowerCase() === String(targetAcc).trim().toLowerCase())
+        (targetAcc && String(p.accountNumber).trim().toLowerCase() === String(targetAcc).trim().toLowerCase() && (!targetBishi || p.bishiType === targetBishi))
     );
-    const remainingPayments = allLoanPayments.filter(
-      (p) =>
-        p.customerId !== targetId &&
-        p.customerId !== cleanId &&
-        (!targetAcc || String(p.accountNumber).trim().toLowerCase() !== String(targetAcc).trim().toLowerCase())
-    );
+    const toDeletePayIds = new Set(toDeletePayments.map((p) => p.id));
+    const remainingPayments = allLoanPayments.filter((p) => !toDeletePayIds.has(p.id));
     setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, remainingPayments);
 
     // Completely and immediately purge from Firestore via atomic writeBatch (0 getDocs read queries)
@@ -1251,9 +1243,11 @@ export const StorageService = {
     if (index === -1 && updates.periodIndex !== undefined) {
       const targetAcc = String(updates.accountNumber || '').trim().toLowerCase();
       const targetCustId = updates.customerId;
+      const targetBishi = updates.bishiType;
       index = collections.findIndex((c) => {
         const cAcc = String(c.accountNumber || '').trim().toLowerCase();
-        const isSameCust = (targetCustId && c.customerId === targetCustId) || (targetAcc && cAcc === targetAcc);
+        const isSameCust = (targetCustId && c.customerId === targetCustId) ||
+                           (targetAcc && cAcc === targetAcc && (!targetBishi || c.bishiType === targetBishi));
         return isSameCust && c.periodIndex === updates.periodIndex;
       });
     }
@@ -1307,7 +1301,8 @@ export const StorageService = {
       const cCustId = c.customerId;
       const cAcc = String(c.accountNumber || '').trim().toLowerCase();
       const isSamePeriod = c.periodIndex === targetPeriod;
-      const isSameCustomer = (cCustId && cCustId === targetCustId) || (targetAcc && cAcc === targetAcc);
+      const isSameCustomer = (cCustId && cCustId === targetCustId) ||
+                             (targetAcc && cAcc === targetAcc && (!target.bishiType || c.bishiType === target.bishiType));
       if (c.id === id || (isSameCustomer && isSamePeriod)) {
         return { ...c, ...updates, updatedAt: nowIso };
       }
@@ -1322,7 +1317,8 @@ export const StorageService = {
     const cust = targetCustId
       ? StorageService.getCustomerById(targetCustId)
       : StorageService.getCustomers().find(
-          (c) => String(c.accountNumber || '').trim().toLowerCase() === targetAcc
+          (c) => String(c.accountNumber || '').trim().toLowerCase() === targetAcc &&
+                 (!target.bishiType || c.bishiType === target.bishiType)
         );
     if (cust) {
       cust.updatedAt = nowIso;

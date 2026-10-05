@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { BishiConfig, BishiType, Modality, Customer } from '../../types';
 import { StorageService } from '../../services/db';
 import { formatDateMarathi, getOfficeNameMarathi } from '../../utils/formatters';
-import { Calendar, Save, Edit3, Plus, X, Trash2, RefreshCw } from 'lucide-react';
+import { Calendar, Save, Edit3, Plus, X, Trash2, RefreshCw, CheckCircle2, RotateCcw } from 'lucide-react';
 import { ModalPortal } from '../../components/common/ModalPortal';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { MarathiTextInput, convertTextToMarathi } from '../../components/common/MarathiTextInput';
@@ -17,6 +17,10 @@ export const BishiManager: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [installments, setInstallments] = useState<number>(40);
   const [modality, setModality] = useState<Modality>('W');
+  const [startAccountNumber, setStartAccountNumber] = useState<number>(1);
+
+  // Scheme Completion Modal state
+  const [schemeToComplete, setSchemeToComplete] = useState<BishiConfig | null>(null);
 
   // New Bishi Scheme Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -27,6 +31,7 @@ export const BishiManager: React.FC = () => {
   );
   const [newModality, setNewModality] = useState<Modality>('W');
   const [newInstallments, setNewInstallments] = useState<number>(40);
+  const [newStartAccountNumber, setNewStartAccountNumber] = useState<number>(1);
 
   const startEdit = (config: BishiConfig) => {
     setEditingId(config.id);
@@ -36,6 +41,7 @@ export const BishiManager: React.FC = () => {
     setModality(configModality);
     const totalInst = config.totalInstallments || (configModality === 'M' ? 10 : 40);
     setInstallments(totalInst);
+    setStartAccountNumber(config.startAccountNumber || (config.id === 'DASARA' ? 801 : 1));
     const effectiveEnd = config.endDate || (config.startDate ? calculateEndDateFromInstallments(config.startDate, configModality, totalInst) : '');
     setEndDate(effectiveEnd);
   };
@@ -60,6 +66,7 @@ export const BishiManager: React.FC = () => {
           endDate,
           modality,
           totalInstallments: Number(installments),
+          startAccountNumber: Number(startAccountNumber) || 1,
         };
       }
       return cfg;
@@ -115,6 +122,7 @@ export const BishiManager: React.FC = () => {
     const finalName = language === 'MR' ? await convertTextToMarathi(trimmedName) : trimmedName;
 
     const schemeId = finalName.trim().toUpperCase().replace(/\s+/g, '_');
+    const defaultStart = (finalName.includes('दसरा') || finalName.toLowerCase().includes('dasara')) ? 801 : 1;
     const newConfig: BishiConfig = {
       id: schemeId,
       name: finalName.trim(),
@@ -122,6 +130,8 @@ export const BishiManager: React.FC = () => {
       endDate: newEndDate,
       modality: newModality,
       totalInstallments: Number(newInstallments) || (newModality === 'M' ? 10 : 40),
+      startAccountNumber: Number(newStartAccountNumber) || defaultStart,
+      status: 'ACTIVE',
       officeId: activeOffice === 'ALL' ? 'MAIN' : activeOffice,
       color: 'bg-emerald-700',
       bgPastel: 'bg-emerald-50/50',
@@ -136,6 +146,50 @@ export const BishiManager: React.FC = () => {
     refreshData();
     setIsAddModalOpen(false);
     setNewBishiName('');
+    setNewStartAccountNumber(1);
+  };
+
+  const handleCompleteScheme = (scheme: BishiConfig) => {
+    const updatedList = bishiConfigs.map((cfg) => {
+      if (cfg.id === scheme.id) {
+        return {
+          ...cfg,
+          status: 'COMPLETED' as const,
+          completedAt: new Date().toISOString(),
+        };
+      }
+      return cfg;
+    });
+    StorageService.saveBishiConfigs(updatedList);
+    showToast(
+      language === 'EN'
+        ? `Bishi scheme "${scheme.name}" marked as Completed successfully.`
+        : `"${scheme.name}" भिशी योजना यशस्वीपणे पूर्ण (Completed) झाली.`,
+      'success'
+    );
+    refreshData();
+    setSchemeToComplete(null);
+  };
+
+  const handleReopenScheme = (scheme: BishiConfig) => {
+    const updatedList = bishiConfigs.map((cfg) => {
+      if (cfg.id === scheme.id) {
+        return {
+          ...cfg,
+          status: 'ACTIVE' as const,
+          completedAt: undefined,
+        };
+      }
+      return cfg;
+    });
+    StorageService.saveBishiConfigs(updatedList);
+    showToast(
+      language === 'EN'
+        ? `Bishi scheme "${scheme.name}" re-opened successfully.`
+        : `"${scheme.name}" भिशी योजना पुन्हा सुरू (Active) केली गेली.`,
+      'success'
+    );
+    refreshData();
   };
 
   // Helper: calculate end date from start date, modality, and count
@@ -470,10 +524,22 @@ export const BishiManager: React.FC = () => {
               <div key={config.id} className="rainbow-border-box">
                 <div className="bg-white rounded-[1.1rem] overflow-hidden flex flex-col justify-between h-full">
                   {/* Header Banner */}
-                  <div className={`${cardColor} p-6 text-white text-center`}>
-                    <span className="text-xs font-bold uppercase tracking-wider text-white/80 block mb-1">
-                      {language === 'EN' ? 'Bishi Scheme' : 'भिशी प्रकार'}
-                    </span>
+                  <div className={`${cardColor} p-6 text-white text-center relative`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold uppercase tracking-wider text-white/80 block">
+                        {language === 'EN' ? 'Bishi Scheme' : 'भिशी प्रकार'}
+                      </span>
+                      {config.status === 'COMPLETED' ? (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-white/20 text-white backdrop-blur-xs border border-white/30">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-300" />
+                          <span>{language === 'EN' ? 'Completed' : 'पूर्ण'}</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-400/20 text-emerald-100 border border-emerald-300/30">
+                          <span>{language === 'EN' ? 'Active' : 'सुरू'}</span>
+                        </span>
+                      )}
+                    </div>
                     <h3 className="text-2xl font-black text-white !text-white">{isEditing ? (editingName || config.name) : config.name}</h3>
                   </div>
 
@@ -490,6 +556,20 @@ export const BishiManager: React.FC = () => {
                             onChange={(val) => setEditingName(val)}
                             placeholder={language === 'EN' ? 'Enter scheme name' : 'योजनेचे नाव इंग्रजीत टाईप करा'}
                             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-black text-brand-900 bg-white focus:ring-2 focus:ring-[#0F7A5C]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            {language === 'EN' ? 'Starting Account Number:' : 'सुरुवातीचा खाते क्रमांक:'}
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={startAccountNumber || ''}
+                            onChange={(e) => setStartAccountNumber(Number(e.target.value) || 1)}
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-black text-brand-900 bg-white focus:ring-2 focus:ring-[#0F7A5C]"
+                            placeholder={language === 'EN' ? 'e.g. 1 or 801' : 'उदा. 1 किंवा 801'}
                           />
                         </div>
 
@@ -608,6 +688,15 @@ export const BishiManager: React.FC = () => {
 
                         <div className="flex justify-between items-center p-3 bg-white/90 rounded-xl border border-slate-100 shadow-2xs">
                           <span className="text-xs text-slate-500 font-bold">
+                            {language === 'EN' ? 'Starting Account No.' : 'सुरुवातीचा खाते क्र.'}
+                          </span>
+                          <span className="font-extrabold text-brand-800">
+                            #{config.startAccountNumber || (config.id === 'DASARA' ? 801 : 1)}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center p-3 bg-white/90 rounded-xl border border-slate-100 shadow-2xs">
+                          <span className="text-xs text-slate-500 font-bold">
                             {language === 'EN' ? 'Start Date' : 'सुरुवातीची तारीख'}
                           </span>
                           <span className="font-extrabold text-slate-800">
@@ -648,24 +737,47 @@ export const BishiManager: React.FC = () => {
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => startEdit(config)}
-                          className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-extrabold text-xs hover:bg-slate-800 transition-all flex items-center justify-center space-x-2 shadow-xs cursor-pointer hover:shadow-md active:scale-[0.99]"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                          <span>{language === 'EN' ? 'Edit Scheme' : 'नाव, तारीख व हप्ते बदला (Edit)'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSchemeToDelete(config)}
-                          className="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200 transition-all flex items-center justify-center shadow-xs cursor-pointer hover:scale-105 active:scale-95"
-                          title={language === 'EN' ? 'Delete Bishi Scheme' : 'भिशी योजना हटवा'}
-                          aria-label={language === 'EN' ? 'Delete Bishi Scheme' : 'भिशी योजना हटवा'}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => startEdit(config)}
+                            className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-extrabold text-xs hover:bg-slate-800 transition-all flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer hover:shadow-md active:scale-[0.99]"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                            <span>{language === 'EN' ? 'Edit' : 'बदला'}</span>
+                          </button>
+                          {config.status !== 'COMPLETED' ? (
+                            <button
+                              type="button"
+                              onClick={() => setSchemeToComplete(config)}
+                              className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs transition-all flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer hover:shadow-md active:scale-[0.99]"
+                              title={language === 'EN' ? 'Mark Bishi Scheme as Completed' : 'भिशी योजना पूर्ण झाली म्हणून नोंदवा'}
+                            >
+                              <CheckCircle2 className="w-4 h-4 text-emerald-100" />
+                              <span>{language === 'EN' ? 'Complete' : 'भिशी पूर्ण करा'}</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleReopenScheme(config)}
+                              className="flex-1 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-extrabold text-xs transition-all flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer active:scale-[0.99]"
+                              title={language === 'EN' ? 'Re-open Scheme' : 'योजना पुन्हा सुरू करा'}
+                            >
+                              <RotateCcw className="w-4 h-4 text-amber-700" />
+                              <span>{language === 'EN' ? 'Re-open' : 'पुन्हा सुरू करा'}</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setSchemeToDelete(config)}
+                            className="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200 transition-all flex items-center justify-center shadow-xs cursor-pointer hover:scale-105 active:scale-95"
+                            title={language === 'EN' ? 'Delete Bishi Scheme' : 'भिशी योजना हटवा'}
+                            aria-label={language === 'EN' ? 'Delete Bishi Scheme' : 'भिशी योजना हटवा'}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -734,6 +846,24 @@ export const BishiManager: React.FC = () => {
                       {language === 'EN' ? 'Monthly' : 'मासिक'}
                     </button>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {language === 'EN' ? 'Starting Account Number' : 'सुरुवातीचा खाते क्रमांक (Starting Acc No)'} <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={newStartAccountNumber || ''}
+                    onChange={(e) => setNewStartAccountNumber(Number(e.target.value) || 1)}
+                    className="w-full px-4 py-2 rounded-xl border border-slate-300 text-sm font-bold bg-white focus:ring-2 focus:ring-[#0F7A5C]"
+                    placeholder={language === 'EN' ? 'e.g. 1 for August, 801 for Dasara' : 'उदा. ऑगस्टसाठी 1, दसरासाठी 801'}
+                  />
+                  <p className="text-[11px] text-slate-500 font-medium mt-1">
+                    {language === 'EN' ? 'New accounts under this scheme will start numbering from here.' : 'या योजनेतील नवीन खाती या क्रमांकापासून सुरू होतील.'}
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -820,6 +950,25 @@ export const BishiManager: React.FC = () => {
         </div>
       </ModalPortal>
       )}
+
+      {/* Complete Scheme Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!schemeToComplete}
+        title={language === 'EN' ? 'Complete Bishi Scheme' : 'भिशी योजना पूर्ण करा'}
+        message={
+          language === 'EN'
+            ? `Are you sure you want to mark the scheme "${schemeToComplete?.name}" as Completed? All customer ledgers, installment records, and payment history will be safely preserved in history, and you can start a new cycle with reset account numbers.`
+            : `तुम्हाला खात्री आहे का की "${schemeToComplete?.name}" ही भिशी योजना पूर्ण (Completed) करायची आहे? सर्व खातेदारांचे हप्ते, जमा-खर्च आणि लेजर सुरक्षितपणे संग्रहित (Archive) राहतील आणि तुम्ही नवीन सत्रासाठी पुन्हा १ पासून खाते क्रमांक वापरू शकाल.`
+        }
+        confirmText={language === 'EN' ? 'Yes, Complete Scheme' : 'होय, भिशी पूर्ण करा'}
+        cancelText={language === 'EN' ? 'Cancel' : 'रद्द करा'}
+        onConfirm={() => {
+          if (schemeToComplete) {
+            handleCompleteScheme(schemeToComplete);
+          }
+        }}
+        onCancel={() => setSchemeToComplete(null)}
+      />
 
       {/* Delete Scheme Confirmation Modal */}
       <ConfirmModal

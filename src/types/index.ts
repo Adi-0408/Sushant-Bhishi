@@ -25,6 +25,9 @@ export interface BishiConfig {
   officeId: OfficeId;
   color?: string;
   bgPastel?: string;
+  startAccountNumber?: number;
+  status?: 'ACTIVE' | 'COMPLETED' | 'CLOSED';
+  completedAt?: string;
 }
 
 export interface Customer {
@@ -130,6 +133,7 @@ export interface Loan {
   customerName?: string;
   accountNumber: string;
   officeId: OfficeId;
+  bishiType?: BishiType;
   customerMobile?: string;
   principalAmount: number;
   issueDate: string;
@@ -153,6 +157,7 @@ export interface LoanPayment {
   customerName?: string;
   accountNumber?: string;
   officeId?: OfficeId;
+  bishiType?: BishiType;
   customerMobile?: string;
   paymentDate: string;
   paidAmount: number;

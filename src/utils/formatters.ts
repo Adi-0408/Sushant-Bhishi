@@ -6,53 +6,40 @@ export const generateNextAccountNumber = (
   customers: Customer[],
   bishiConfigs: BishiConfig[] = []
 ): string => {
-  let startNum = 1;
-  let endNum = 300;
+  const config = bishiConfigs.find((c) => c.id === bishiType);
+  let startNum = config?.startAccountNumber;
 
-  if (bishiType === '15_AUGUST') {
-    startNum = 1;
-    endNum = 300;
-  } else if (bishiType === '26_JANUARY') {
-    startNum = 301;
-    endNum = 600;
-  } else if (bishiType === 'DASARA') {
-    startNum = 601;
-    endNum = 900;
-  } else if (bishiType === 'LOAN_ONLY') {
-    startNum = 9001;
-    endNum = 9999;
-  } else {
-    const idx = bishiConfigs.findIndex((c) => c.id === bishiType);
-    if (idx >= 0) {
-      startNum = idx * 300 + 1;
-      endNum = (idx + 1) * 300;
+  if (typeof startNum !== 'number' || isNaN(startNum) || startNum <= 0) {
+    if (bishiType === '15_AUGUST' || String(bishiType).toUpperCase().includes('AUGUST')) {
+      startNum = 1;
+    } else if (bishiType === '26_JANUARY' || String(bishiType).toUpperCase().includes('JANUARY')) {
+      startNum = 301;
+    } else if (bishiType === 'DASARA' || String(bishiType).toUpperCase().includes('DASARA')) {
+      startNum = 801;
+    } else if (bishiType === 'LOAN_ONLY') {
+      startNum = 9001;
     } else {
-      startNum = 901;
-      endNum = 1200;
+      const idx = bishiConfigs.findIndex((c) => c.id === bishiType);
+      if (idx >= 0) {
+        startNum = idx * 300 + 1;
+      } else {
+        startNum = 1;
+      }
     }
   }
 
-  const existingNums = customers
+  // Strictly consider customers registered under THIS specific bishiType
+  const schemeCustomers = customers.filter((c) => c.bishiType === bishiType);
+  const existingNums = schemeCustomers
     .map((c) => parseInt(c.accountNumber.replace(/\D/g, ''), 10))
-    .filter((n) => !isNaN(n) && n >= startNum && n <= endNum);
+    .filter((n) => !isNaN(n) && n >= startNum);
 
   if (existingNums.length === 0) {
     return String(startNum);
   }
 
   const maxNum = Math.max(...existingNums);
-  const nextNum = maxNum + 1;
-
-  if (nextNum > endNum) {
-    const usedSet = new Set(existingNums);
-    let gap = startNum;
-    while (usedSet.has(gap)) {
-      gap++;
-    }
-    return String(gap);
-  }
-
-  return String(nextNum);
+  return String(maxNum + 1);
 };
 
 export const formatCurrency = (amount: number, lang: Language = 'MR'): string => {
@@ -79,7 +66,20 @@ export const formatDateMarathi = (dateString?: string, lang: Language = 'MR'): s
   }
 };
 
-export const getBishiNameMarathi = (type: BishiType, lang: Language = 'MR'): string => {
+export const getBishiNameMarathi = (type: BishiType, lang: Language = 'MR', bishiConfigs?: BishiConfig[]): string => {
+  if (bishiConfigs && bishiConfigs.length > 0) {
+    const found = bishiConfigs.find((c) => c.id === type);
+    if (found?.name) return found.name;
+  }
+  try {
+    const raw = localStorage.getItem('sb_bishi_configs');
+    if (raw) {
+      const parsed: BishiConfig[] = JSON.parse(raw);
+      const found = parsed.find((c) => c.id === type);
+      if (found?.name) return found.name;
+    }
+  } catch {}
+
   if (lang === 'EN') {
     switch (type) {
       case '15_AUGUST':
@@ -91,7 +91,7 @@ export const getBishiNameMarathi = (type: BishiType, lang: Language = 'MR'): str
       case 'LOAN_ONLY':
         return 'Loan Only Customer';
       default:
-        return type;
+        return String(type).replace(/_/g, ' ');
     }
   }
   switch (type) {
@@ -104,7 +104,7 @@ export const getBishiNameMarathi = (type: BishiType, lang: Language = 'MR'): str
     case 'LOAN_ONLY':
       return 'फक्त कर्ज खातेदार (Loan Only)';
     default:
-      return type;
+      return String(type).replace(/_/g, ' ');
   }
 };
 
