@@ -34,33 +34,51 @@ export interface IncrementalSyncResult {
   message: string;
 }
 
+let touchSyncDebounceTimer: any = null;
+let pendingExtraFields: Record<string, any> = {};
+
 /**
  * Updates the global sync version / lastUpdated timestamp in Firestore.
- * Also stores total counts so other devices can immediately detect record count mismatches.
+ * Debounced by default to prevent burst writes during rapid user actions.
  */
-export const touchSyncTimestamp = async (extraFields?: Record<string, any>): Promise<void> => {
-  try {
-    const now = new Date().toISOString();
-    const statsRef = doc(db, 'stats', 'summary');
-    const custCount = StorageService.getCustomers().length;
-    const collCount = StorageService.getCollections().length;
-    const loanCount = StorageService.getLoans().length;
-    const updatePayload: Record<string, any> = {
-      lastUpdated: now,
-      totalCustomers: custCount,
-      totalCollections: collCount,
-      totalLoans: loanCount,
-      ...extraFields,
-    };
-    await updateDoc(statsRef, updatePayload).catch(async () => {
-      await setDoc(statsRef, updatePayload, { merge: true });
-    });
-    localStorage.setItem(LAST_SYNC_KEY, now);
+export const touchSyncTimestamp = async (extraFields?: Record<string, any>, immediate: boolean = false): Promise<void> => {
+  if (extraFields) {
+    pendingExtraFields = { ...pendingExtraFields, ...extraFields };
+  }
 
-    // Strategy 2: Pre-package database snapshot so 11 PM Cloud backup uses only 1 Read!
-    queueSnapshotPublishDebounced();
-  } catch (err) {
-    console.warn('[Sync] touchSyncTimestamp note:', err);
+  const executeTouch = async () => {
+    try {
+      const now = new Date().toISOString();
+      const statsRef = doc(db, 'stats', 'summary');
+      const custCount = StorageService.getCustomers().length;
+      const collCount = StorageService.getCollections().filter((c) => (c.collectedAmount || 0) > 0 || c.status === 'PAID').length;
+      const loanCount = StorageService.getLoans().length;
+      const updatePayload: Record<string, any> = {
+        lastUpdated: now,
+        totalCustomers: custCount,
+        totalCollections: collCount,
+        totalLoans: loanCount,
+        ...pendingExtraFields,
+      };
+      pendingExtraFields = {};
+      await updateDoc(statsRef, updatePayload).catch(async () => {
+        await setDoc(statsRef, updatePayload, { merge: true });
+      });
+      localStorage.setItem(LAST_SYNC_KEY, now);
+
+      // Pre-package database snapshot so 11 PM Cloud backup uses only 1 Read!
+      queueSnapshotPublishDebounced(60000);
+    } catch (err) {
+      console.warn('[Sync] touchSyncTimestamp note:', err);
+    }
+  };
+
+  if (immediate) {
+    if (touchSyncDebounceTimer) clearTimeout(touchSyncDebounceTimer);
+    await executeTouch();
+  } else {
+    if (touchSyncDebounceTimer) clearTimeout(touchSyncDebounceTimer);
+    touchSyncDebounceTimer = setTimeout(executeTouch, 2500);
   }
 };
 
@@ -198,23 +216,33 @@ export const performIncrementalSync = async (forceFull: boolean = false): Promis
     const cloudColls = Number(statsData?.totalCollections) || 0;
     const cloudLoans = Number(statsData?.totalLoans) || 0;
 
-    // Detect if this device is missing records compared to the cloud (needs pull from cloud)
+    // Detect if this device is missing customers or loans compared to the cloud (needs pull from cloud)
     const hasCountsMismatch =
       (cloudCusts > 0 && localCusts.length < cloudCusts) ||
-      (cloudColls > 0 && localColls.length < cloudColls) ||
       (cloudLoans > 0 && localLoans.length < cloudLoans);
 
-    // Detect if this device has more records than the cloud (needs push to cloud)
+    // Detect if this device has new customers/loans created while offline (needs delta push to cloud)
     const hasLocalMore =
       (cloudCusts > 0 && localCusts.length > cloudCusts) ||
-      (cloudColls > 0 && localColls.length > cloudColls) ||
       (cloudLoans > 0 && localLoans.length > cloudLoans);
 
     if (hasLocalMore) {
-      await StorageService.syncAllToFirestore();
-      await touchSyncTimestamp();
+      const cloudAccounts = new Set(
+        Array.isArray(statsData?.activeCustomerAccounts)
+          ? statsData.activeCustomerAccounts.map((a: string) => String(a).trim().toLowerCase())
+          : []
+      );
+      const newCusts = localCusts.filter(
+        (c) => !cloudAccounts.has(String(c.accountNumber).trim().toLowerCase())
+      );
+      if (newCusts.length > 0) {
+        for (const c of newCusts) {
+          await StorageService.syncCustomerToFirestore(c);
+        }
+      }
+      await touchSyncTimestamp(undefined, true);
       return {
-        updatedCount: 0,
+        updatedCount: newCusts.length,
         deletedCount: 0,
         readsCount,
         isUpToDate: true,
@@ -425,6 +453,27 @@ export const performIncrementalSync = async (forceFull: boolean = false): Promis
             (!c.accountNumber || !deletedCustomerAccounts.has(String(c.accountNumber).trim().toLowerCase()))
         );
         localStorage.setItem('sb_customers', JSON.stringify(current));
+
+        const currentColls = StorageService.getCollections().filter(
+          (c) =>
+            !deletedCustomerIds.has(c.customerId) &&
+            (!c.accountNumber || !deletedCustomerAccounts.has(String(c.accountNumber).trim().toLowerCase()))
+        );
+        localStorage.setItem('sb_collections', JSON.stringify(currentColls));
+
+        const currentLoans = StorageService.getLoans().filter(
+          (l) =>
+            !deletedCustomerIds.has(l.customerId) &&
+            (!l.accountNumber || !deletedCustomerAccounts.has(String(l.accountNumber).trim().toLowerCase()))
+        );
+        localStorage.setItem('sb_loans', JSON.stringify(currentLoans));
+
+        const currentPays = StorageService.getLoanPayments().filter(
+          (p) =>
+            !deletedCustomerIds.has(p.customerId) &&
+            (!p.accountNumber || !deletedCustomerAccounts.has(String(p.accountNumber).trim().toLowerCase()))
+        );
+        localStorage.setItem('sb_loan_payments', JSON.stringify(currentPays));
       }
       if (deletedCollIds.size > 0) {
         const current = StorageService.getCollections().filter((c) => !deletedCollIds.has(c.id));

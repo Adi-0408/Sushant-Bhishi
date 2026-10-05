@@ -847,6 +847,10 @@ export const StorageService = {
     return newCustomer;
   },
 
+  syncCustomerToFirestore: async (customer: Customer): Promise<void> => {
+    await syncToFirestore('customers', customer.id, customer);
+  },
+
   updateCustomer: (id: string, updates: Partial<Customer>): Customer => {
     const customers = StorageService.getCustomers();
     const index = customers.findIndex((c) => c.id === id);
@@ -934,15 +938,17 @@ export const StorageService = {
           });
           if (collsChanged) {
             setStoredData(STORAGE_KEYS.COLLECTIONS, updatedColls);
-            updatedColls
-              .filter((c) => c.customerId === id || (customers[index].accountNumber && c.accountNumber === customers[index].accountNumber))
-              .forEach((c) => {
-                if (accountChanged || nameChanged) {
-                  const oldC = { ...c, customerName: oldCustomer.name, accountNumber: oldCustomer.accountNumber };
-                  deleteFromFirestore('collections', c.id, oldC);
-                }
+            if (accountChanged || nameChanged) {
+              const activeUpdatedColls = updatedColls
+                .filter((c) => c.customerId === id || (customers[index].accountNumber && c.accountNumber === customers[index].accountNumber))
+                .filter((c) => (c.collectedAmount || 0) > 0 || c.status === 'PAID' || c.status === 'PARTIAL');
+
+              activeUpdatedColls.forEach((c) => {
+                const oldC = { ...c, customerName: oldCustomer.name, accountNumber: oldCustomer.accountNumber };
+                deleteFromFirestore('collections', c.id, oldC);
                 syncToFirestore('collections', c.id, c);
               });
+            }
           }
         }
       }
@@ -951,58 +957,62 @@ export const StorageService = {
       let loansChanged = false;
       const updatedLoans = allLoans.map((l) => {
         if (l.customerId === id || (oldCustomer.accountNumber && l.accountNumber === oldCustomer.accountNumber)) {
-          loansChanged = true;
-          return {
-            ...l,
-            customerId: id,
-            customerName: customers[index].name,
-            accountNumber: customers[index].accountNumber,
-            officeId: customers[index].officeId,
-            customerMobile: customers[index].mobile,
-          };
+          if (accountChanged || nameChanged || l.customerMobile !== customers[index].mobile || l.officeId !== customers[index].officeId) {
+            loansChanged = true;
+            return {
+              ...l,
+              customerId: id,
+              customerName: customers[index].name,
+              accountNumber: customers[index].accountNumber,
+              officeId: customers[index].officeId,
+              customerMobile: customers[index].mobile,
+            };
+          }
         }
         return l;
       });
       if (loansChanged) {
         setStoredData(STORAGE_KEYS.LOANS, updatedLoans);
-        updatedLoans
-          .filter((l) => l.customerId === id || (customers[index].accountNumber && l.accountNumber === customers[index].accountNumber))
-          .forEach((l) => {
-            if (accountChanged || nameChanged) {
+        if (accountChanged || nameChanged) {
+          updatedLoans
+            .filter((l) => l.customerId === id || (customers[index].accountNumber && l.accountNumber === customers[index].accountNumber))
+            .forEach((l) => {
               const oldL = { ...l, customerName: oldCustomer.name, accountNumber: oldCustomer.accountNumber };
               deleteFromFirestore('loans', l.id, oldL);
-            }
-            syncToFirestore('loans', l.id, l);
-          });
+              syncToFirestore('loans', l.id, l);
+            });
+        }
       }
 
       const allLoanPayments = getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []);
       let paymentsChanged = false;
       const updatedPayments = allLoanPayments.map((p) => {
         if (p.customerId === id || (oldCustomer.accountNumber && p.accountNumber === oldCustomer.accountNumber)) {
-          paymentsChanged = true;
-          return {
-            ...p,
-            customerId: id,
-            customerName: customers[index].name,
-            accountNumber: customers[index].accountNumber,
-            officeId: customers[index].officeId,
-            customerMobile: customers[index].mobile,
-          };
+          if (accountChanged || nameChanged || p.customerMobile !== customers[index].mobile || p.officeId !== customers[index].officeId) {
+            paymentsChanged = true;
+            return {
+              ...p,
+              customerId: id,
+              customerName: customers[index].name,
+              accountNumber: customers[index].accountNumber,
+              officeId: customers[index].officeId,
+              customerMobile: customers[index].mobile,
+            };
+          }
         }
         return p;
       });
       if (paymentsChanged) {
         setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, updatedPayments);
-        updatedPayments
-          .filter((p) => p.customerId === id || (customers[index].accountNumber && p.accountNumber === customers[index].accountNumber))
-          .forEach((p) => {
-            if (accountChanged || nameChanged) {
+        if (accountChanged || nameChanged) {
+          updatedPayments
+            .filter((p) => p.customerId === id || (customers[index].accountNumber && p.accountNumber === customers[index].accountNumber))
+            .forEach((p) => {
               const oldP = { ...p, customerName: oldCustomer.name, accountNumber: oldCustomer.accountNumber };
               deleteFromFirestore('loanPayments', p.id, oldP);
-            }
-            syncToFirestore('loanPayments', p.id, p);
-          });
+              syncToFirestore('loanPayments', p.id, p);
+            });
+        }
       }
     } catch (e) {}
 
@@ -1094,8 +1104,11 @@ export const StorageService = {
         queueDelete('customers', readableDocId);
       }
 
-      // 2. Collection document refs
-      for (const c of toDeleteColls) {
+      // 2. Active collection document refs (only delete documents that could exist in cloud)
+      const activeToDeleteColls = toDeleteColls.filter(
+        (c) => (c.collectedAmount || 0) > 0 || c.status === 'PAID' || c.status === 'PARTIAL'
+      );
+      for (const c of activeToDeleteColls) {
         queueDelete('collections', c.id);
         const enriched = {
           ...c,
@@ -1125,14 +1138,6 @@ export const StorageService = {
         queueDelete('loanPayments', readablePayId);
       }
 
-      // 5. Installments document refs
-      for (const c of toDeleteColls) {
-        queueDelete('installments', `inst_bishi_${id}_${c.periodIndex}`);
-      }
-      for (const l of toDeleteLoans) {
-        queueDelete('installments', `inst_loan_${l.id}_1`);
-      }
-
       // Commit in atomic chunks of 400 with writeBatch (strictly 0 getDocs reads)
       const CHUNK_SIZE = 400;
       for (let i = 0; i < docRefsToDelete.length; i += CHUNK_SIZE) {
@@ -1147,9 +1152,9 @@ export const StorageService = {
       console.log(`[Firestore] Purged customer ${id} and ${docRefsToDelete.length} related documents with 0 server reads.`);
       invalidateStatsCache();
       recordDeletion('customers', targetId, { accountNumber: targetAcc, name: customerToDelete?.name });
-      toDeleteLoans.forEach((l) => recordDeletion('loans', l.id, { accountNumber: targetAcc }));
-      toDeleteColls.forEach((c) => recordDeletion('collections', c.id, { accountNumber: targetAcc }));
-      toDeletePayments.forEach((p) => recordDeletion('loanPayments', p.id, { accountNumber: targetAcc }));
+      if (toDeleteLoans.length > 0) {
+        toDeleteLoans.forEach((l) => recordDeletion('loans', l.id, { accountNumber: targetAcc }));
+      }
       touchSyncOnCustomerDelete(targetAcc);
       endSyncOp(true);
     } catch (err) {
@@ -1207,29 +1212,35 @@ export const StorageService = {
     });
     const combined = deduplicateCollections([...newEntries, ...filtered]);
     setStoredData(STORAGE_KEYS.COLLECTIONS, combined);
-    syncBatchToFirestore(
-      'collections',
-      newEntries.map((entry) => ({ docId: entry.id, data: entry }))
+    // Only sync active or paid collections to Firestore. Empty/pending future schedules remain offline/local.
+    const activeEntriesToSync = newEntries.filter(
+      (entry) => (entry.collectedAmount || 0) > 0 || entry.status === 'PAID' || entry.status === 'PARTIAL'
     );
+    if (activeEntriesToSync.length > 0) {
+      syncBatchToFirestore(
+        'collections',
+        activeEntriesToSync.map((entry) => ({ docId: entry.id, data: entry }))
+      );
 
-    // Strategy 2: Sync owning customer doc(s) with embedded installments to Firestore
-    const affectedCustIds = new Set<string>();
-    newEntries.forEach((e) => {
-      if (e.customerId) affectedCustIds.add(e.customerId);
-      if (e.accountNumber) {
-        const cust = StorageService.getCustomers().find(
-          (c) => String(c.accountNumber).trim().toLowerCase() === String(e.accountNumber).trim().toLowerCase()
-        );
-        if (cust) affectedCustIds.add(cust.id);
-      }
-    });
+      // Sync owning customer doc(s) with embedded installments to Firestore only when active entries change
+      const affectedCustIds = new Set<string>();
+      activeEntriesToSync.forEach((e) => {
+        if (e.customerId) affectedCustIds.add(e.customerId);
+        if (e.accountNumber) {
+          const cust = StorageService.getCustomers().find(
+            (c) => String(c.accountNumber).trim().toLowerCase() === String(e.accountNumber).trim().toLowerCase()
+          );
+          if (cust) affectedCustIds.add(cust.id);
+        }
+      });
 
-    affectedCustIds.forEach((cId) => {
-      const cust = StorageService.getCustomerById(cId);
-      if (cust) {
-        syncToFirestore('customers', cust.id, cust);
-      }
-    });
+      affectedCustIds.forEach((cId) => {
+        const cust = StorageService.getCustomerById(cId);
+        if (cust) {
+          syncToFirestore('customers', cust.id, cust);
+        }
+      });
+    }
   },
 
   updateCollectionEntry: (id: string, updates: Partial<CollectionEntry>): CollectionEntry => {
@@ -1315,7 +1326,8 @@ export const StorageService = {
         );
     if (cust) {
       cust.updatedAt = nowIso;
-      syncToFirestore('customers', cust.id, cust);
+      // Note: Omit redundant syncToFirestore('customers') on individual installment entries
+      // The collection transaction document itself is already synced above.
     }
 
     if (updatedEntry.status === 'PAID' || Number(updatedEntry.collectedAmount) >= Number(updatedEntry.expectedAmount)) {
@@ -2124,10 +2136,13 @@ export const StorageService = {
         );
       }
       const collections = StorageService.getCollections();
-      if (collections.length > 0) {
+      const activeCollections = collections.filter(
+        (c) => (c.collectedAmount || 0) > 0 || c.status === 'PAID' || c.status === 'PARTIAL'
+      );
+      if (activeCollections.length > 0) {
         await syncBatchToFirestore(
           'collections',
-          collections.map((c) => ({ docId: c.id, data: c }))
+          activeCollections.map((c) => ({ docId: c.id, data: c }))
         );
       }
       const bishi = StorageService.getBishiConfigs();

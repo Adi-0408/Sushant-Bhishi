@@ -16,7 +16,6 @@ import { ModalPortal } from '../../components/common/ModalPortal';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { X, UserPlus, Save, AlertCircle, CheckCircle2, Landmark, Calendar, Clock, DollarSign, Trash2 } from 'lucide-react';
 import { checkAccountNumberExists } from '../../services/customerSearch';
-import { generateBishiInstallmentSchedule, generateLoanInstallmentSchedule, saveInstallmentsBatchToFirestore } from '../../services/installments';
 import { invalidateStatsCache } from '../../services/stats';
 
 interface CustomerFormModalProps {
@@ -590,25 +589,6 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           });
 
           StorageService.saveCollectionsBatch(preparedCollections);
-
-          // Step 1: Generate and save bishi installments schedule upfront
-          const bishiInstallments = generateBishiInstallmentSchedule(
-            newCustomer,
-            bishiDate,
-            targetInstallments,
-            modality
-          );
-          if (Number(alreadyPaidAmount) > 0) {
-            let budget = Number(alreadyPaidAmount);
-            bishiInstallments.forEach((inst) => {
-              if (budget >= inst.amount && inst.amount > 0) {
-                inst.status = 'paid';
-                inst.paidAt = inst.dueDate;
-                budget -= inst.amount;
-              }
-            });
-          }
-          saveInstallmentsBatchToFirestore(bishiInstallments);
         }
 
         // Save Loan if applicable
@@ -643,10 +623,6 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             penaltyAmount: 0,
             status: isCompleted ? 'COMPLETED' : 'ACTIVE',
           });
-
-          // Step 1: Generate and save loan installment schedule upfront
-          const loanInstallments = generateLoanInstallmentSchedule(savedLoan);
-          saveInstallmentsBatchToFirestore(loanInstallments);
 
           if (paidPrin > 0 || paidInt > 0) {
             StorageService.addLoanPayment({

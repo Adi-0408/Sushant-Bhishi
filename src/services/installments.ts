@@ -91,50 +91,23 @@ export const generateLoanInstallmentSchedule = (loan: Loan): Installment[] => {
 
 /**
  * Saves a schedule of installments into Firestore using atomic writeBatch.
- * (One-time write cost per enrollment/loan).
+ * (Optimized: No-op. Installment schedules are dynamically calculated and embedded in customer docs, saving 40-50 writes per customer).
  */
-export const saveInstallmentsBatchToFirestore = async (installments: Installment[]): Promise<void> => {
-  if (!installments || installments.length === 0) return;
-
-  const CHUNK_SIZE = 400;
-  for (let i = 0; i < installments.length; i += CHUNK_SIZE) {
-    const chunk = installments.slice(i, i + CHUNK_SIZE);
-    const batch = writeBatch(db);
-
-    for (const inst of chunk) {
-      const ref = doc(db, 'installments', inst.id);
-      batch.set(ref, inst, { merge: true });
-    }
-
-    await batch.commit();
-  }
+export const saveInstallmentsBatchToFirestore = async (_installments: Installment[]): Promise<void> => {
+  return;
 };
 
 /**
  * Marks a matching installment as "paid" when a payment is recorded.
+ * (Optimized: No-op. Collections collection is the canonical source of truth).
  */
 export const markInstallmentAsPaid = async (
-  customerId: string,
-  periodIndex: number,
-  type: 'bishi' | 'loan' = 'bishi',
-  paidAtIso: string = new Date().toISOString()
+  _customerId: string,
+  _periodIndex: number,
+  _type: 'bishi' | 'loan' = 'bishi',
+  _paidAtIso: string = new Date().toISOString()
 ): Promise<void> => {
-  try {
-    const installmentId = type === 'bishi'
-      ? `inst_bishi_${customerId}_${periodIndex}`
-      : `inst_loan_${customerId}_${periodIndex}`;
-
-    const ref = doc(db, 'installments', installmentId);
-    await updateDoc(ref, {
-      status: 'paid',
-      paidAt: paidAtIso,
-      updatedAt: new Date().toISOString(),
-    }).catch(() => {
-      // If doc doesn't exist by constructed ID, skip quietly
-    });
-  } catch (err) {
-    console.warn('[Installments] Note updating installment status:', err);
-  }
+  return;
 };
 
 /**

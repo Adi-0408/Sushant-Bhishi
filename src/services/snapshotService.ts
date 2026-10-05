@@ -110,7 +110,7 @@ export async function publishBackupSnapshotToFirestore(providedData?: SystemBack
 // Debounce timer so continuous typing or multiple rapid updates only publish once
 let debounceTimer: any = null;
 
-export function queueSnapshotPublishDebounced(delayMs: number = 8000): void {
+export function queueSnapshotPublishDebounced(delayMs: number = 60000): void {
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     publishBackupSnapshotToFirestore().catch((err) => {
