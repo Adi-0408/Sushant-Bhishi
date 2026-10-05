@@ -877,6 +877,8 @@ export const StorageService = {
     invalidateStatsCache();
 
     // Clean up old Firestore doc ID if account number or name changed
+    const accountChanged = oldCustomer.accountNumber !== customers[index].accountNumber;
+    const nameChanged = oldCustomer.name !== customers[index].name;
     const oldDocId = getFirestoreDocId('customers', id, oldCustomer);
     const newDocId = getFirestoreDocId('customers', id, customers[index]);
     if (oldDocId !== newDocId) {
@@ -931,6 +933,15 @@ export const StorageService = {
           });
           if (collsChanged) {
             setStoredData(STORAGE_KEYS.COLLECTIONS, updatedColls);
+            updatedColls
+              .filter((c) => c.customerId === id || (customers[index].accountNumber && c.accountNumber === customers[index].accountNumber))
+              .forEach((c) => {
+                if (accountChanged || nameChanged) {
+                  const oldC = { ...c, customerName: oldCustomer.name, accountNumber: oldCustomer.accountNumber };
+                  deleteFromFirestore('collections', c.id, oldC);
+                }
+                syncToFirestore('collections', c.id, c);
+              });
           }
         }
       }
@@ -953,6 +964,15 @@ export const StorageService = {
       });
       if (loansChanged) {
         setStoredData(STORAGE_KEYS.LOANS, updatedLoans);
+        updatedLoans
+          .filter((l) => l.customerId === id || (customers[index].accountNumber && l.accountNumber === customers[index].accountNumber))
+          .forEach((l) => {
+            if (accountChanged || nameChanged) {
+              const oldL = { ...l, customerName: oldCustomer.name, accountNumber: oldCustomer.accountNumber };
+              deleteFromFirestore('loans', l.id, oldL);
+            }
+            syncToFirestore('loans', l.id, l);
+          });
       }
 
       const allLoanPayments = getStoredData<LoanPayment[]>(STORAGE_KEYS.LOAN_PAYMENTS, []);
@@ -973,6 +993,15 @@ export const StorageService = {
       });
       if (paymentsChanged) {
         setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, updatedPayments);
+        updatedPayments
+          .filter((p) => p.customerId === id || (customers[index].accountNumber && p.accountNumber === customers[index].accountNumber))
+          .forEach((p) => {
+            if (accountChanged || nameChanged) {
+              const oldP = { ...p, customerName: oldCustomer.name, accountNumber: oldCustomer.accountNumber };
+              deleteFromFirestore('loanPayments', p.id, oldP);
+            }
+            syncToFirestore('loanPayments', p.id, p);
+          });
       }
     } catch (e) {}
 
@@ -1510,22 +1539,35 @@ export const StorageService = {
               (loanData.customerId && lp.customerId === loanData.customerId) ||
               (loanData.accountNumber && lp.accountNumber === loanData.accountNumber)
     );
-    const paymentsInterestSum = paymentsForLoan.reduce(
-      (sum, p) => sum + (Number(p.interestPaid) || 0),
-      0
-    );
-    // Explicitly preserve and prioritize user-entered paid interest
-    const totalInterestPaid = paymentsForLoan.length > 0
-      ? paymentsInterestSum
-      : (loanData.totalInterestPaid !== undefined ? Number(loanData.totalInterestPaid) || 0 : 0);
-
     const paymentsPrincipalSum = paymentsForLoan.reduce(
       (sum, p) => sum + (Number(p.paidAmount) || 0),
       0
     );
-    const paidAmount = paymentsForLoan.length > 0
-      ? Math.max(paymentsPrincipalSum, Number(loanData.paidAmount) || 0)
-      : (Number(loanData.paidAmount) || 0);
+    const paymentsInterestSum = paymentsForLoan.reduce(
+      (sum, p) => sum + (Number(p.interestPaid) || 0),
+      0
+    );
+    // Respect explicit caller-provided totalInterestPaid and paidAmount, otherwise calculate from payments
+    const totalInterestPaid = loanData.totalInterestPaid !== undefined
+      ? Number(loanData.totalInterestPaid) || 0
+      : (paymentsForLoan.length > 0 ? paymentsInterestSum : 0);
+
+    const paidAmount = loanData.paidAmount !== undefined
+      ? Number(loanData.paidAmount) || 0
+      : (paymentsForLoan.length > 0 ? paymentsPrincipalSum : 0);
+
+    const discount = Number(loanData.discountAmount) || 0;
+    const penalty = Number(loanData.penaltyAmount) || 0;
+    const remainingPrincipal = Math.max(0, principal - paidAmount - discount);
+    const dueInterest = Math.max(0, totalInterest - totalInterestPaid);
+    const calculatedRemaining = remainingPrincipal + penalty + dueInterest;
+    const remainingAmount = loanData.remainingAmount !== undefined
+      ? Number(loanData.remainingAmount) || 0
+      : calculatedRemaining;
+    const status = loanData.status || (remainingAmount <= 0 ? 'COMPLETED' : 'ACTIVE');
+    const totalPayable = loanData.totalPayable !== undefined
+      ? Number(loanData.totalPayable) || 0
+      : (principal + totalInterest);
 
     const targetId = loanData.id || (existingIndex >= 0 ? loans[existingIndex].id : 'loan_' + Date.now());
 
@@ -1540,6 +1582,9 @@ export const StorageService = {
       totalInterest,
       totalInterestPaid,
       paidAmount,
+      totalPayable,
+      remainingAmount,
+      status,
       updatedAt: new Date().toISOString(),
     };
 
@@ -1719,6 +1764,106 @@ export const StorageService = {
     touchSyncTimestamp();
 
     return newPayment;
+  },
+
+  deleteLoan: async (loanId: string): Promise<void> => {
+    const loans = StorageService.getLoans();
+    const loanToDelete = loans.find((l) => l.id === loanId);
+    if (!loanToDelete) return;
+
+    // 1. Remove loan from storage
+    const remainingLoans = loans.filter((l) => l.id !== loanId);
+    setStoredData(STORAGE_KEYS.LOANS, remainingLoans);
+    deleteFromFirestore('loans', loanId, loanToDelete);
+
+    // 2. Remove all loan payments for this loan
+    const allPayments = StorageService.getLoanPayments();
+    const toDeletePayments = allPayments.filter(
+      (p) => p.loanId === loanId ||
+             (loanToDelete.customerId && p.customerId === loanToDelete.customerId) ||
+             (loanToDelete.accountNumber && p.accountNumber === loanToDelete.accountNumber)
+    );
+    const remainingPayments = allPayments.filter(
+      (p) => p.loanId !== loanId &&
+             (!loanToDelete.customerId || p.customerId !== loanToDelete.customerId) &&
+             (!loanToDelete.accountNumber || p.accountNumber !== loanToDelete.accountNumber)
+    );
+    setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, remainingPayments);
+    for (const p of toDeletePayments) {
+      deleteFromFirestore('loanPayments', p.id, p);
+    }
+
+    // 3. Update customer hasLoan flag to false if no other active loans exist
+    const otherCustLoans = remainingLoans.filter(
+      (l) => l.customerId === loanToDelete.customerId ||
+             (loanToDelete.accountNumber && l.accountNumber === loanToDelete.accountNumber)
+    );
+    if (otherCustLoans.length === 0 && loanToDelete.customerId) {
+      const customers = StorageService.getCustomers();
+      const custIdx = customers.findIndex(
+        (c) => c.id === loanToDelete.customerId || (loanToDelete.accountNumber && c.accountNumber === loanToDelete.accountNumber)
+      );
+      if (custIdx >= 0) {
+        customers[custIdx].hasLoan = false;
+        setStoredData(STORAGE_KEYS.CUSTOMERS, customers);
+        syncToFirestore('customers', customers[custIdx].id, customers[custIdx]);
+      }
+    }
+
+    invalidateStatsCache();
+    touchSyncTimestamp();
+  },
+
+  deleteLoanPayment: async (paymentId: string): Promise<void> => {
+    const allPayments = StorageService.getLoanPayments();
+    const paymentToDelete = allPayments.find((p) => p.id === paymentId);
+    if (!paymentToDelete) return;
+
+    const remainingPayments = allPayments.filter((p) => p.id !== paymentId);
+    setStoredData(STORAGE_KEYS.LOAN_PAYMENTS, remainingPayments);
+    deleteFromFirestore('loanPayments', paymentId, paymentToDelete);
+
+    // Recalculate associated loan
+    const loans = StorageService.getLoans();
+    const loan = loans.find(
+      (l) => (paymentToDelete.loanId && l.id === paymentToDelete.loanId) ||
+             (paymentToDelete.customerId && l.customerId === paymentToDelete.customerId) ||
+             (paymentToDelete.accountNumber && l.accountNumber === paymentToDelete.accountNumber)
+    );
+
+    if (loan) {
+      const remainingPaymentsForLoan = remainingPayments.filter(
+        (lp) => (loan.id && lp.loanId === loan.id) ||
+                (loan.customerId && lp.customerId === loan.customerId) ||
+                (loan.accountNumber && lp.accountNumber === loan.accountNumber)
+      );
+
+      const newPaid = remainingPaymentsForLoan.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
+      const newInterestPaid = remainingPaymentsForLoan.reduce((sum, p) => sum + (Number(p.interestPaid) || 0), 0);
+      const newDiscount = remainingPaymentsForLoan.reduce((sum, p) => sum + (Number(p.discountAmount) || 0), 0);
+      const penalty = Number(loan.penaltyAmount) || 0;
+      const principal = Number(loan.principalAmount) || 0;
+      const rate = Number(loan.interestRate) || 0;
+      const accruedInterest = calculateLoanTotalAccruedInterest(loan);
+      const initialInterest = Math.round((principal * rate) / 100);
+      const totalInterest = rate === 0 ? 0 : Math.max(initialInterest, accruedInterest);
+      const remainingPrincipal = Math.max(0, principal - newPaid - newDiscount);
+      const dueInterest = Math.max(0, totalInterest - newInterestPaid);
+      const newRemaining = remainingPrincipal + penalty + dueInterest;
+      const isClosed = newRemaining <= 0;
+
+      StorageService.saveLoan({
+        ...loan,
+        paidAmount: newPaid,
+        totalInterestPaid: newInterestPaid,
+        discountAmount: newDiscount,
+        remainingAmount: newRemaining,
+        status: isClosed ? 'COMPLETED' : 'ACTIVE',
+      });
+    }
+
+    invalidateStatsCache();
+    touchSyncTimestamp();
   },
 
   // Interest & Penalty Settings

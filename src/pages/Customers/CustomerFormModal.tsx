@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Customer, BishiConfig, BishiType, Modality, OfficeId } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { StorageService } from '../../services/db';
@@ -12,7 +13,8 @@ import { generateNextAccountNumber } from '../../utils/formatters';
 import { MarathiTextInput, convertTextToMarathi } from '../../components/common/MarathiTextInput';
 import { CustomDropdown } from '../../components/common/CustomDropdown';
 import { ModalPortal } from '../../components/common/ModalPortal';
-import { X, UserPlus, Save, AlertCircle, CheckCircle2, Landmark, Calendar, Clock, DollarSign } from 'lucide-react';
+import { ConfirmModal } from '../../components/common/ConfirmModal';
+import { X, UserPlus, Save, AlertCircle, CheckCircle2, Landmark, Calendar, Clock, DollarSign, Trash2 } from 'lucide-react';
 import { checkAccountNumberExists } from '../../services/customerSearch';
 import { generateBishiInstallmentSchedule, generateLoanInstallmentSchedule, saveInstallmentsBatchToFirestore } from '../../services/installments';
 import { invalidateStatsCache } from '../../services/stats';
@@ -32,7 +34,11 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
   onSuccess,
   initialLoanOnly = false,
 }) => {
+  const navigate = useNavigate();
   const { customers, activeOffice, bishiConfigs, interestRates, penaltySettings, showToast, refreshData, language, t } = useApp();
+
+  const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const defaultMonthlyRate = interestRates.find((r) => (r.rateType || 'MONTHLY') === 'MONTHLY')?.rate ?? 10;
   const defaultWeeklyRate = interestRates.find((r) => r.rateType === 'WEEKLY')?.rate ?? 2.5;
@@ -274,6 +280,34 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
     );
   }
 
+  const handleDeleteAccount = async () => {
+    if (!editingCustomer) return;
+    try {
+      setIsDeletingAccount(true);
+      await StorageService.deleteCustomer(editingCustomer.id);
+      await refreshData();
+      showToast(
+        language === 'EN'
+          ? 'Customer account deleted successfully'
+          : 'खातेदार आणि सर्व माहिती यशस्वीरित्या हटवली',
+        'success'
+      );
+      setShowDeleteAccountConfirm(false);
+      onClose();
+      navigate('/customers');
+    } catch (err: any) {
+      console.error('Error deleting customer account:', err);
+      showToast(
+        language === 'EN'
+          ? `Failed to delete account: ${err?.message || ''}`
+          : `खाते हटवण्यात त्रुटी आली: ${err?.message || ''}`,
+        'error'
+      );
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -357,43 +391,28 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           const monthlyInterest = Math.round((principal * rate) / 100);
           const totalInterest = rate > 0 ? Math.max(monthlyInterest, months * monthlyInterest) : 0;
 
-          const paidPrin = loanPaidPrincipal !== '' ? Math.max(0, Number(loanPaidPrincipal) || 0) : (existingLoan ? (Number(existingLoan.paidAmount) || 0) : 0);
-          const paidInt = loanPaidInterest !== '' ? Math.max(0, Number(loanPaidInterest) || 0) : (existingLoan ? (Number(existingLoan.totalInterestPaid) || 0) : 0);
-          const discount = existingLoan ? (Number(existingLoan.discountAmount) || 0) : 0;
-          const penalty = existingLoan ? (Number(existingLoan.penaltyAmount) || 0) : 0;
-          const isMayur820 = updated.accountNumber === '820' || updated.name?.includes('मयूर') || updated.name?.toLowerCase().includes('mayur');
-          const remPrincipal = Math.max(0, principal - paidPrin - discount);
-          const remInterest = isMayur820 ? 0 : Math.max(0, totalInterest - paidInt);
-          const remainingAmount = isMayur820 ? 50000 : (remPrincipal + penalty + remInterest);
-          const isCompleted = remainingAmount <= 0;
+          // User-entered initial payments (explicit numbers, 0 if cleared)
+          const paidPrin = loanPaidPrincipal !== '' ? Math.max(0, Number(loanPaidPrincipal) || 0) : 0;
+          const paidInt = loanPaidInterest !== '' ? Math.max(0, Number(loanPaidInterest) || 0) : 0;
 
-          const savedLoan = StorageService.saveLoan({
-            id: existingLoan?.id,
-            customerId: updated.id,
-            accountNumber: updated.accountNumber,
-            officeId: updated.officeId,
-            customerName: updated.name,
-            customerMobile: updated.mobile,
-            principalAmount: principal,
-            issueDate: effectiveDate,
-            interestRate: rate,
-            totalInterest,
-            totalInterestPaid: paidInt,
-            totalPayable: isMayur820 ? 350000 : (principal + totalInterest),
-            paidAmount: paidPrin,
-            discountAmount: discount,
-            remainingAmount,
-            penaltyAmount: penalty,
-            status: isCompleted ? 'COMPLETED' : 'ACTIVE',
-          });
-
-          // Sync initial / historical payment in loanPayments
+          // Find existing initial payment record
           const allPayments = StorageService.getLoanPayments();
           const existingInitialPayment = allPayments.find(
-            (lp) => ((savedLoan.id && lp.loanId === savedLoan.id) || lp.customerId === updated.id || (updated.accountNumber && lp.accountNumber === updated.accountNumber)) &&
+            (lp) => ((existingLoan?.id && lp.loanId === existingLoan.id) || lp.customerId === updated.id || (editingCustomer.accountNumber && lp.accountNumber === editingCustomer.accountNumber) || (updated.accountNumber && lp.accountNumber === updated.accountNumber)) &&
                     (lp.note?.includes('Initial') || lp.note?.includes('सुरुवातीची') || lp.note?.includes('जुनी'))
           );
 
+          // Find all non-initial repayments (made via "+ Repay Loan")
+          const otherPayments = allPayments.filter(
+            (lp) => lp.id !== existingInitialPayment?.id &&
+                    ((existingLoan?.id && lp.loanId === existingLoan.id) || lp.customerId === updated.id || (editingCustomer.accountNumber && lp.accountNumber === editingCustomer.accountNumber) || (updated.accountNumber && lp.accountNumber === updated.accountNumber))
+          );
+          const otherPaidPrin = otherPayments.reduce((s, p) => s + (Number(p.paidAmount) || 0), 0);
+          const otherPaidInt = otherPayments.reduce((s, p) => s + (Number(p.interestPaid) || 0), 0);
+          const otherDiscount = otherPayments.reduce((s, p) => s + (Number(p.discountAmount) || 0), 0);
+          const penalty = existingLoan ? (Number(existingLoan.penaltyAmount) || 0) : 0;
+
+          // Sync initial payment first:
           if (paidPrin > 0 || paidInt > 0) {
             if (existingInitialPayment) {
               const updatedPayments = allPayments.map((p) => {
@@ -403,11 +422,11 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                     paidAmount: paidPrin,
                     interestPaid: paidInt,
                     totalPaid: paidPrin + paidInt + (p.penaltyPaid || 0),
-                    remainingLoan: remainingAmount,
                     customerName: updated.name,
                     accountNumber: updated.accountNumber,
                     officeId: updated.officeId,
                     customerMobile: updated.mobile,
+                    paymentDate: effectiveDate,
                   };
                 }
                 return p;
@@ -415,7 +434,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
               StorageService.saveLoanPaymentsBatch(updatedPayments);
             } else {
               StorageService.addLoanPayment({
-                loanId: savedLoan.id,
+                loanId: existingLoan?.id || '',
                 customerId: updated.id,
                 customerName: updated.name,
                 accountNumber: updated.accountNumber,
@@ -426,21 +445,52 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                 interestPaid: paidInt,
                 penaltyPaid: 0,
                 discountAmount: 0,
-                remainingLoan: remainingAmount,
+                remainingLoan: 0,
                 paymentMode: 'CASH',
                 note: language === 'EN' ? 'Initial historical loan payment recorded' : 'सुरुवातीची जुनी कर्ज भरणा नोंद',
               });
             }
+          } else if (existingInitialPayment) {
+            // User cleared initial payment to 0 - cleanly delete the initial payment record
+            await StorageService.deleteLoanPayment(existingInitialPayment.id);
           }
-        } else if (!shouldHaveLoan && existingLoan && existingLoan.status === 'ACTIVE') {
+
+          // Total paid across initial and other repayments
+          const totalPaidPrin = paidPrin + otherPaidPrin;
+          const totalPaidInt = paidInt + otherPaidInt;
+          const isMayur820 = updated.accountNumber === '820' || updated.name?.includes('मयूर') || updated.name?.toLowerCase().includes('mayur');
+          const remPrincipal = Math.max(0, principal - totalPaidPrin - otherDiscount);
+          const remInterest = isMayur820 ? 0 : Math.max(0, totalInterest - totalPaidInt);
+          const remainingAmount = isMayur820 ? 50000 : (remPrincipal + penalty + remInterest);
+          const isCompleted = remainingAmount <= 0;
+
           StorageService.saveLoan({
-            ...existingLoan,
-            status: 'COMPLETED',
-            remainingAmount: 0,
+            id: existingLoan?.id,
+            customerId: updated.id,
+            accountNumber: updated.accountNumber,
+            officeId: updated.officeId,
+            customerName: updated.name,
+            customerMobile: updated.mobile,
+            principalAmount: principal,
+            issueDate: effectiveDate,
+            interestRate: rate,
+            totalInterest,
+            totalInterestPaid: totalPaidInt,
+            totalPayable: isMayur820 ? 350000 : (principal + totalInterest),
+            paidAmount: totalPaidPrin,
+            discountAmount: otherDiscount,
+            remainingAmount,
+            penaltyAmount: penalty,
+            status: isCompleted ? 'COMPLETED' : 'ACTIVE',
           });
+        } else if (!shouldHaveLoan && existingLoan) {
+          // User unchecked loan or removed it - completely delete loan and associated payments
+          await StorageService.deleteLoan(existingLoan.id);
         }
 
         // Check if bishi schedule parameters changed and synchronize collections
+        const accountChanged = editingCustomer.accountNumber !== accountNumber.trim();
+        const nameChanged = editingCustomer.name !== finalName;
         const dateChanged = editingCustomer.bishiDate !== bishiDate;
         const modalityChanged = editingCustomer.modality !== modality;
         const amountChanged = Number(editingCustomer.amount) !== Number(amount);
@@ -459,7 +509,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
             targetInstallments
           );
 
-          if (reconciliation.hasChanges || dateChanged || modalityChanged || amountChanged || interestChanged) {
+          if (reconciliation.hasChanges || accountChanged || nameChanged || dateChanged || modalityChanged || amountChanged || interestChanged) {
             if (reconciliation.updatedCollections.length > 0) {
               StorageService.saveCollectionsBatch(reconciliation.updatedCollections);
             }
@@ -1169,26 +1219,63 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           </div>
 
           {/* Fixed Pinned Footer */}
-          <div className="p-3.5 sm:px-6 sm:py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end space-x-3 shrink-0">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-2.5 min-h-[44px] rounded-xl border border-slate-300 text-slate-700 text-sm font-bold hover:bg-white transition-colors cursor-pointer flex items-center justify-center shadow-2xs"
-            >
-              {t.btnCancel}
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-6 py-2.5 min-h-[44px] rounded-xl bg-brand-900 text-white text-sm font-bold shadow-md hover:bg-brand-800 transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              <span>{submitting ? (language === 'EN' ? 'Saving...' : 'जतन होत आहे...') : t.btnSave}</span>
-            </button>
+          <div className="p-3.5 sm:px-6 sm:py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0">
+            <div>
+              {editingCustomer && (
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteAccountConfirm(true)}
+                  disabled={submitting || isDeletingAccount}
+                  className="px-3.5 py-2 min-h-[40px] rounded-xl border border-rose-200 text-rose-600 bg-rose-50 hover:bg-rose-100 font-bold text-xs sm:text-sm transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title={language === 'EN' ? 'Delete Account' : 'खाते हटवा'}
+                >
+                  <Trash2 className="w-4 h-4 text-rose-600" />
+                  <span>{language === 'EN' ? 'Delete Account' : 'खाते हटवा'}</span>
+                </button>
+              )}
+            </div>
+            <div className="flex items-center space-x-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2.5 min-h-[44px] rounded-xl border border-slate-300 text-slate-700 text-sm font-bold hover:bg-white transition-colors cursor-pointer flex items-center justify-center shadow-2xs"
+              >
+                {t.btnCancel}
+              </button>
+              <button
+                type="submit"
+                disabled={submitting || isDeletingAccount}
+                className="px-6 py-2.5 min-h-[44px] rounded-xl bg-brand-900 text-white text-sm font-bold shadow-md hover:bg-brand-800 transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                <span>{submitting ? (language === 'EN' ? 'Saving...' : 'जतन होत आहे...') : t.btnSave}</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>
     </div>
+
+    {editingCustomer && (
+      <ConfirmModal
+        isOpen={showDeleteAccountConfirm}
+        title={language === 'EN' ? 'Delete Customer Account' : 'खाते कायमचे हटवा?'}
+        message={
+          language === 'EN'
+            ? `Are you sure you want to permanently delete account "${editingCustomer.accountNumber} - ${editingCustomer.name}"? All associated installments, loan records, and payments will be permanently deleted. This action cannot be undone.`
+            : `तुम्हाला खात्री आहे का की "${editingCustomer.accountNumber} - ${editingCustomer.name}" हे खाते कायमचे हटवायचे आहे? सर्व भिशी हप्ते, कर्ज माहिती आणि जमा-खर्च कायमचे नष्ट होतील. ही कृती पूर्ववत करता येणार नाही.`
+        }
+        confirmText={
+          isDeletingAccount
+            ? (language === 'EN' ? 'Deleting...' : 'हटवत आहे...')
+            : (language === 'EN' ? 'Delete Account' : 'खाते हटवा')
+        }
+        cancelText={language === 'EN' ? 'Cancel' : 'रद्द करा'}
+        isDanger={true}
+        onConfirm={handleDeleteAccount}
+        onCancel={() => setShowDeleteAccountConfirm(false)}
+      />
+    )}
   </ModalPortal>
   );
 };

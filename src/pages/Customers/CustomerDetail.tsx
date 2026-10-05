@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { CollectionEntry } from '../../types';
+import { CollectionEntry, LoanPayment } from '../../types';
 import { StorageService } from '../../services/db';
 import { SmsService } from '../../services/sms';
 import { generateCustomerPDF } from '../../services/pdf';
@@ -100,6 +100,12 @@ export const CustomerDetail: React.FC = () => {
 
   const [deleteConfirmEntry, setDeleteConfirmEntry] = useState<CollectionEntry | null>(null);
   const [isEditCustomerOpen, setIsEditCustomerOpen] = useState(false);
+  const [isDeleteAccountModalOpen, setIsDeleteAccountModalOpen] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isDeleteLoanModalOpen, setIsDeleteLoanModalOpen] = useState(false);
+  const [isDeletingLoan, setIsDeletingLoan] = useState(false);
+  const [deleteConfirmLoanPayment, setDeleteConfirmLoanPayment] = useState<LoanPayment | null>(null);
+  const [isDeletingLoanPayment, setIsDeletingLoanPayment] = useState(false);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -375,6 +381,85 @@ export const CustomerDetail: React.FC = () => {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    if (!customer) return;
+    try {
+      setIsDeletingAccount(true);
+      await StorageService.deleteCustomer(customer.id);
+      await refreshData();
+      showToast(
+        language === 'EN'
+          ? 'Customer account deleted successfully'
+          : 'खातेदार आणि सर्व माहिती यशस्वीरित्या हटवली',
+        'success'
+      );
+      setIsDeleteAccountModalOpen(false);
+      navigate('/customers');
+    } catch (err: any) {
+      console.error('Error deleting customer account:', err);
+      showToast(
+        language === 'EN'
+          ? `Failed to delete account: ${err?.message || ''}`
+          : `खाते हटवण्यात त्रुटी आली: ${err?.message || ''}`,
+        'error'
+      );
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
+  const handleDeleteLoan = async () => {
+    if (!loan) return;
+    try {
+      setIsDeletingLoan(true);
+      await StorageService.deleteLoan(loan.id);
+      await refreshData();
+      showToast(
+        language === 'EN'
+          ? 'Loan and related payment records deleted successfully'
+          : 'कर्ज व संबंधित नोंदी यशस्वीरित्या हटवल्या',
+        'success'
+      );
+      setIsDeleteLoanModalOpen(false);
+    } catch (err: any) {
+      console.error('Error deleting loan:', err);
+      showToast(
+        language === 'EN'
+          ? `Failed to delete loan: ${err?.message || ''}`
+          : `कर्ज हटवण्यात त्रुटी आली: ${err?.message || ''}`,
+        'error'
+      );
+    } finally {
+      setIsDeletingLoan(false);
+    }
+  };
+
+  const handleDeleteLoanPayment = async () => {
+    if (!deleteConfirmLoanPayment) return;
+    try {
+      setIsDeletingLoanPayment(true);
+      await StorageService.deleteLoanPayment(deleteConfirmLoanPayment.id);
+      await refreshData();
+      showToast(
+        language === 'EN'
+          ? 'Loan payment deleted successfully'
+          : 'कर्ज हप्ता नोंद यशस्वीरित्या हटवली',
+        'success'
+      );
+      setDeleteConfirmLoanPayment(null);
+    } catch (err: any) {
+      console.error('Error deleting loan payment:', err);
+      showToast(
+        language === 'EN'
+          ? `Failed to delete loan payment: ${err?.message || ''}`
+          : `कर्ज हप्ता नोंद हटवण्यात त्रुटी आली: ${err?.message || ''}`,
+        'error'
+      );
+    } finally {
+      setIsDeletingLoanPayment(false);
+    }
+  };
+
   const handleSendManualSms = () => {
     SmsService.sendSms(customer, 'PENDING', {
       remaining: financials.totalRemainingBishi,
@@ -432,6 +517,16 @@ export const CustomerDetail: React.FC = () => {
             <Printer className="w-4 h-4" />
             <span>{language === 'EN' ? 'Print' : 'प्रिंट करा'}</span>
           </button>
+
+          {/* Delete Account */}
+          <button
+            onClick={() => setIsDeleteAccountModalOpen(true)}
+            className="px-3.5 py-2 min-h-[44px] rounded-xl bg-rose-50 text-rose-700 border border-rose-200 font-bold text-xs hover:bg-rose-100 transition-colors flex items-center space-x-1.5 touch-target cursor-pointer"
+            title={language === 'EN' ? 'Delete Account' : 'खाते हटवा'}
+          >
+            <Trash2 className="w-4 h-4 text-rose-600" />
+            <span>{language === 'EN' ? 'Delete Account' : 'खाते हटवा'}</span>
+          </button>
         </div>
       </div>
 
@@ -479,6 +574,14 @@ export const CustomerDetail: React.FC = () => {
                 >
                   <Edit className="w-3.5 h-3.5 text-amber-700" />
                   <span>{language === 'EN' ? 'Edit Details' : 'माहिती बदला (Edit)'}</span>
+                </button>
+                <button
+                  onClick={() => setIsDeleteAccountModalOpen(true)}
+                  className="px-2.5 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold text-xs flex items-center space-x-1 transition-all shadow-2xs cursor-pointer no-print"
+                  title={language === 'EN' ? 'Delete customer account' : 'खाते कायमचे हटवा'}
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                  <span>{language === 'EN' ? 'Delete' : 'हटवा'}</span>
                 </button>
               </div>
               <p className="text-xs print:text-[10px] text-slate-500 font-bold mt-1 print:mt-0.5">
@@ -991,19 +1094,30 @@ export const CustomerDetail: React.FC = () => {
                 {language === 'EN' ? 'Loan Details' : 'कर्जाची माहिती'}
               </h3>
             </div>
-            {isLoanCompleted ? (
-              <span className="px-3 py-1.5 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 font-extrabold text-xs inline-flex items-center space-x-1.5 shadow-2xs no-print">
-                <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-                <span>{language === 'EN' ? 'Loan Completed' : 'कर्ज पूर्ण फेडले (Completed)'}</span>
-              </span>
-            ) : (
+            <div className="flex items-center space-x-2">
+              {isLoanCompleted ? (
+                <span className="px-3 py-1.5 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 font-extrabold text-xs inline-flex items-center space-x-1.5 shadow-2xs no-print">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                  <span>{language === 'EN' ? 'Loan Completed' : 'कर्ज पूर्ण फेडले (Completed)'}</span>
+                </span>
+              ) : (
+                <button
+                  onClick={handleOpenLoanModal}
+                  className="px-4 py-2 rounded-xl bg-amber-700 text-white font-extrabold text-xs hover:bg-amber-800 transition-colors no-print cursor-pointer"
+                >
+                  {language === 'EN' ? '+ Repay Loan' : '+ कर्ज जमा करा'}
+                </button>
+              )}
               <button
-                onClick={handleOpenLoanModal}
-                className="px-4 py-2 rounded-xl bg-amber-700 text-white font-extrabold text-xs hover:bg-amber-800 transition-colors no-print cursor-pointer"
+                type="button"
+                onClick={() => setIsDeleteLoanModalOpen(true)}
+                className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold text-xs flex items-center space-x-1 transition-colors no-print cursor-pointer"
+                title={language === 'EN' ? 'Delete Loan' : 'कर्ज हटवा'}
               >
-                {language === 'EN' ? '+ Repay Loan' : '+ कर्ज जमा करा'}
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>{language === 'EN' ? 'Delete Loan' : 'कर्ज हटवा'}</span>
               </button>
-            )}
+            </div>
           </div>
 
           <div className="p-6 print:p-2.5 print:overflow-visible">
@@ -1172,11 +1286,21 @@ export const CustomerDetail: React.FC = () => {
                               {formatDateMarathi(lp.paymentDate, language)}
                             </span>
                           </div>
-                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-bold text-slate-700">
-                            {lp.paymentMode === 'ONLINE'
-                              ? (language === 'EN' ? '📱 Online' : '📱 ऑनलाइन')
-                              : (language === 'EN' ? '💵 Cash' : '💵 नगद')}
-                          </span>
+                          <div className="flex items-center space-x-1.5">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-bold text-slate-700">
+                              {lp.paymentMode === 'ONLINE'
+                                ? (language === 'EN' ? '📱 Online' : '📱 ऑनलाइन')
+                                : (language === 'EN' ? '💵 Cash' : '💵 नगद')}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmLoanPayment(lp)}
+                              className="p-1 rounded-md text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors no-print cursor-pointer"
+                              title={language === 'EN' ? 'Delete payment entry' : 'नोंद हटवा'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 text-xs">
@@ -1236,6 +1360,7 @@ export const CustomerDetail: React.FC = () => {
                         <th className="p-2.5 sm:p-3 print:py-1 print:px-1.5 text-right whitespace-nowrap text-rose-900">{language === 'EN' ? 'Remaining Balance' : 'उर्वरित बाकी'}</th>
                         <th className="p-2.5 sm:p-3 print:py-1 print:px-1.5 text-center whitespace-nowrap">{t.colModality}</th>
                         <th className="p-2.5 sm:p-3 print:py-1 print:px-1.5 text-left whitespace-nowrap pr-3 sm:pr-4 print:pr-2">{language === 'EN' ? 'Details / Note' : 'तपशील / टीप'}</th>
+                        <th className="p-2.5 sm:p-3 print:hidden text-center whitespace-nowrap">{language === 'EN' ? 'Action' : 'कृती'}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
@@ -1268,6 +1393,16 @@ export const CustomerDetail: React.FC = () => {
                           </td>
                           <td className="p-2.5 sm:p-3 print:py-1 print:px-1.5 text-slate-500 text-[11px] print:text-[8px] font-medium whitespace-nowrap pr-3 sm:pr-4 print:pr-2">
                             {lp.note || '-'}
+                          </td>
+                          <td className="p-2.5 sm:p-3 print:hidden text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmLoanPayment(lp)}
+                              className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer inline-flex items-center justify-center"
+                              title={language === 'EN' ? 'Delete payment entry' : 'नोंद हटवा'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -1745,6 +1880,70 @@ export const CustomerDetail: React.FC = () => {
         onConfirm={handleDeleteEntryConfirm}
         onCancel={() => setDeleteConfirmEntry(null)}
       />
+
+      {/* Account Delete Confirm Modal */}
+      <ConfirmModal
+        isOpen={isDeleteAccountModalOpen}
+        title={language === 'EN' ? 'Delete Customer Account' : 'खाते कायमचे हटवा?'}
+        message={
+          language === 'EN'
+            ? `Are you sure you want to permanently delete account "${customer.accountNumber} - ${customer.name}"? All associated installments, loan records, and payments will be permanently deleted. This action cannot be undone.`
+            : `तुम्हाला खात्री आहे का की "${customer.accountNumber} - ${customer.name}" हे खाते कायमचे हटवायचे आहे? सर्व भिशी हप्ते, कर्ज माहिती आणि जमा-खर्च कायमचे नष्ट होतील. ही कृती पूर्ववत करता येणार नाही.`
+        }
+        confirmText={
+          isDeletingAccount
+            ? (language === 'EN' ? 'Deleting...' : 'हटवत आहे...')
+            : (language === 'EN' ? 'Delete Account' : 'खाते हटवा')
+        }
+        cancelText={language === 'EN' ? 'Cancel' : 'रद्द करा'}
+        isDanger={true}
+        onConfirm={handleDeleteAccount}
+        onCancel={() => setIsDeleteAccountModalOpen(false)}
+      />
+
+      {/* Loan Delete Confirm Modal */}
+      {loan && (
+        <ConfirmModal
+          isOpen={isDeleteLoanModalOpen}
+          title={language === 'EN' ? 'Delete Loan' : 'कर्ज कायमचे हटवा?'}
+          message={
+            language === 'EN'
+              ? `Are you sure you want to delete this loan (Principal: ₹${loan.principalAmount?.toLocaleString('en-IN')})? All associated loan repayment records will also be permanently deleted.`
+              : `तुम्हाला खात्री आहे का की हे कर्ज (मुद्दल: ₹${loan.principalAmount?.toLocaleString('en-IN')}) कायमचे हटवायचे आहे? सर्व संबंधित कर्ज जमा नोंदी कायमच्या नष्ट होतील.`
+          }
+          confirmText={
+            isDeletingLoan
+              ? (language === 'EN' ? 'Deleting...' : 'हटवत आहे...')
+              : (language === 'EN' ? 'Delete Loan' : 'कर्ज हटवा')
+          }
+          cancelText={language === 'EN' ? 'Cancel' : 'रद्द करा'}
+          isDanger={true}
+          onConfirm={handleDeleteLoan}
+          onCancel={() => setIsDeleteLoanModalOpen(false)}
+        />
+      )}
+
+      {/* Loan Payment Delete Confirm Modal */}
+      {deleteConfirmLoanPayment && (
+        <ConfirmModal
+          isOpen={!!deleteConfirmLoanPayment}
+          title={language === 'EN' ? 'Delete Loan Payment' : 'कर्ज हप्ता नोंद हटवा?'}
+          message={
+            language === 'EN'
+              ? `Are you sure you want to delete this payment record (Principal: ₹${deleteConfirmLoanPayment.paidAmount?.toLocaleString('en-IN')}, Interest: ₹${deleteConfirmLoanPayment.interestPaid?.toLocaleString('en-IN')})? The loan balance will be automatically recalculated.`
+              : `तुम्हाला खात्री आहे का की ही कर्ज हप्ता नोंद (मुद्दल: ₹${deleteConfirmLoanPayment.paidAmount?.toLocaleString('en-IN')}, व्याज: ₹${deleteConfirmLoanPayment.interestPaid?.toLocaleString('en-IN')}) हटवायची आहे? कर्जाची शिल्लक पुन्हा आपोआप मोजली जाईल.`
+          }
+          confirmText={
+            isDeletingLoanPayment
+              ? (language === 'EN' ? 'Deleting...' : 'हटवत आहे...')
+              : (language === 'EN' ? 'Delete Payment' : 'नोंद हटवा')
+          }
+          cancelText={language === 'EN' ? 'Cancel' : 'रद्द करा'}
+          isDanger={true}
+          onConfirm={handleDeleteLoanPayment}
+          onCancel={() => setDeleteConfirmLoanPayment(null)}
+        />
+      )}
 
       {/* Edit Customer Modal */}
       <CustomerFormModal

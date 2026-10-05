@@ -48,11 +48,19 @@ export const calculateMemberLedger = (
   // 1. Get customer-specific collections and loan payments
   const targetInstallments = Number(customer.totalInstallments) || (customer.modality === 'W' ? 40 : 10);
   const allCustomerCollections = collections
-    .filter((c) => c.customerId === customer.id && (c.periodIndex <= targetInstallments || c.status === 'PAID' || (c.collectedAmount || 0) > 0))
+    .filter((c) => {
+      const matchCust = c.customerId === customer.id || (customer.accountNumber && c.accountNumber === customer.accountNumber);
+      return matchCust && (c.periodIndex <= targetInstallments || c.status === 'PAID' || (c.collectedAmount || 0) > 0);
+    })
     .sort((a, b) => a.periodIndex - b.periodIndex);
 
   const custLoanPayments = loanPayments
-    .filter((lp) => lp.customerId === customer.id)
+    .filter((lp) => {
+      if (lp.customerId === customer.id) return true;
+      if (loan && lp.loanId === loan.id) return true;
+      if (customer.accountNumber && lp.accountNumber === customer.accountNumber) return true;
+      return false;
+    })
     .sort((a, b) => a.paymentDate.localeCompare(b.paymentDate) || (a.id || '').localeCompare(b.id || ''));
 
   // 2. Filter collections if not showing all scheduled weeks
@@ -144,7 +152,10 @@ export const calculateMemberLedger = (
   let totalLoanPenalty = 0;
   let totalLoanDiscount = 0;
 
-  const totalLoanIssued = customer.hasLoan && loan ? (loan.principalAmount || 0) : 0;
+  const totalLoanIssued = (loan && (loan.principalAmount || 0) > 0)
+    ? loan.principalAmount
+    : 0;
+  const hasAnyLoan = Boolean(customer.hasLoan || customer.bishiType === 'LOAN_ONLY' || totalLoanIssued > 0 || (loan && (loan.principalAmount || 0) > 0));
   let runningLoanPrincipalBalance = totalLoanIssued;
 
   const rows: MemberLedgerRow[] = rawEntries.map((entry, idx) => {
@@ -175,18 +186,18 @@ export const calculateMemberLedger = (
     const loanDiscount = lp ? (lp.discountAmount || 0) : 0;
     totalLoanDiscount += loanDiscount;
 
-    if (customer.hasLoan) {
+    if (hasAnyLoan) {
       runningLoanPrincipalBalance = Math.max(
         0,
         runningLoanPrincipalBalance - loanPrincipalPaid - loanDiscount
       );
     }
 
-    const loanIssued = idx === 0 && customer.hasLoan ? totalLoanIssued : 0;
+    const loanIssued = idx === 0 && hasAnyLoan ? totalLoanIssued : 0;
 
     // Remaining balance is running loan principal balance + remaining bishi amount for this installment (if any)
     const bishiRemaining = c ? (c.remainingAmount || 0) : 0;
-    const balanceRemaining = (customer.hasLoan ? runningLoanPrincipalBalance : 0) + bishiRemaining;
+    const balanceRemaining = (hasAnyLoan ? runningLoanPrincipalBalance : 0) + bishiRemaining;
 
     return {
       id: c ? c.id : lp ? lp.id : `ledger-row-${idx}`,
@@ -209,7 +220,7 @@ export const calculateMemberLedger = (
   });
 
   const finalRemainingBalance =
-    (customer.hasLoan && loan ? loan.remainingAmount : 0) +
+    (hasAnyLoan && loan && typeof loan.remainingAmount === 'number' ? loan.remainingAmount : (hasAnyLoan ? runningLoanPrincipalBalance : 0)) +
     (allCustomerCollections.length > 0
       ? allCustomerCollections[allCustomerCollections.length - 1].remainingAmount || 0
       : 0);

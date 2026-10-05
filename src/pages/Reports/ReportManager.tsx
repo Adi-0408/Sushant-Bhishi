@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 
 export const ReportManager: React.FC = () => {
-  const { customers, collections, loans, bishiConfigs, activeOffice, selectedBishiFilter, t, language, thakbakiList, isRefreshing, refreshAllData } = useApp();
+  const { customers, collections, loans, loanPayments: contextLoanPayments, bishiConfigs, activeOffice, selectedBishiFilter, t, language, thakbakiList, isRefreshing, refreshAllData } = useApp();
 
   const [viewMode, setViewMode] = useState<'LEDGER_CARD' | 'SUMMARY' | 'THAKBAKI'>('LEDGER_CARD');
   const [timePeriodFilter, setTimePeriodFilter] = useState<'ALL' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'>('ALL');
@@ -52,7 +52,7 @@ export const ReportManager: React.FC = () => {
   const [noteInput, setNoteInput] = useState('');
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const loanPayments = StorageService.getLoanPayments();
+  const loanPayments = contextLoanPayments && contextLoanPayments.length > 0 ? contextLoanPayments : StorageService.getLoanPayments();
 
   const isDateInPeriod = (dateStr?: string, period: 'ALL' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' = 'ALL'): boolean => {
     if (!dateStr || period === 'ALL') return true;
@@ -409,14 +409,21 @@ export const ReportManager: React.FC = () => {
 
   const reportTitle = `${getStatusLabelText()} - ${getPeriodLabelText()}`;
 
+  // Loan details for active ledger customer
+  const activeCustomerLoans = activeLedgerCustomer
+    ? loans.filter((l) => l.customerId === activeLedgerCustomer.id || (activeLedgerCustomer.accountNumber && l.accountNumber === activeLedgerCustomer.accountNumber))
+    : [];
+  const activeCustomerLoan = activeCustomerLoans.find((l) => l.status === 'ACTIVE')
+    || [...activeCustomerLoans].sort((a, b) => (b.updatedAt || b.issueDate || '').localeCompare(a.updatedAt || a.issueDate || ''))[0]
+    || null;
+
   const handleDownloadPDF = () => {
     if (viewMode === 'THAKBAKI') {
       generateThakbakiReportPDF(thakbakiList, language);
       return;
     }
     if (viewMode === 'LEDGER_CARD' && activeLedgerCustomer) {
-      const custLoan = loans.find((l) => l.customerId === activeLedgerCustomer.id);
-      generateMemberLedgerPDF(activeLedgerCustomer, collections, custLoan, loanPayments, showAllLedgerPeriods, language);
+      generateMemberLedgerPDF(activeLedgerCustomer, collections, activeCustomerLoan, loanPayments, showAllLedgerPeriods, language);
     } else {
       const filteredCustomersToDownload = filteredRows.map((r) => r.customer);
       generateReportPDF(
@@ -437,8 +444,7 @@ export const ReportManager: React.FC = () => {
       return;
     }
     if (viewMode === 'LEDGER_CARD' && activeLedgerCustomer) {
-      const custLoan = loans.find((l) => l.customerId === activeLedgerCustomer.id);
-      exportMemberLedgerToExcel(activeLedgerCustomer, collections, custLoan, loanPayments, showAllLedgerPeriods);
+      exportMemberLedgerToExcel(activeLedgerCustomer, collections, activeCustomerLoan, loanPayments, showAllLedgerPeriods);
     } else {
       exportGeneralReportToExcel(
         reportTitle,
@@ -448,11 +454,6 @@ export const ReportManager: React.FC = () => {
       );
     }
   };
-
-  // Loan details for active ledger customer
-  const activeCustomerLoan = activeLedgerCustomer
-    ? loans.find((l) => l.customerId === activeLedgerCustomer.id)
-    : null;
 
   // Calculate unified ledger rows supporting multiple payments on a single day
   const ledgerCalculation = activeLedgerCustomer
