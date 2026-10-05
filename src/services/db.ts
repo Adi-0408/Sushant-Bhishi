@@ -568,7 +568,7 @@ export const deduplicateCustomers = (custs: Customer[]): Customer[] => {
   );
 };
 
-// Deduplicates loans by ID or account + issueDate + principal
+// Deduplicates loans by account number or customerId, always keeping the newest record
 export const deduplicateLoans = (loans: Loan[]): Loan[] => {
   if (!loans || !Array.isArray(loans) || loans.length === 0) return [];
 
@@ -576,7 +576,8 @@ export const deduplicateLoans = (loans: Loan[]): Loan[] => {
   loans.forEach((l) => {
     if (!l) return;
     const acc = String(l.accountNumber || '').trim().toLowerCase();
-    const key = l.id || (acc ? `${acc}_${l.issueDate || ''}_${l.principalAmount || 0}` : (l.customerId || Math.random().toString()));
+    const custId = String(l.customerId || '').trim().toLowerCase();
+    const key = acc || custId || l.id;
 
     const existing = map.get(key);
     if (!existing) {
@@ -584,7 +585,7 @@ export const deduplicateLoans = (loans: Loan[]): Loan[] => {
     } else {
       const existingTime = existing.updatedAt || existing.issueDate || '';
       const entryTime = l.updatedAt || l.issueDate || '';
-      if (entryTime && (!existingTime || entryTime > existingTime)) {
+      if (entryTime && (!existingTime || entryTime >= existingTime)) {
         map.set(key, l);
       }
     }

@@ -195,9 +195,12 @@ export const calculateMemberLedger = (
 
     const loanIssued = idx === 0 && hasAnyLoan ? totalLoanIssued : 0;
 
-    // Remaining balance is running loan principal balance + remaining bishi amount for this installment (if any)
+    // Remaining balance is loan balance (from payment record or running balance) + remaining bishi amount
     const bishiRemaining = c ? (c.remainingAmount || 0) : 0;
-    const balanceRemaining = (hasAnyLoan ? runningLoanPrincipalBalance : 0) + bishiRemaining;
+    const loanBal = (lp && typeof lp.remainingLoan === 'number')
+      ? lp.remainingLoan
+      : (hasAnyLoan ? runningLoanPrincipalBalance : 0);
+    const balanceRemaining = loanBal + bishiRemaining;
 
     return {
       id: c ? c.id : lp ? lp.id : `ledger-row-${idx}`,

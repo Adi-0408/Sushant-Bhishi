@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { BishiType, CollectionEntry, Modality } from '../../types';
@@ -29,10 +29,15 @@ import {
   User,
   ClipboardList,
   RefreshCw,
+  Landmark,
 } from 'lucide-react';
 
 export const ReportManager: React.FC = () => {
-  const { customers, collections, loans, loanPayments: contextLoanPayments, bishiConfigs, activeOffice, selectedBishiFilter, t, language, thakbakiList, isRefreshing, refreshAllData } = useApp();
+  const { customers, collections, loans: contextLoans, loanPayments: contextLoanPayments, bishiConfigs, activeOffice, selectedBishiFilter, t, language, thakbakiList, isRefreshing, refreshAllData, refreshData } = useApp();
+
+  useEffect(() => {
+    refreshData();
+  }, []);
 
   const [viewMode, setViewMode] = useState<'LEDGER_CARD' | 'SUMMARY' | 'THAKBAKI'>('LEDGER_CARD');
   const [timePeriodFilter, setTimePeriodFilter] = useState<'ALL' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'>('ALL');
@@ -52,6 +57,7 @@ export const ReportManager: React.FC = () => {
   const [noteInput, setNoteInput] = useState('');
 
   const todayStr = new Date().toISOString().split('T')[0];
+  const loans = contextLoans && contextLoans.length > 0 ? contextLoans : StorageService.getLoans();
   const loanPayments = contextLoanPayments && contextLoanPayments.length > 0 ? contextLoanPayments : StorageService.getLoanPayments();
 
   const isDateInPeriod = (dateStr?: string, period: 'ALL' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' = 'ALL'): boolean => {
@@ -227,15 +233,18 @@ export const ReportManager: React.FC = () => {
       || [...custLoans].sort((a, b) => (b.updatedAt || b.issueDate || '').localeCompare(a.updatedAt || a.issueDate || ''))[0]
       || null;
 
-    // Total unpaid/remaining loan for this customer across all active/pending loans
-    const unpaidLoan = custLoans.reduce((sum, l) => {
-      if (l.status === 'COMPLETED' || l.status === 'CLOSED') return sum;
-      return sum + Math.max(0, l.remainingAmount || 0);
-    }, 0);
-    const totalPrincipalLoan = custLoans.reduce((sum, l) => sum + (l.principalAmount || 0), 0);
+    // Active loan remaining amount and principal
+    const activeUnpaidLoan = custLoan && custLoan.status !== 'COMPLETED' && custLoan.status !== 'CLOSED'
+      ? Math.max(0, custLoan.remainingAmount || 0)
+      : 0;
+    const unpaidLoan = (Boolean(cust.hasLoan) || cust.bishiType === 'LOAN_ONLY' || custLoans.some((l) => l.status === 'ACTIVE'))
+      ? activeUnpaidLoan
+      : 0;
+    const totalPrincipalLoan = custLoan ? (custLoan.principalAmount || 0) : 0;
 
     const custLoanPayments = loanPayments.filter((lp) => {
       if (lp.customerId === cust.id) return true;
+      if (custLoan && lp.loanId === custLoan.id) return true;
       if (!cust.accountNumber || !lp.accountNumber) return false;
       const strA = String(cust.accountNumber).trim();
       const strB = String(lp.accountNumber).trim();
@@ -256,17 +265,17 @@ export const ReportManager: React.FC = () => {
 
     if (timePeriodFilter === 'ALL' && custLoan) {
       if (loanPaid === 0 && (custLoan.paidAmount || 0) > 0) {
-        loanPaid = custLoan.paidAmount;
+        loanPaid = custLoan.paidAmount || 0;
       }
       if (loanIntPaid === 0 && (custLoan.totalInterestPaid || 0) > 0) {
         loanIntPaid = custLoan.totalInterestPaid || 0;
       }
       if (loanPenPaid === 0 && (custLoan.penaltyAmount || 0) > 0) {
-        loanPenPaid = custLoan.penaltyAmount;
+        loanPenPaid = custLoan.penaltyAmount || 0;
       }
     }
 
-    const hasLoan = custLoans.length > 0 || Boolean(cust.hasLoan) || cust.bishiType === 'LOAN_ONLY' || totalPrincipalLoan > 0 || loanPaid > 0;
+    const hasLoan = (Boolean(cust.hasLoan) || cust.bishiType === 'LOAN_ONLY' || custLoans.length > 0) && custLoan !== null;
 
     // PURE loan-only customer (who does not belong to any regular bishi scheme)
     const isLoanOnly = cust.bishiType === 'LOAN_ONLY';
@@ -416,6 +425,8 @@ export const ReportManager: React.FC = () => {
   const activeCustomerLoan = activeCustomerLoans.find((l) => l.status === 'ACTIVE')
     || [...activeCustomerLoans].sort((a, b) => (b.updatedAt || b.issueDate || '').localeCompare(a.updatedAt || a.issueDate || ''))[0]
     || null;
+  const isLedgerLoanCompleted = Boolean(activeCustomerLoan && (activeCustomerLoan.status === 'COMPLETED' || activeCustomerLoan.status === 'CLOSED' || (activeCustomerLoan.remainingAmount || 0) <= 0));
+  const hasLedgerLoan = Boolean(activeLedgerCustomer?.hasLoan || activeLedgerCustomer?.bishiType === 'LOAN_ONLY' || activeCustomerLoans.length > 0) && activeCustomerLoan !== null;
 
   const handleDownloadPDF = () => {
     if (viewMode === 'THAKBAKI') {
@@ -807,6 +818,93 @@ export const ReportManager: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+
+              {/* LOAN SECTION IN MEMBER LEDGER CARD - Identical to Account CustomerDetail page */}
+              {hasLedgerLoan && activeCustomerLoan && (
+                <div className="bg-[#fffde7] rounded-xl border border-amber-900/40 p-4 space-y-3 break-inside-avoid print:p-2">
+                  <div className="flex items-center justify-between border-b border-amber-900/20 pb-2">
+                    <div className="flex items-center space-x-2">
+                      <Landmark className="w-4 h-4 text-amber-800" />
+                      <h3 className="text-xs sm:text-sm font-black text-amber-950">
+                        {language === 'EN' ? 'Loan Details' : 'कर्जाची माहिती (Loan Details)'}
+                      </h3>
+                    </div>
+                    {isLedgerLoanCompleted ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 font-extrabold text-[11px] inline-flex items-center space-x-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>{language === 'EN' ? 'Loan Completed' : 'कर्ज पूर्ण फेडले (Completed)'}</span>
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-900 font-extrabold text-[11px]">
+                        {language === 'EN' ? 'Active Loan' : 'सक्रिय कर्ज (Active)'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 text-center text-xs">
+                    <div className="bg-white p-2.5 rounded-lg border border-amber-900/20">
+                      <span className="text-[10px] font-bold text-slate-500 block leading-tight">{language === 'EN' ? 'Loan Principal' : 'कर्जाची रक्कम'}</span>
+                      <span className="text-sm font-black text-slate-900 block mt-0.5 whitespace-nowrap">
+                        {formatCurrency(activeCustomerLoan.principalAmount, language)}
+                      </span>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-lg border border-amber-900/20">
+                      <span className="text-[10px] font-bold text-slate-500 block leading-tight">{language === 'EN' ? 'Interest Rate' : 'व्याज दर'}</span>
+                      <span className="text-sm font-black text-slate-900 block mt-0.5 whitespace-nowrap">
+                        {activeCustomerLoan.interestRate}%
+                      </span>
+                    </div>
+
+                    <div className="bg-amber-50 p-2.5 rounded-lg border border-amber-300">
+                      <span className="text-[10px] font-bold text-amber-800 block leading-tight">{language === 'EN' ? 'Total Payable' : 'एकूण देय'}</span>
+                      <span className="text-sm font-black text-amber-950 block mt-0.5 whitespace-nowrap">
+                        {formatCurrency(activeCustomerLoan.totalPayable, language)}
+                      </span>
+                    </div>
+
+                    <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-300">
+                      <span className="text-[10px] font-bold text-emerald-800 block leading-tight">{language === 'EN' ? 'Paid Principal' : 'भरलेली मुद्दल'}</span>
+                      <span className="text-sm font-black text-emerald-800 block mt-0.5 whitespace-nowrap">
+                        {formatCurrency(activeCustomerLoan.paidAmount, language)}
+                      </span>
+                    </div>
+
+                    <div className="bg-amber-100/70 p-2.5 rounded-lg border border-amber-300">
+                      <span className="text-[10px] font-extrabold text-amber-950 block leading-tight">{language === 'EN' ? 'Interest Paid' : 'भरलेले व्याज'}</span>
+                      <span className="text-sm font-black text-amber-900 block mt-0.5 whitespace-nowrap">
+                        {formatCurrency(activeCustomerLoan.totalInterestPaid || 0, language)}
+                      </span>
+                    </div>
+
+                    {Boolean(activeCustomerLoan.discountAmount && activeCustomerLoan.discountAmount > 0) && (
+                      <div className="bg-emerald-100/70 p-2.5 rounded-lg border border-emerald-300">
+                        <span className="text-[10px] font-extrabold text-emerald-900 block leading-tight">{language === 'EN' ? 'Discount' : 'सूट'}</span>
+                        <span className="text-sm font-black text-emerald-800 block mt-0.5 whitespace-nowrap">
+                          {formatCurrency(activeCustomerLoan.discountAmount || 0, language)}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className={`p-2.5 rounded-lg border-2 ${
+                      isLedgerLoanCompleted
+                        ? 'bg-emerald-50 border-emerald-400 text-emerald-900'
+                        : 'bg-rose-50 border-rose-300 text-rose-900'
+                    }`}>
+                      <span className="text-[10px] font-black block leading-tight">
+                        {isLedgerLoanCompleted
+                          ? (language === 'EN' ? 'Status' : 'स्थिती')
+                          : (language === 'EN' ? 'Remaining Loan' : 'उर्वरित बाकी')}
+                      </span>
+                      <span className="text-sm font-black block mt-0.5 whitespace-nowrap">
+                        {isLedgerLoanCompleted
+                          ? (language === 'EN' ? 'Completed' : 'पूर्ण नील')
+                          : formatCurrency(activeCustomerLoan.remainingAmount, language)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Mobile swipe helper cue */}
               <div className="md:hidden flex items-center justify-between text-[11px] font-bold text-amber-800 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 mb-2 no-print">
