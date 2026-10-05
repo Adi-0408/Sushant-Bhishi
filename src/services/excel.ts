@@ -208,7 +208,8 @@ export const exportGeneralReportToExcel = (
     isPaid: boolean;
     unpaidLoan?: number;
     loanDeduction?: number;
-  }[]
+  }[],
+  lang: 'MR' | 'EN' = 'MR'
 ) => {
   const tableRowsHtml = rows
     .map(
@@ -228,9 +229,9 @@ export const exportGeneralReportToExcel = (
           <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${idx + 1}</td>
           <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold;">${r.customer.accountNumber}</td>
           <td style="border: 1px solid #cbd5e1; padding: 6px; font-weight: bold;">${r.customer.name}</td>
-          <td style="border: 1px solid #cbd5e1; padding: 6px;">${r.customer.mobile}</td>
-          <td style="border: 1px solid #cbd5e1; padding: 6px;">${getBishiNameMarathi(r.customer.bishiType)}</td>
-          <td style="border: 1px solid #cbd5e1; padding: 6px;">${r.customer.modality === 'W' ? 'साप्ताहिक' : 'मासिक'}</td>
+          <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center;">${r.customer.mobile || '-'}</td>
+          <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center;">${getBishiNameMarathi(r.customer.bishiType, lang)}</td>
+          <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; font-weight: bold;">${r.customer.modality === 'W' ? (lang === 'EN' ? 'Weekly' : 'साप्ताहिक') : (lang === 'EN' ? 'Monthly' : 'मासिक')}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px;">${r.exp}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; color: #1e40af;">+${expInt}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #064e3b; background-color: #ecfdf5;">${totalExpWithInt}</td>
@@ -241,7 +242,7 @@ export const exportGeneralReportToExcel = (
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #1e3a8a;">${payableAmt > 0 ? payableAmt : '-'}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #581c87;">${extraAmt > 0 ? `+${extraAmt}` : '-'}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #166534; background-color: #f0fdf4;">${returnAmt > 0 ? (loanAmt > 0 ? `${returnAmt} (-कर्ज: ${loanAmt}${loanAmt >= returnAmt ? ` | बाकी: ${loanAmt - returnAmt}` : ` | हात: ${returnAmt - loanAmt}`})` : returnAmt) : '-'}</td>
-          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${r.isPaid ? 'पूर्ण जमा' : r.coll > 0 ? 'अंशतः जमा' : 'बाकी'}</td>
+          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${r.isPaid ? (lang === 'EN' ? 'Paid' : 'पूर्ण जमा') : r.coll > 0 ? (lang === 'EN' ? 'Partial' : 'अंशतः जमा') : (lang === 'EN' ? 'Pending' : 'बाकी')}</td>
         </tr>
       `;
       }
@@ -279,28 +280,28 @@ export const exportGeneralReportToExcel = (
       </style>
     </head>
     <body>
-      <h2>सुशांत भिशी - ${title}</h2>
-      <p>कार्यालय: ${officeName} | भिशी: ${bishiName} | तारीख: ${new Date().toLocaleDateString('mr-IN')}</p>
+      <h2>${lang === 'EN' ? 'Sushant Bishi' : 'सुशांत भिशी'} - ${title}</h2>
+      <p>${lang === 'EN' ? 'Office' : 'कार्यालय'}: ${officeName} | ${lang === 'EN' ? 'Scheme' : 'भिशी'}: ${bishiName} | ${lang === 'EN' ? 'Date' : 'तारीख'}: ${new Date().toLocaleDateString(lang === 'EN' ? 'en-IN' : 'mr-IN')}</p>
       <table>
         <thead>
           <tr class="th-header" style="background-color:#0B5C45; color:#ffffff; font-weight:bold;">
-            <th>अ. क्र.</th>
-            <th>खाते क्र.</th>
-            <th>खातेदाराचे नाव</th>
-            <th>मोबाईल</th>
-            <th>भिशी प्रकार</th>
-            <th>पद्धत</th>
-            <th>हप्ते ठेव (₹)</th>
-            <th>अपेक्षित व्याज (₹)</th>
-            <th>एकूण भिशी (व्याजासह) (₹)</th>
-            <th>जमा (₹)</th>
-            <th>बाकी (₹)</th>
-            <th>जमा व्याज (₹)</th>
-            <th>कर्ज (₹)</th>
-            <th>एकूण देय (₹)</th>
-            <th>जादा जमा (₹)</th>
-            <th>एकूण परतावा (₹)</th>
-            <th>स्थिती</th>
+            <th>${lang === 'EN' ? 'Sr. No.' : 'अ. क्र.'}</th>
+            <th>${lang === 'EN' ? 'Acc No.' : 'खाते क्र.'}</th>
+            <th>${lang === 'EN' ? 'Customer Name' : 'खातेदाराचे नाव'}</th>
+            <th>${lang === 'EN' ? 'Mobile' : 'मोबाईल'}</th>
+            <th>${lang === 'EN' ? 'Bishi Scheme' : 'भिशी प्रकार'}</th>
+            <th>${lang === 'EN' ? 'Modality (Frequency)' : 'पद्धत (साप्ताहिक/मासिक)'}</th>
+            <th>${lang === 'EN' ? 'Inst. Deposit (₹)' : 'हप्ते ठेव (₹)'}</th>
+            <th>${lang === 'EN' ? 'Expected Int (₹)' : 'अपेक्षित व्याज (₹)'}</th>
+            <th>${lang === 'EN' ? 'Total Bishi (with Int) (₹)' : 'एकूण भिशी (व्याजासह) (₹)'}</th>
+            <th>${lang === 'EN' ? 'Collected (₹)' : 'जमा (₹)'}</th>
+            <th>${lang === 'EN' ? 'Remaining (₹)' : 'बाकी (₹)'}</th>
+            <th>${lang === 'EN' ? 'Earned Int (₹)' : 'जमा व्याज (₹)'}</th>
+            <th>${lang === 'EN' ? 'Loan (₹)' : 'कर्ज (₹)'}</th>
+            <th>${lang === 'EN' ? 'Total Payable (₹)' : 'एकूण देय (₹)'}</th>
+            <th>${lang === 'EN' ? 'Extra Submitted (₹)' : 'जादा जमा (₹)'}</th>
+            <th>${lang === 'EN' ? 'Total Return (₹)' : 'एकूण परतावा (₹)'}</th>
+            <th>${lang === 'EN' ? 'Status' : 'स्थिती'}</th>
           </tr>
         </thead>
         <tbody>
@@ -308,7 +309,7 @@ export const exportGeneralReportToExcel = (
         </tbody>
         <tfoot>
           <tr class="tf-footer" style="background-color:#0F4A3C; color:#ffffff; font-weight:bold;">
-            <td colspan="6" style="font-weight:bold; text-align:right;">एकूण (TOTAL)</td>
+            <td colspan="6" style="font-weight:bold; text-align:right;">${lang === 'EN' ? 'TOTAL' : 'एकूण (TOTAL)'}</td>
             <td style="text-align:right;">${totalExp}</td>
             <td style="text-align:right;">${totalExpInt}</td>
             <td style="text-align:right; font-weight:bold; color:#a7f3d0;">${totalExpWithInterest}</td>

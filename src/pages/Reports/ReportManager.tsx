@@ -461,7 +461,8 @@ export const ReportManager: React.FC = () => {
         reportTitle,
         getOfficeNameMarathi(activeOffice, language),
         bishiFilter === 'ALL' ? t.allBishi : getBishiNameMarathi(bishiFilter, language),
-        filteredRows
+        filteredRows,
+        language
       );
     }
   };
@@ -1168,9 +1169,20 @@ export const ReportManager: React.FC = () => {
                         </div>
                         <div>
                           <span className="text-[10px] font-extrabold text-slate-400 block uppercase">
-                            {t.colBishi}
+                            {t.colBishi} / {t.colModality}
                           </span>
-                          <span className="text-slate-800 font-bold">{getBishiNameMarathi(cust.bishiType, language)}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                            <span className="text-slate-800 font-bold">{getBishiNameMarathi(cust.bishiType, language)}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-black border ${
+                              cust.modality === 'W'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            }`}>
+                              {cust.modality === 'W'
+                                ? (language === 'EN' ? 'Weekly' : 'साप्ताहिक')
+                                : (language === 'EN' ? 'Monthly' : 'मासिक')}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -1296,9 +1308,10 @@ export const ReportManager: React.FC = () => {
                           {t.colFullName}
                         </th>
 
-                        {/* Scrollable Columns 4 through 14 */}
+                        {/* Scrollable Columns 4 through 15 */}
                         <th className="p-2.5 print:p-1 print:px-1 border-r border-b border-emerald-800 text-center whitespace-nowrap min-w-[110px] align-middle">{t.colMobile}</th>
                         <th className="p-2.5 print:p-1 print:px-1 border-r border-b border-emerald-800 text-center whitespace-nowrap min-w-[145px] align-middle">{t.colBishi}</th>
+                        <th className="p-2.5 print:p-1 print:px-1 border-r border-b border-emerald-800 text-center whitespace-nowrap min-w-[95px] align-middle">{t.colModality}</th>
                         <th className="p-2.5 print:p-1 print:px-1 text-right border-r border-b border-emerald-800 whitespace-nowrap min-w-[160px] align-middle">{language === 'EN' ? 'Total Bishi (with Int.) (₹)' : 'एकूण भिशी (व्याजासह) (₹)'}</th>
                         <th className="p-2.5 print:p-1 print:px-1 text-right border-r border-b border-emerald-800 whitespace-nowrap min-w-[115px] align-middle">{t.colCollectedAmount}</th>
                         <th className="p-2.5 print:p-1 print:px-1 text-right border-r border-b border-emerald-800 whitespace-nowrap min-w-[115px] align-middle">{t.colRemainingAmount}</th>
@@ -1341,6 +1354,19 @@ export const ReportManager: React.FC = () => {
                           <td className="p-2.5 print:p-1 print:px-1 text-center border-r border-b border-slate-200 whitespace-nowrap min-w-[145px] align-middle">
                             <span className="inline-block px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-bold text-[11px] border border-slate-200/80 whitespace-nowrap">
                               {getBishiNameMarathi(cust.bishiType, language)}
+                            </span>
+                          </td>
+
+                          {/* Col 5b: Scheme Frequency / Modality (Monthly / Weekly) */}
+                          <td className="p-2.5 print:p-1 print:px-1 text-center border-r border-b border-slate-200 whitespace-nowrap min-w-[95px] align-middle">
+                            <span className={`inline-block px-2 py-0.5 rounded-md font-black text-[11px] whitespace-nowrap border ${
+                              cust.modality === 'W'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200 print:border-slate-300'
+                                : 'bg-emerald-50 text-emerald-800 border-emerald-200 print:border-slate-300'
+                            }`}>
+                              {cust.modality === 'W'
+                                ? (language === 'EN' ? 'Weekly' : 'साप्ताहिक')
+                                : (language === 'EN' ? 'Monthly' : 'मासिक')}
                             </span>
                           </td>
 
@@ -1485,6 +1511,9 @@ export const ReportManager: React.FC = () => {
 
                         {/* Col 5: Scheme */}
                         <td className="p-2.5 print:p-1 border-r border-t-2 border-emerald-800 text-center text-slate-400 whitespace-nowrap min-w-[145px] align-middle">-</td>
+
+                        {/* Col 5b: Modality */}
+                        <td className="p-2.5 print:p-1 border-r border-t-2 border-emerald-800 text-center text-slate-400 whitespace-nowrap min-w-[95px] align-middle">-</td>
 
                         {/* Col 6: Total Bishi (with Int.) */}
                         <td className="p-2.5 print:p-1 print:px-1 text-right border-r border-t-2 border-emerald-800 text-emerald-200 font-black whitespace-nowrap min-w-[160px] align-middle">

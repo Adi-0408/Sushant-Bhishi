@@ -514,6 +514,7 @@ export const generateReportPDF = async (
             <td style="padding: 5px 6px; border: 1px solid #e2e8f0; font-weight: 800; color: #1e293b;">${r.cust.name}</td>
             <td style="padding: 5px 4px; border: 1px solid #e2e8f0; text-align: center; color: #64748b;">${r.cust.mobile}</td>
             <td style="padding: 5px 4px; border: 1px solid #e2e8f0; text-align: center; color: #475569;">${getBishiNameMarathi(r.cust.bishiType, lang)}</td>
+            <td style="padding: 5px 3px; border: 1px solid #e2e8f0; text-align: center; font-weight: 800; font-size: 8px; color: ${r.cust.modality === 'W' ? '#1d4ed8' : '#047857'};">${r.cust.modality === 'W' ? (lang === 'EN' ? 'Weekly' : 'साप्ताहिक') : (lang === 'EN' ? 'Monthly' : 'मासिक')}</td>
             <td style="padding: 5px 5px; border: 1px solid #e2e8f0; text-align: right; font-weight: 700;">
               <div style="font-weight: 900; color: #064e3b;">${formatCurrency(r.totalExpWithInterest, lang)}</div>
               <div style="font-size: 7.5px; color: #64748b;">(${formatCurrency(r.exp, lang)} + ${formatCurrency(r.expectedInterest, lang)})</div>
@@ -555,7 +556,8 @@ export const generateReportPDF = async (
           <th style="padding: 6px 4px; border: 1px solid #065f46; text-align: center; width: 55px;">${lang === 'EN' ? 'Acc No.' : 'खाते क्र.'}</th>
           <th style="padding: 6px 6px; border: 1px solid #065f46; text-align: left; width: 110px;">${lang === 'EN' ? 'Customer Name' : 'खातेदाराचे नाव'}</th>
           <th style="padding: 6px 4px; border: 1px solid #065f46; text-align: center; width: 75px;">${lang === 'EN' ? 'Mobile' : 'मोबाईल'}</th>
-          <th style="padding: 6px 4px; border: 1px solid #065f46; text-align: center; width: 65px;">${lang === 'EN' ? 'Scheme' : 'योजना'}</th>
+          <th style="padding: 6px 4px; border: 1px solid #065f46; text-align: center; width: 60px;">${lang === 'EN' ? 'Scheme' : 'योजना'}</th>
+          <th style="padding: 6px 3px; border: 1px solid #065f46; text-align: center; width: 50px;">${lang === 'EN' ? 'Frequency' : 'पद्धत'}</th>
           <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 90px;">${lang === 'EN' ? 'Total (with Int) (₹)' : 'एकूण भिशी (व्याजासह) (₹)'}</th>
           <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 70px;">${lang === 'EN' ? 'Collected (₹)' : 'जमा (₹)'}</th>
           <th style="padding: 6px 5px; border: 1px solid #065f46; text-align: right; width: 70px;">${lang === 'EN' ? 'Remaining (₹)' : 'बाकी (₹)'}</th>
@@ -628,6 +630,7 @@ export const generateReportPDF = async (
             <td style="padding: 6px 6px; border: 1px solid #065f46;">${customers.length} ${lang === 'EN' ? 'Accounts' : 'खातेदार'}</td>
             <td style="padding: 6px 4px; border: 1px solid #065f46;">-</td>
             <td style="padding: 6px 4px; border: 1px solid #065f46;">-</td>
+            <td style="padding: 6px 3px; border: 1px solid #065f46; text-align: center;">-</td>
             <td style="padding: 6px 5px; border: 1px solid #065f46; text-align: right;">
               <div>${formatCurrency(totalExpWithInterestSum, lang)}</div>
               <div style="font-size: 7.5px; color: #a7f3d0;">(${formatCurrency(totalExp, lang)} + ${formatCurrency(totalExpectedInterestSum, lang)})</div>
