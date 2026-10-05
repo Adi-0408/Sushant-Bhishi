@@ -223,7 +223,9 @@ export const AutoBackupService = {
   saveSnapshotLocally: (
     data: SystemBackupData,
     filename: string,
-    exactTimestamp?: number
+    exactTimestamp?: number,
+    slotDate?: string,
+    backupType?: '11PM' | 'OPEN' | 'MANUAL' | 'DRIVE'
   ): LocalBackupSnapshot => {
     const custCount = data.customers?.length || 0;
     const existing = AutoBackupService.getLocalSnapshots();
@@ -238,6 +240,22 @@ export const AutoBackupService = {
     const jsonStr = JSON.stringify(data);
     const sizeKb = Math.round((jsonStr.length * 2) / 1024);
 
+    // Derive backupType if not provided
+    let derivedType = backupType;
+    if (!derivedType) {
+      if (filename.includes('AutoBackup_11PM')) derivedType = '11PM';
+      else if (filename.includes('DailyOpen')) derivedType = 'OPEN';
+      else if (filename.includes('CloudDrive')) derivedType = 'DRIVE';
+      else derivedType = 'MANUAL';
+    }
+
+    // Derive slotDate if not provided
+    let derivedSlot = slotDate;
+    if (!derivedSlot && filename.includes('AutoBackup_11PM')) {
+      const match = filename.match(/(\d{4}-\d{2}-\d{2})/);
+      if (match) derivedSlot = match[1];
+    }
+
     const snapshot: LocalBackupSnapshot = {
       id: 'snap_' + timeMs,
       createdAt,
@@ -248,6 +266,8 @@ export const AutoBackupService = {
       loanPaymentCount: data.loanPayments?.length || 0,
       sizeKb,
       data,
+      slotDate: derivedSlot,
+      backupType: derivedType,
     };
 
     // Filter out duplicates within 2 seconds
@@ -333,7 +353,7 @@ export const AutoBackupService = {
     const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_Backup', new Date(now));
 
     // 1. Save snapshot to local device storage
-    const snapshot = AutoBackupService.saveSnapshotLocally(data, filename, now);
+    const snapshot = AutoBackupService.saveSnapshotLocally(data, filename, now, undefined, 'MANUAL');
 
     // 2. Download directly to device filesystem
     AutoBackupService.downloadBackupFile(data, filename);
@@ -521,6 +541,7 @@ export const AutoBackupService = {
           const currentData = StorageService.exportBackup();
           const snapIso = new Date(snapTimestamp).toISOString();
           const snapFile = cloudData.lastDaily11pmFilename || filename;
+          const snapSlot = cloudData.lastDaily11pmDate || (snapFile.match(/(\d{4}-\d{2}-\d{2})/) ? snapFile.match(/(\d{4}-\d{2}-\d{2})/)?.[1] : undefined);
           const snapshot: LocalBackupSnapshot = {
             id: 'snap_' + snapTimestamp,
             createdAt: snapIso,
@@ -531,6 +552,8 @@ export const AutoBackupService = {
             loanPaymentCount: currentData.loanPayments?.length || 0,
             sizeKb: Number(cloudData.lastBackupSizeKb) || Math.round((JSON.stringify(currentData).length * 2) / 1024),
             data: currentData,
+            slotDate: snapSlot,
+            backupType: snapFile.includes('11PM') ? '11PM' : 'DRIVE',
           };
           const updated = [snapshot, ...cleanedExisting].slice(0, 10);
           updated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -630,11 +653,11 @@ export const AutoBackupService = {
         }
 
         const now = Date.now();
-        // Distinct filename clearly indicating the scheduled daily 11 PM backup
-        const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_AutoBackup_11PM', new Date(now));
+        // Distinct filename clearly indicating the scheduled daily 11 PM backup for targetSlotDate
+        const filename = `Sushant_Bishi_AutoBackup_11PM_${targetSlotDate}_2300.json`;
 
         // 1. Store snapshot in local memory for instant 1-click restore without needing files
-        const snapshot = AutoBackupService.saveSnapshotLocally(data, filename, now);
+        const snapshot = AutoBackupService.saveSnapshotLocally(data, filename, now, targetSlotDate, '11PM');
 
         // 2. Mark the 11 PM backup for targetSlotDate as COMPLETED
         config.lastDaily11pmDate = targetSlotDate;
@@ -750,7 +773,7 @@ export const AutoBackupService = {
       const filename = AutoBackupService.generateBackupFilename('Sushant_Bishi_DailyOpen_Backup', new Date(backupTime));
 
       // 1. Store snapshot in local memory / IndexedDB for instant 1-click restore
-      const snapshot = AutoBackupService.saveSnapshotLocally(data, filename, backupTime);
+      const snapshot = AutoBackupService.saveSnapshotLocally(data, filename, backupTime, todayStr, 'OPEN');
 
       // 2. Mark this browser session as completed so navigating/reloading doesn't re-trigger
       sessionStorage.setItem(sessionKey, String(backupTime));

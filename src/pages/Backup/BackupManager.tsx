@@ -471,6 +471,36 @@ export const BackupManager: React.FC = () => {
     }
   };
 
+  const getSnapshotBadge = (snap: LocalBackupSnapshot) => {
+    const fn = snap.filename || '';
+    const slot = snap.slotDate || (fn.match(/(\d{4}-\d{2}-\d{2})/) ? fn.match(/(\d{4}-\d{2}-\d{2})/)?.[1] : undefined);
+
+    if (snap.backupType === '11PM' || fn.includes('AutoBackup_11PM')) {
+      return {
+        label: language === 'EN'
+          ? `11:00 PM Daily${slot ? ` (${slot})` : ''}`
+          : `रात्री ११:०० चा बॅकअप${slot ? ` (${slot})` : ''}`,
+        badgeClass: 'bg-purple-100 text-purple-900 border-purple-300',
+      };
+    }
+    if (snap.backupType === 'OPEN' || fn.includes('DailyOpen')) {
+      return {
+        label: language === 'EN' ? 'Site Opening' : 'वेबसाईट उघडतानाचा',
+        badgeClass: 'bg-blue-100 text-blue-900 border-blue-300',
+      };
+    }
+    if (snap.backupType === 'DRIVE' || fn.includes('CloudDrive')) {
+      return {
+        label: language === 'EN' ? 'Google Drive Cloud' : 'गुगल ड्राईव्ह क्लाउड',
+        badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+      };
+    }
+    return {
+      label: language === 'EN' ? 'Manual Backup' : 'मॅन्युअल बॅकअप',
+      badgeClass: 'bg-amber-100 text-amber-900 border-amber-300',
+    };
+  };
+
   return (
     <div className="space-y-6 pb-12 max-w-5xl mx-auto">
       {/* Page Header */}
@@ -954,19 +984,32 @@ export const BackupManager: React.FC = () => {
                       {idx + 1}
                     </div>
                     <div className="min-w-0">
-                      <div className="text-xs font-black text-slate-900 flex items-center space-x-2">
+                      <div className="text-xs font-black text-slate-900 flex flex-wrap items-center gap-1.5">
                         <span>{idx === 0 ? formatDateTime(unifiedLatestTime) : formatDateTime(snap.createdAt)}</span>
                         {idx === 0 && (
-                          <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-black">
+                          <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-black border border-emerald-300">
                             {language === 'EN' ? 'LATEST' : 'नवीनतम'}
                           </span>
                         )}
+                        {(() => {
+                          const badge = getSnapshotBadge(snap);
+                          return (
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-black border ${badge.badgeClass}`}>
+                              {badge.label}
+                            </span>
+                          );
+                        })()}
                       </div>
-                      <div className="text-[11px] text-slate-500 font-bold truncate">
+                      <div className="text-[11px] text-slate-500 font-bold truncate mt-0.5">
                         {language === 'EN'
                           ? `${snap.customerCount} Customers, ${snap.collectionCount} Collections, ${snap.loanCount} Loans (~${snap.sizeKb} KB)`
                           : `${snap.customerCount} खातेदार, ${snap.collectionCount} हप्ते, ${snap.loanCount} कर्जे (~${snap.sizeKb} KB)`}
                       </div>
+                      {snap.filename && (
+                        <div className="text-[10px] text-slate-400 font-mono truncate max-w-[280px] sm:max-w-[450px]">
+                          {snap.filename}
+                        </div>
+                      )}
                     </div>
                   </div>
 

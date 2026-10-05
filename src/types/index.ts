@@ -256,6 +256,8 @@ export interface LocalBackupSnapshot {
   loanPaymentCount?: number;
   sizeKb: number;
   data: SystemBackupData;
+  slotDate?: string;
+  backupType?: '11PM' | 'OPEN' | 'MANUAL' | 'DRIVE';
 }
 
 export interface AutoBackupConfig {
