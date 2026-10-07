@@ -12,7 +12,7 @@ import {
   SmsLog,
   ThakbakiEntry,
 } from '../types';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, collection } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { StorageService } from '../services/db';
 import { useAuth } from './AuthContext';
@@ -148,6 +148,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 2. Realtime listener on stats/summary doc (0 reads while idle, 1 read on actual remote update)
     // Guarantees all 4 devices stay 100% in sync simultaneously when customers are added, modified, or deleted!
     let unsubStats: (() => void) | null = null;
+    let unsubBishi: (() => void) | null = null;
     try {
       unsubStats = onSnapshot(doc(db, 'stats', 'summary'), async (snap: any) => {
         if (!snap.exists()) return;
@@ -200,6 +201,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('[AppContext] Realtime stats listener note:', e);
     }
 
+    // Realtime Bishi listener to sync added, updated, or deleted schemes immediately
+    try {
+      unsubBishi = onSnapshot(
+        collection(db, 'bishi'),
+        (snapshot: any) => {
+          if (snapshot.metadata?.hasPendingWrites) return;
+          const remoteList: BishiConfig[] = [];
+          snapshot.forEach((d: any) => {
+            const raw = d.data();
+            remoteList.push({
+              ...raw,
+              id: raw.id || d.id,
+            });
+          });
+          localStorage.setItem('sb_bishi_configs', JSON.stringify(remoteList));
+          setBishiConfigs(remoteList);
+        },
+        (err: any) => console.warn('[AppContext] Bishi listener error:', err?.message || err)
+      );
+
+    } catch (e) {
+      console.warn('[AppContext] Bishi listener setup note:', e);
+    }
+
     // 3. Low-read startup sync: If local storage has data, do a quick delta check (1 read)
     // Always runs on startup/login to guarantee immediate cross-device sync
     if (currentAdmin) {
@@ -226,6 +251,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       if (unsubStatus) unsubStatus();
       if (unsubStats) unsubStats();
+      if (unsubBishi) unsubBishi();
     };
   }, [currentAdmin]);
 

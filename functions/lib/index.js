@@ -1,0 +1,323 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.sendAutomatedReminders = exports.resetDailyStats = exports.markOverdueInstallments = exports.refreshTodaysDue = exports.onLoanPaymentCreated = exports.onLoanCreated = exports.onCollectionCreated = exports.onCustomerDeleted = exports.onCustomerCreated = void 0;
+const admin = require("firebase-admin");
+const firestore_1 = require("firebase-functions/v2/firestore");
+const scheduler_1 = require("firebase-functions/v2/scheduler");
+if (!admin.apps.length) {
+    admin.initializeApp();
+}
+const db = admin.firestore();
+const STATS_REF = db.doc('stats/summary');
+/**
+ * 1. onCustomerCreated (customers/{id} onCreate)
+ * Increment stats/summary.totalCustomers by 1 atomically using FieldValue.increment()
+ */
+exports.onCustomerCreated = (0, firestore_1.onDocumentCreated)('customers/{customerId}', async (event) => {
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    await STATS_REF.set({
+        totalCustomers: admin.firestore.FieldValue.increment(1),
+        lastUpdated: new Date().toISOString(),
+    }, { merge: true });
+});
+/**
+ * 1b. onCustomerDeleted (customers/{id} onDelete)
+ * Decrement stats/summary.totalCustomers by 1 atomically
+ */
+exports.onCustomerDeleted = (0, firestore_1.onDocumentDeleted)('customers/{customerId}', async (event) => {
+    await STATS_REF.set({
+        totalCustomers: admin.firestore.FieldValue.increment(-1),
+        lastUpdated: new Date().toISOString(),
+    }, { merge: true });
+});
+/**
+ * 2. onCollectionCreated (collections/{id} onCreate — a bishi payment)
+ * → stats/summary.todaysCollection += amount
+ * → stats/summary.totalBishiCollected += amount
+ * → mark matching installments/{id}.status = "paid", paidAt = now
+ */
+exports.onCollectionCreated = (0, firestore_1.onDocumentCreated)('collections/{collectionId}', async (event) => {
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    const data = snapshot.data();
+    const amount = Number(data.collectedAmount) || 0;
+    const customerId = data.customerId || '';
+    const periodIndex = data.periodIndex ?? 1;
+    // Atomically increment stats
+    if (amount > 0) {
+        await STATS_REF.set({
+            todaysCollection: admin.firestore.FieldValue.increment(amount),
+            totalBishiCollected: admin.firestore.FieldValue.increment(amount),
+            lastUpdated: new Date().toISOString(),
+        }, { merge: true });
+    }
+    // Update matching installment status to "paid"
+    if (customerId && periodIndex) {
+        const installmentId = `inst_bishi_${customerId}_${periodIndex}`;
+        const instRef = db.doc(`installments/${installmentId}`);
+        try {
+            await instRef.set({
+                status: 'paid',
+                paidAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: new Date().toISOString(),
+            }, { merge: true });
+        }
+        catch (e) {
+            console.warn('Installment status update note:', e);
+        }
+    }
+    // WhatsApp Integration: Send Confirmation
+    if (customerId) {
+        try {
+            const { sendCollectionConfirmation } = await Promise.resolve().then(() => require('./whatsapp.js'));
+            const customerSnap = await db.doc(`customers/${customerId}`).get();
+            if (customerSnap.exists) {
+                const customerData = customerSnap.data();
+                const phone = customerData?.mobile;
+                const name = customerData?.name || data.customerName || '';
+                if (phone) {
+                    await sendCollectionConfirmation(phone, name, Number(data.totalPaid) || amount, Number(data.remainingAmount) || 0, Number(data.expectedAmount) || 0);
+                }
+            }
+        }
+        catch (err) {
+            console.error('Failed to send WhatsApp confirmation:', err);
+        }
+    }
+});
+/**
+ * 3. onLoanCreated (loans/{id} onCreate)
+ * → stats/summary.totalPrincipalLoans += principal
+ * → stats/summary.loanBalanceDue += principal
+ * → generate the full installments schedule for this loan
+ */
+exports.onLoanCreated = (0, firestore_1.onDocumentCreated)('loans/{loanId}', async (event) => {
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    const data = snapshot.data();
+    const principal = Number(data.principalAmount) || 0;
+    const loanId = event.params.loanId;
+    const customerId = data.customerId || '';
+    const customerName = data.customerName || '';
+    const accountNumber = data.accountNumber || '';
+    const issueDate = data.issueDate || new Date().toISOString().split('T')[0];
+    // Atomically update stats
+    await STATS_REF.set({
+        totalPrincipalLoans: admin.firestore.FieldValue.increment(principal),
+        loanBalanceDue: admin.firestore.FieldValue.increment(principal),
+        lastUpdated: new Date().toISOString(),
+    }, { merge: true });
+    // Generate loan installment record upfront
+    const installmentId = `inst_loan_${loanId}_1`;
+    const instRef = db.doc(`installments/${installmentId}`);
+    await instRef.set({
+        id: installmentId,
+        customerId,
+        customerName,
+        accountNumber,
+        accountNo: accountNumber,
+        type: 'loan',
+        sourceId: loanId,
+        dueDate: issueDate,
+        amount: principal,
+        status: data.status === 'COMPLETED' ? 'paid' : 'pending',
+        paidAt: data.status === 'COMPLETED' ? admin.firestore.FieldValue.serverTimestamp() : null,
+        periodIndex: 1,
+        periodLabel: 'कर्ज हप्ता',
+        officeId: data.officeId || 'MAIN',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    }, { merge: true });
+});
+/**
+ * 4. onLoanPaymentCreated (loanPayments/{id} onCreate)
+ * → stats/summary.loanBalanceDue -= paymentAmount
+ * → mark matching installments/{id}.status = "paid"
+ * → if a penalty/late-fee field exists, stats/summary.todaysPenalty += it
+ */
+exports.onLoanPaymentCreated = (0, firestore_1.onDocumentCreated)('loanPayments/{paymentId}', async (event) => {
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    const data = snapshot.data();
+    const paymentAmount = Number(data.paidAmount) || 0;
+    const penalty = Number(data.penaltyPaid) || 0;
+    const loanId = data.loanId;
+    const updates = {
+        lastUpdated: new Date().toISOString(),
+    };
+    if (paymentAmount > 0) {
+        updates.loanBalanceDue = admin.firestore.FieldValue.increment(-paymentAmount);
+    }
+    if (penalty > 0) {
+        updates.todaysPenalty = admin.firestore.FieldValue.increment(penalty);
+    }
+    await STATS_REF.set(updates, { merge: true });
+    // Mark loan installment paid if fully settled
+    if (loanId) {
+        const instRef = db.doc(`installments/inst_loan_${loanId}_1`);
+        try {
+            await instRef.set({
+                status: 'paid',
+                paidAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: new Date().toISOString(),
+            }, { merge: true });
+        }
+        catch (e) {
+            console.warn('Loan installment update note:', e);
+        }
+    }
+});
+/**
+ * 5. refreshTodaysDue (scheduled, every 30 min)
+ * → query installments where dueDate == today && status == "pending"
+ * → compute sum(amount) and count
+ * → write into stats/summary.todaysDueAmount / .todaysDueInstallments
+ */
+exports.refreshTodaysDue = (0, scheduler_1.onSchedule)('every 30 minutes', async () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const snap = await db
+        .collection('installments')
+        .where('dueDate', '==', todayStr)
+        .where('status', '==', 'pending')
+        .get();
+    let totalDue = 0;
+    let count = 0;
+    snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        totalDue += Number(data.amount) || 0;
+        count += 1;
+    });
+    await STATS_REF.set({
+        todaysDueAmount: totalDue,
+        todaysDueInstallments: count,
+        lastUpdated: new Date().toISOString(),
+    }, { merge: true });
+    console.log(`[refreshTodaysDue] today: ${todayStr}, due: ₹${totalDue}, count: ${count}`);
+});
+/**
+ * 6. markOverdueInstallments (scheduled, once daily, early morning at 4 AM)
+ * → batch-update installments where status == "pending" && dueDate < today to status "overdue"
+ */
+exports.markOverdueInstallments = (0, scheduler_1.onSchedule)('0 4 * * *', async () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const snap = await db
+        .collection('installments')
+        .where('status', '==', 'pending')
+        .where('dueDate', '<', todayStr)
+        .limit(500)
+        .get();
+    if (snap.empty) {
+        console.log('[markOverdueInstallments] No overdue installments to update.');
+        return;
+    }
+    const batch = db.batch();
+    snap.forEach((docSnap) => {
+        batch.update(docSnap.ref, {
+            status: 'overdue',
+            updatedAt: new Date().toISOString(),
+        });
+    });
+    await batch.commit();
+    console.log(`[markOverdueInstallments] Marked ${snap.size} installments as overdue.`);
+});
+/**
+ * 7. resetDailyStats (scheduled, midnight 00:00)
+ * → stats/summary.todaysCollection = 0, todaysPenalty = 0
+ */
+exports.resetDailyStats = (0, scheduler_1.onSchedule)('0 0 * * *', async () => {
+    await STATS_REF.set({
+        todaysCollection: 0,
+        todaysPenalty: 0,
+        lastUpdated: new Date().toISOString(),
+    }, { merge: true });
+    console.log('[resetDailyStats] Daily stats reset to zero for new day.');
+});
+/**
+ * 8. sendAutomatedReminders (scheduled, daily at 9:00 AM)
+ * → Weekly (Friday, Saturday)
+ * → Monthly (8th, 9th)
+ * → Thakbaki (Sunday)
+ */
+exports.sendAutomatedReminders = (0, scheduler_1.onSchedule)('0 9 * * *', async () => {
+    // Use IST timezone
+    const now = new Date();
+    const istNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const dayOfWeek = istNow.getDay(); // 0 = Sunday, 5 = Friday, 6 = Saturday
+    const dayOfMonth = istNow.getDate();
+    const isWeeklyDay = dayOfWeek === 5 || dayOfWeek === 6;
+    const isMonthlyDay = dayOfMonth === 8 || dayOfMonth === 9;
+    const isThakbakiDay = dayOfWeek === 0;
+    if (!isWeeklyDay && !isMonthlyDay && !isThakbakiDay) {
+        console.log('[sendAutomatedReminders] Not a scheduled reminder day (Weekly: Fri/Sat, Monthly: 8th/9th, Thakbaki: Sun).');
+        return;
+    }
+    const { sendCollectionReminder, sendThakbakiReminder } = await Promise.resolve().then(() => require('./whatsapp.js'));
+    // 1. Process Weekly & Monthly Installments
+    if (isWeeklyDay || isMonthlyDay) {
+        const pendingInstallments = await db.collection('installments').where('status', '==', 'pending').get();
+        // Group pending amounts by customer
+        const customersToRemind = new Map();
+        pendingInstallments.forEach((docSnap) => {
+            const inst = docSnap.data();
+            if (!inst.customerId || !inst.amount)
+                return;
+            if (!customersToRemind.has(inst.customerId)) {
+                customersToRemind.set(inst.customerId, {
+                    amount: 0,
+                    dueDates: new Set(),
+                    name: inst.customerName || ''
+                });
+            }
+            const data = customersToRemind.get(inst.customerId);
+            data.amount += Number(inst.amount);
+            if (inst.dueDate)
+                data.dueDates.add(inst.dueDate);
+        });
+        console.log(`[sendAutomatedReminders] Processing ${customersToRemind.size} customers with pending installments.`);
+        for (const [customerId, data] of customersToRemind.entries()) {
+            try {
+                const customerSnap = await db.doc(`customers/${customerId}`).get();
+                if (!customerSnap.exists)
+                    continue;
+                const customer = customerSnap.data();
+                if (!customer || !customer.mobile || customer.status !== 'ACTIVE')
+                    continue;
+                const modality = customer.modality; // 'WEEKLY' or 'MONTHLY'
+                let shouldSend = false;
+                if (isWeeklyDay && modality === 'WEEKLY')
+                    shouldSend = true;
+                if (isMonthlyDay && modality === 'MONTHLY')
+                    shouldSend = true;
+                if (shouldSend) {
+                    const dueDateStr = Array.from(data.dueDates).join(', ');
+                    await sendCollectionReminder(customer.mobile, customer.name || data.name, data.amount, dueDateStr);
+                }
+            }
+            catch (err) {
+                console.error(`Failed to send WhatsApp reminder for customer ${customerId}:`, err);
+            }
+        }
+    }
+    // 2. Process Thakbaki (Arrears) on Sundays
+    if (isThakbakiDay) {
+        const pendingThakbaki = await db.collection('thakbaki').where('status', '==', 'PENDING').get();
+        console.log(`[sendAutomatedReminders] Processing ${pendingThakbaki.size} pending Thakbaki entries.`);
+        for (const docSnap of pendingThakbaki.docs) {
+            try {
+                const thak = docSnap.data();
+                if (!thak.remainingAmount || thak.remainingAmount <= 0 || !thak.mobile)
+                    continue;
+                await sendThakbakiReminder(thak.mobile, thak.name, Number(thak.remainingAmount));
+            }
+            catch (err) {
+                console.error(`Failed to send Thakbaki reminder for ${docSnap.id}:`, err);
+            }
+        }
+    }
+});
+//# sourceMappingURL=index.js.map

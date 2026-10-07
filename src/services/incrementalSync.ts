@@ -154,7 +154,7 @@ export const touchSyncOnCustomerDelete = async (accountNumber?: string): Promise
  * during incremental sync without scanning the whole collection.
  */
 export const recordDeletion = async (
-  collectionName: 'customers' | 'collections' | 'loans' | 'loanPayments',
+  collectionName: 'customers' | 'collections' | 'loans' | 'loanPayments' | 'bishi',
   docId: string,
   extra?: { accountNumber?: string; name?: string }
 ): Promise<void> => {
@@ -430,6 +430,7 @@ export const performIncrementalSync = async (forceFull: boolean = false): Promis
       const deletedCollIds = new Set<string>();
       const deletedLoanIds = new Set<string>();
       const deletedPayIds = new Set<string>();
+      const deletedBishiIds = new Set<string>();
 
       delSnap.forEach((d: any) => {
         const raw = d.data();
@@ -442,6 +443,8 @@ export const performIncrementalSync = async (forceFull: boolean = false): Promis
           deletedLoanIds.add(raw.docId);
         } else if (raw.collectionName === 'loanPayments') {
           deletedPayIds.add(raw.docId);
+        } else if (raw.collectionName === 'bishi') {
+          if (raw.docId) deletedBishiIds.add(raw.docId);
         }
         deletedCount++;
       });
@@ -486,6 +489,10 @@ export const performIncrementalSync = async (forceFull: boolean = false): Promis
       if (deletedPayIds.size > 0) {
         const current = StorageService.getLoanPayments().filter((p) => !deletedPayIds.has(p.id));
         localStorage.setItem('sb_loan_payments', JSON.stringify(current));
+      }
+      if (deletedBishiIds.size > 0) {
+        const current = StorageService.getBishiConfigs().filter((b) => !deletedBishiIds.has(b.id));
+        localStorage.setItem('sb_bishi_configs', JSON.stringify(current));
       }
     }
 

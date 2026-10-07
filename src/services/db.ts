@@ -526,10 +526,21 @@ export const deduplicateCollections = (entries: CollectionEntry[]): CollectionEn
       } else if (existingTime > entryTime) {
         // Keep existing
       } else {
-        // When timestamps are identical, pick the canonical readable doc ID if one matches
-        const readableId = getFirestoreDocId('collections', entry.id, entry);
-        if (entry.id === readableId && existing.id !== readableId) {
+        // When timestamps are identical or tied, prefer paid/active records over empty/pending
+        const entryPaid = (entry.collectedAmount || 0) > 0 || entry.status === 'PAID';
+        const existingPaid = (existing.collectedAmount || 0) > 0 || existing.status === 'PAID';
+        if (entryPaid && !existingPaid) {
           map.set(key, entry);
+        } else if (!entryPaid && existingPaid) {
+          // Keep existing paid
+        } else if ((entry.collectedAmount || 0) > (existing.collectedAmount || 0)) {
+          map.set(key, entry);
+        } else {
+          // When amounts are identical, pick the canonical readable doc ID if one matches
+          const readableId = getFirestoreDocId('collections', entry.id, entry);
+          if (entry.id === readableId && existing.id !== readableId) {
+            map.set(key, entry);
+          }
         }
       }
     }
@@ -1159,8 +1170,11 @@ export const StorageService = {
   getBishiConfigs: (): BishiConfig[] => getStoredData<BishiConfig[]>(STORAGE_KEYS.BISHI_CONFIGS, []),
 
   saveBishiConfigs: (configs: BishiConfig[]): void => {
-    setStoredData(STORAGE_KEYS.BISHI_CONFIGS, configs);
-    configs.forEach((c) => syncToFirestore('bishi', c.id, c));
+    const nowIso = new Date().toISOString();
+    const stamped = configs.map((c) => ({ ...c, updatedAt: nowIso }));
+    setStoredData(STORAGE_KEYS.BISHI_CONFIGS, stamped);
+    stamped.forEach((c) => syncToFirestore('bishi', c.id, c));
+    touchSyncTimestamp();
   },
 
   deleteBishiConfig: async (id: string): Promise<void> => {
@@ -1169,6 +1183,8 @@ export const StorageService = {
     const updated = configs.filter((c) => c.id !== id);
     setStoredData(STORAGE_KEYS.BISHI_CONFIGS, updated);
     await deleteFromFirestore('bishi', id, toDelete);
+    await recordDeletion('bishi', id, toDelete);
+    await touchSyncTimestamp();
   },
 
   // Collection Entries Operations
@@ -1322,8 +1338,7 @@ export const StorageService = {
         );
     if (cust) {
       cust.updatedAt = nowIso;
-      // Note: Omit redundant syncToFirestore('customers') on individual installment entries
-      // The collection transaction document itself is already synced above.
+      syncToFirestore('customers', cust.id, cust);
     }
 
     if (updatedEntry.status === 'PAID' || Number(updatedEntry.collectedAmount) >= Number(updatedEntry.expectedAmount)) {
@@ -2348,6 +2363,8 @@ export const StorageService = {
           });
         });
         setStoredData(STORAGE_KEYS.BISHI_CONFIGS, remoteBishi);
+      } else {
+        setStoredData(STORAGE_KEYS.BISHI_CONFIGS, []);
       }
 
       if (!rateSnap.empty) {

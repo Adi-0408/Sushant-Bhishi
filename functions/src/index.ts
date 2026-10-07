@@ -84,6 +84,31 @@ export const onCollectionCreated = onDocumentCreated('collections/{collectionId}
       console.warn('Installment status update note:', e);
     }
   }
+
+  // WhatsApp Integration: Send Confirmation
+  if (customerId) {
+    try {
+      const { sendCollectionConfirmation } = await import('./whatsapp.js');
+      const customerSnap = await db.doc(`customers/${customerId}`).get();
+      if (customerSnap.exists) {
+        const customerData = customerSnap.data();
+        const phone = customerData?.mobile;
+        const name = customerData?.name || data.customerName || '';
+        
+        if (phone) {
+          await sendCollectionConfirmation(
+            phone,
+            name,
+            Number(data.totalPaid) || amount,
+            Number(data.remainingAmount) || 0,
+            Number(data.expectedAmount) || 0
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Failed to send WhatsApp confirmation:', err);
+    }
+  }
 });
 
 /**
@@ -267,4 +292,104 @@ export const resetDailyStats = onSchedule('0 0 * * *', async () => {
     { merge: true }
   );
   console.log('[resetDailyStats] Daily stats reset to zero for new day.');
+});
+
+/**
+ * 8. sendAutomatedReminders (scheduled, daily at 9:00 AM)
+ * → Weekly (Friday, Saturday)
+ * → Monthly (8th, 9th)
+ * → Thakbaki (Sunday)
+ */
+export const sendAutomatedReminders = onSchedule('0 9 * * *', async () => {
+  // Use IST timezone
+  const now = new Date();
+  const istNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const dayOfWeek = istNow.getDay(); // 0 = Sunday, 5 = Friday, 6 = Saturday
+  const dayOfMonth = istNow.getDate();
+
+  const isWeeklyDay = dayOfWeek === 5 || dayOfWeek === 6;
+  const isMonthlyDay = dayOfMonth === 8 || dayOfMonth === 9;
+  const isThakbakiDay = dayOfWeek === 0;
+
+  if (!isWeeklyDay && !isMonthlyDay && !isThakbakiDay) {
+    console.log('[sendAutomatedReminders] Not a scheduled reminder day (Weekly: Fri/Sat, Monthly: 8th/9th, Thakbaki: Sun).');
+    return;
+  }
+
+  const { sendCollectionReminder, sendThakbakiReminder } = await import('./whatsapp.js');
+
+  // 1. Process Weekly & Monthly Installments
+  if (isWeeklyDay || isMonthlyDay) {
+    const pendingInstallments = await db.collection('installments').where('status', '==', 'pending').get();
+    
+    // Group pending amounts by customer
+    const customersToRemind = new Map<string, { amount: number, dueDates: Set<string>, name: string }>();
+
+    pendingInstallments.forEach((docSnap: any) => {
+      const inst = docSnap.data();
+      if (!inst.customerId || !inst.amount) return;
+
+      if (!customersToRemind.has(inst.customerId)) {
+        customersToRemind.set(inst.customerId, {
+          amount: 0,
+          dueDates: new Set<string>(),
+          name: inst.customerName || ''
+        });
+      }
+      const data = customersToRemind.get(inst.customerId)!;
+      data.amount += Number(inst.amount);
+      if (inst.dueDate) data.dueDates.add(inst.dueDate);
+    });
+
+    console.log(`[sendAutomatedReminders] Processing ${customersToRemind.size} customers with pending installments.`);
+
+    for (const [customerId, data] of customersToRemind.entries()) {
+      try {
+        const customerSnap = await db.doc(`customers/${customerId}`).get();
+        if (!customerSnap.exists) continue;
+        
+        const customer = customerSnap.data();
+        if (!customer || !customer.mobile || customer.status !== 'ACTIVE') continue;
+
+        const modality = customer.modality; // 'WEEKLY' or 'MONTHLY'
+        
+        let shouldSend = false;
+        if (isWeeklyDay && modality === 'WEEKLY') shouldSend = true;
+        if (isMonthlyDay && modality === 'MONTHLY') shouldSend = true;
+        
+        if (shouldSend) {
+          const dueDateStr = Array.from(data.dueDates).join(', ');
+          await sendCollectionReminder(
+            customer.mobile,
+            customer.name || data.name,
+            data.amount,
+            dueDateStr
+          );
+        }
+      } catch (err) {
+        console.error(`Failed to send WhatsApp reminder for customer ${customerId}:`, err);
+      }
+    }
+  }
+
+  // 2. Process Thakbaki (Arrears) on Sundays
+  if (isThakbakiDay) {
+    const pendingThakbaki = await db.collection('thakbaki').where('status', '==', 'PENDING').get();
+    console.log(`[sendAutomatedReminders] Processing ${pendingThakbaki.size} pending Thakbaki entries.`);
+
+    for (const docSnap of pendingThakbaki.docs) {
+      try {
+        const thak = docSnap.data();
+        if (!thak.remainingAmount || thak.remainingAmount <= 0 || !thak.mobile) continue;
+        
+        await sendThakbakiReminder(
+          thak.mobile,
+          thak.name,
+          Number(thak.remainingAmount)
+        );
+      } catch (err) {
+        console.error(`Failed to send Thakbaki reminder for ${docSnap.id}:`, err);
+      }
+    }
+  }
 });
