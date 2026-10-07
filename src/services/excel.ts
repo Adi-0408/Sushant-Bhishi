@@ -195,6 +195,7 @@ export const exportGeneralReportToExcel = (
   bishiName: string,
   rows: {
     customer: Customer;
+    installmentAmount?: number;
     exp: number;
     expectedInterest?: number;
     totalExpWithInterest?: number;
@@ -214,6 +215,8 @@ export const exportGeneralReportToExcel = (
   const tableRowsHtml = rows
     .map(
       (r, idx) => {
+        const isLoanOnly = r.customer.bishiType === 'LOAN_ONLY';
+        const instAmt = isLoanOnly ? 0 : (r.installmentAmount ?? (r.customer.amount || 0));
         const rate = r.customer.interestRate || (r.customer.modality === 'W' ? 2.5 : 10);
         const expInt = r.expectedInterest ?? Math.round((r.exp * rate) / 100);
         const totalExpWithInt = r.totalExpWithInterest ?? (r.exp + expInt);
@@ -222,7 +225,6 @@ export const exportGeneralReportToExcel = (
         const extraAmt = r.extraSubmitted || 0;
         const returnAmt = r.totalWithExtra !== undefined ? r.totalWithExtra : (r.coll + intAmt);
         const loanAmt = r.unpaidLoan || 0;
-        const loanDed = r.loanDeduction || 0;
 
         return `
         <tr>
@@ -232,6 +234,7 @@ export const exportGeneralReportToExcel = (
           <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center;">${r.customer.mobile || '-'}</td>
           <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center;">${getBishiNameMarathi(r.customer.bishiType, lang)}</td>
           <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; font-weight: bold;">${r.customer.modality === 'W' ? (lang === 'EN' ? 'Weekly' : 'साप्ताहिक') : (lang === 'EN' ? 'Monthly' : 'मासिक')}</td>
+          <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #065f46;">${instAmt > 0 ? instAmt : '-'}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px;">${r.exp}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; color: #1e40af;">+${expInt}</td>
           <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px; font-weight: bold; color: #064e3b; background-color: #ecfdf5;">${totalExpWithInt}</td>
@@ -249,6 +252,7 @@ export const exportGeneralReportToExcel = (
     )
     .join('');
 
+  const totalInstallment = rows.reduce((a, r) => a + (r.customer.bishiType === 'LOAN_ONLY' ? 0 : (r.installmentAmount ?? (r.customer.amount || 0))), 0);
   const totalExp = rows.reduce((a, r) => a + r.exp, 0);
   const totalExpInt = rows.reduce((a, r) => {
     const rate = r.customer.interestRate || (r.customer.modality === 'W' ? 2.5 : 10);
@@ -291,6 +295,7 @@ export const exportGeneralReportToExcel = (
             <th>${lang === 'EN' ? 'Mobile' : 'मोबाईल'}</th>
             <th>${lang === 'EN' ? 'Bishi Scheme' : 'भिशी प्रकार'}</th>
             <th>${lang === 'EN' ? 'Modality (Frequency)' : 'पद्धत (साप्ताहिक/मासिक)'}</th>
+            <th>${lang === 'EN' ? 'Installment (₹)' : 'हप्ता रक्कम (₹)'}</th>
             <th>${lang === 'EN' ? 'Inst. Deposit (₹)' : 'हप्ते ठेव (₹)'}</th>
             <th>${lang === 'EN' ? 'Expected Int (₹)' : 'अपेक्षित व्याज (₹)'}</th>
             <th>${lang === 'EN' ? 'Total Bishi (with Int) (₹)' : 'एकूण भिशी (व्याजासह) (₹)'}</th>
@@ -310,6 +315,7 @@ export const exportGeneralReportToExcel = (
         <tfoot>
           <tr class="tf-footer" style="background-color:#0F4A3C; color:#ffffff; font-weight:bold;">
             <td colspan="6" style="font-weight:bold; text-align:right;">${lang === 'EN' ? 'TOTAL' : 'एकूण (TOTAL)'}</td>
+            <td style="text-align:right; font-weight:bold; color:#a7f3d0;">${totalInstallment > 0 ? totalInstallment : '-'}</td>
             <td style="text-align:right;">${totalExp}</td>
             <td style="text-align:right;">${totalExpInt}</td>
             <td style="text-align:right; font-weight:bold; color:#a7f3d0;">${totalExpWithInterest}</td>

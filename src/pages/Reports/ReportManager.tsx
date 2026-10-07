@@ -159,6 +159,7 @@ export const ReportManager: React.FC = () => {
     customers[0] ||
     null;
 
+  let grandInstallment = 0;
   let grandExpected = 0;
   let grandExpectedInterest = 0;
   let grandTotalExpWithInterest = 0;
@@ -279,6 +280,7 @@ export const ReportManager: React.FC = () => {
 
     // PURE loan-only customer (who does not belong to any regular bishi scheme)
     const isLoanOnly = cust.bishiType === 'LOAN_ONLY';
+    const installmentAmount = isLoanOnly ? 0 : (cust.amount || 0);
 
     const totalExpBase = isLoanOnly ? (custLoan ? custLoan.principalAmount : (cust.amount || 0)) : exp;
     const totalExpWithInterest = isLoanOnly ? totalExpBase : (exp + expectedBishiInterest);
@@ -306,6 +308,7 @@ export const ReportManager: React.FC = () => {
 
     return {
       customer: cust,
+      installmentAmount,
       exp: totalExpBase,
       expectedInterest: isLoanOnly ? 0 : expectedBishiInterest,
       totalExpWithInterest,
@@ -368,6 +371,7 @@ export const ReportManager: React.FC = () => {
   });
 
   filteredRows.forEach((r) => {
+    grandInstallment += r.installmentAmount;
     grandExpected += r.exp;
     grandExpectedInterest += r.expectedInterest;
     grandTotalExpWithInterest += r.totalExpWithInterest;
@@ -1132,7 +1136,7 @@ export const ReportManager: React.FC = () => {
               <>
                 {/* Mobile Cards View (< md screens, hidden in print) */}
                 <div className="block md:hidden print:hidden space-y-3 p-3 bg-slate-50/50">
-                  {filteredRows.map(({ customer: cust, exp, expectedInterest, totalExpWithInterest, coll, rem, int, pen, hasLoan, unpaidLoan, totalPrincipalLoan, loanDeduction, bishiGrossReturn, netReturn, isLoanOnly, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
+                  {filteredRows.map(({ customer: cust, installmentAmount, exp, expectedInterest, totalExpWithInterest, coll, rem, int, pen, hasLoan, unpaidLoan, totalPrincipalLoan, loanDeduction, bishiGrossReturn, netReturn, isLoanOnly, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
                     <div key={cust.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                         <div className="flex items-center space-x-2">
@@ -1183,6 +1187,11 @@ export const ReportManager: React.FC = () => {
                                 : (language === 'EN' ? 'Monthly' : 'मासिक')}
                             </span>
                           </div>
+                          {!isLoanOnly && (
+                            <span className="text-[11px] text-emerald-800 font-black block mt-1">
+                              {language === 'EN' ? 'Installment: ' : 'हप्ता: '}{formatCurrency(installmentAmount, language)}
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -1308,10 +1317,11 @@ export const ReportManager: React.FC = () => {
                           {t.colFullName}
                         </th>
 
-                        {/* Scrollable Columns 4 through 15 */}
+                        {/* Scrollable Columns 4 through 16 */}
                         <th className="p-2.5 print:p-1 print:px-1 border-r border-b border-emerald-800 text-center whitespace-nowrap min-w-[110px] align-middle">{t.colMobile}</th>
                         <th className="p-2.5 print:p-1 print:px-1 border-r border-b border-emerald-800 text-center whitespace-nowrap min-w-[145px] align-middle">{t.colBishi}</th>
                         <th className="p-2.5 print:p-1 print:px-1 border-r border-b border-emerald-800 text-center whitespace-nowrap min-w-[95px] align-middle">{t.colModality}</th>
+                        <th className="p-2.5 print:p-1 print:px-1 text-right border-r border-b border-emerald-800 whitespace-nowrap min-w-[110px] align-middle">{language === 'EN' ? 'Installment (₹)' : 'हप्ता रक्कम (₹)'}</th>
                         <th className="p-2.5 print:p-1 print:px-1 text-right border-r border-b border-emerald-800 whitespace-nowrap min-w-[160px] align-middle">{language === 'EN' ? 'Total Bishi (with Int.) (₹)' : 'एकूण भिशी (व्याजासह) (₹)'}</th>
                         <th className="p-2.5 print:p-1 print:px-1 text-right border-r border-b border-emerald-800 whitespace-nowrap min-w-[115px] align-middle">{t.colCollectedAmount}</th>
                         <th className="p-2.5 print:p-1 print:px-1 text-right border-r border-b border-emerald-800 whitespace-nowrap min-w-[115px] align-middle">{t.colRemainingAmount}</th>
@@ -1324,7 +1334,7 @@ export const ReportManager: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 font-medium">
-                      {filteredRows.map(({ customer: cust, exp, expectedInterest, totalExpWithInterest, coll, rem, int, pen, hasLoan, unpaidLoan, totalPrincipalLoan, loanDeduction, bishiGrossReturn, netReturn, isLoanOnly, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
+                      {filteredRows.map(({ customer: cust, installmentAmount, exp, expectedInterest, totalExpWithInterest, coll, rem, int, pen, hasLoan, unpaidLoan, totalPrincipalLoan, loanDeduction, bishiGrossReturn, netReturn, isLoanOnly, isPaid, isPending, isPartial, totalPayable, extraSubmitted, totalWithExtra }, idx) => (
                         <tr key={cust.id} className="group hover:bg-[#EEF7F2] transition-colors odd:bg-white even:bg-slate-50/70 break-inside-avoid">
                           {/* Sticky Col 1: # */}
                           <td className="p-2.5 print:p-1 text-center font-bold text-slate-700 border-r border-b border-slate-200 w-12 min-w-[48px] max-w-[48px] sticky left-0 z-10 bg-white group-even:bg-slate-50 group-hover:bg-[#EEF7F2] align-middle shadow-[1px_0_0_0_#e2e8f0]">
@@ -1368,6 +1378,15 @@ export const ReportManager: React.FC = () => {
                                 ? (language === 'EN' ? 'Weekly' : 'साप्ताहिक')
                                 : (language === 'EN' ? 'Monthly' : 'मासिक')}
                             </span>
+                          </td>
+
+                          {/* Col 5c: Installment Amount (हप्ता रक्कम) */}
+                          <td className="p-2.5 print:p-1 print:px-1 text-right font-black text-emerald-900 border-r border-b border-slate-200 whitespace-nowrap min-w-[110px] bg-emerald-50/15 align-middle">
+                            {isLoanOnly ? (
+                              <span className="text-slate-400 font-bold">-</span>
+                            ) : (
+                              formatCurrency(installmentAmount, language)
+                            )}
                           </td>
 
                           {/* Col 6: Total Bishi (with Int.) */}
@@ -1514,6 +1533,11 @@ export const ReportManager: React.FC = () => {
 
                         {/* Col 5b: Modality */}
                         <td className="p-2.5 print:p-1 border-r border-t-2 border-emerald-800 text-center text-slate-400 whitespace-nowrap min-w-[95px] align-middle">-</td>
+
+                        {/* Col 5c: Installment */}
+                        <td className="p-2.5 print:p-1 print:px-1 text-right border-r border-t-2 border-emerald-800 text-emerald-200 font-black whitespace-nowrap min-w-[110px] align-middle">
+                          {grandInstallment > 0 ? formatCurrency(grandInstallment, language) : '-'}
+                        </td>
 
                         {/* Col 6: Total Bishi (with Int.) */}
                         <td className="p-2.5 print:p-1 print:px-1 text-right border-r border-t-2 border-emerald-800 text-emerald-200 font-black whitespace-nowrap min-w-[160px] align-middle">

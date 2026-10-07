@@ -336,7 +336,7 @@ export const generateThakbakiReportPDF = async (
 /**
  * Generate Report PDF (Summary Report / सामान्य अहवाल)
  * True multi-page pagination:
- * - 13-Column table header is repeated on EVERY page.
+ * - 16-Column table header (including Installment / हप्ता रक्कम) is repeated on EVERY page.
  * - Rows are never sliced across page breaks.
  * - Emerald theme matching website UI.
  */
@@ -349,6 +349,7 @@ export const generateReportPDF = async (
   customNote?: string,
   lang: Language = 'MR'
 ) => {
+  let totalInstallmentSum = 0;
   let totalExp = 0;
   let totalExpectedInterestSum = 0;
   let totalExpWithInterestSum = 0;
@@ -363,6 +364,7 @@ export const generateReportPDF = async (
 
   const allLoans = StorageService.getLoans();
   const allLoanPayments = StorageService.getLoanPayments();
+  const bishiConfigs = StorageService.getBishiConfigs();
   const isLoanContext = bishiName.includes('कर्ज') || bishiName.toLowerCase().includes('loan') || title.includes('कर्ज') || title.toLowerCase().includes('loan');
 
   const rows = customers.map((cust) => {
@@ -377,6 +379,7 @@ export const generateReportPDF = async (
       ? custLoans[0] || null
       : null;
     const isLoanAccount = cust.bishiType === 'LOAN_ONLY';
+    const installment = isLoanAccount ? 0 : (cust.amount || 0);
 
     let exp = 0;
     let coll = 0;
@@ -417,7 +420,13 @@ export const generateReportPDF = async (
       totalWithExtra = 0;
       totalPayable = 0;
     } else {
-      const custColls = collections.filter((c) => c.customerId === cust.id);
+      const schemeCfg = bishiConfigs.find((cfg) => cfg.id === cust.bishiType);
+      const targetInstallments = Number(cust.totalInstallments) || Number(schemeCfg?.totalInstallments) || (cust.modality === 'W' ? 40 : 10);
+      const custColls = collections.filter((c) => {
+        if (c.customerId !== cust.id) return false;
+        if (c.periodIndex > targetInstallments && c.status !== 'PAID' && (c.collectedAmount || 0) <= 0) return false;
+        return true;
+      });
       let recordedColl = 0;
       let recordedExtra = 0;
       custColls.forEach((c) => {
@@ -433,7 +442,9 @@ export const generateReportPDF = async (
       coll = regularBishiColl + extraSubmitted;
       rem = Math.max(0, exp - regularBishiColl);
 
-      const rate = cust.interestRate || (cust.modality === 'W' ? 2.5 : 10);
+      const rate = typeof cust.interestRate === 'number' && !isNaN(cust.interestRate)
+        ? cust.interestRate
+        : (cust.modality === 'W' ? 2.5 : 10);
       expectedInterest = Math.round((exp * rate) / 100);
       totalExpWithInterest = exp + expectedInterest;
       int = Math.round((regularBishiColl * rate) / 100);
@@ -444,6 +455,7 @@ export const generateReportPDF = async (
       totalPayable = totalExpWithInterest + extraSubmitted;
     }
 
+    totalInstallmentSum += installment;
     totalExp += exp;
     totalExpectedInterestSum += expectedInterest;
     totalExpWithInterestSum += totalExpWithInterest;
@@ -457,16 +469,17 @@ export const generateReportPDF = async (
     totalReturnSum += totalWithExtra;
 
     const statusText =
-      rem === 0 && exp > 0
+      rem === 0 && (exp > 0 || coll > 0)
         ? lang === 'EN' ? 'Paid' : 'पूर्ण जमा'
         : coll > 0
         ? lang === 'EN' ? 'Partial' : 'अंशतः जमा'
         : lang === 'EN' ? 'Pending' : 'बाकी';
-    const statusBg = rem === 0 && exp > 0 ? '#dcfce7' : coll > 0 ? '#fef9c3' : '#fee2e2';
-    const statusColor = rem === 0 && exp > 0 ? '#15803d' : coll > 0 ? '#a16207' : '#be123c';
+    const statusBg = rem === 0 && (exp > 0 || coll > 0) ? '#dcfce7' : coll > 0 ? '#fef9c3' : '#fee2e2';
+    const statusColor = rem === 0 && (exp > 0 || coll > 0) ? '#15803d' : coll > 0 ? '#a16207' : '#be123c';
 
     return {
       cust,
+      installment,
       exp,
       expectedInterest,
       totalExpWithInterest,
@@ -508,39 +521,37 @@ export const generateReportPDF = async (
       .map((r) => {
         const sr = currentSrNo++;
         return `
-          <tr style="background: ${sr % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-            <td style="padding: 3.5px 3px; border: 1px solid #e2e8f0; text-align: center; font-weight: 700; color: #475569; font-size: 8px;">${sr}</td>
-            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: center; font-weight: 900; color: #0f172a; font-size: 8.5px;">${r.cust.accountNumber}</td>
-            <td style="padding: 3.5px 5px; border: 1px solid #e2e8f0; font-weight: 800; color: #1e293b; font-size: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px;">${r.cust.name}</td>
-            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: center; color: #64748b; font-size: 7.5px;">${r.cust.mobile}</td>
-            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: center; color: #475569; font-size: 7.5px;">${getBishiNameMarathi(r.cust.bishiType, lang)}</td>
-            <td style="padding: 3.5px 3px; border: 1px solid #e2e8f0; text-align: center; font-weight: 800; font-size: 7.5px; color: ${r.cust.modality === 'W' ? '#1d4ed8' : '#047857'};">${r.cust.modality === 'W' ? (lang === 'EN' ? 'Weekly' : 'साप्ताहिक') : (lang === 'EN' ? 'Monthly' : 'मासिक')}</td>
-            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 700; font-size: 8px;">
-              <div style="font-weight: 900; color: #064e3b;">${formatCurrency(r.totalExpWithInterest, lang)}</div>
-              <div style="font-size: 6.5px; color: #64748b;">(${formatCurrency(r.exp, lang)} + ${formatCurrency(r.expectedInterest, lang)})</div>
+          <tr style="background: ${sr % 2 === 0 ? '#ffffff' : '#f8fafc'}; line-height: 1.2;">
+            <td style="padding: 3.5px 2px; border: 1px solid #e2e8f0; text-align: center; font-weight: 700; color: #475569; font-size: 8px; white-space: nowrap;">${sr}</td>
+            <td style="padding: 3.5px 3px; border: 1px solid #e2e8f0; text-align: center; font-weight: 900; color: #0f172a; font-size: 8.5px; white-space: nowrap;">${r.cust.accountNumber}</td>
+            <td style="padding: 3.5px 5px; border: 1px solid #e2e8f0; font-weight: 800; color: #1e293b; font-size: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 108px;">${r.cust.name}</td>
+            <td style="padding: 3.5px 3px; border: 1px solid #e2e8f0; text-align: center; color: #64748b; font-size: 7.5px; white-space: nowrap;">${r.cust.mobile || '-'}</td>
+            <td style="padding: 3.5px 3px; border: 1px solid #e2e8f0; text-align: center; color: #475569; font-size: 7.5px; white-space: nowrap;">${getBishiNameMarathi(r.cust.bishiType, lang)}</td>
+            <td style="padding: 3.5px 3px; border: 1px solid #e2e8f0; text-align: center; font-weight: 800; font-size: 7.5px; white-space: nowrap; color: ${r.cust.modality === 'W' ? '#1d4ed8' : '#047857'};">${r.cust.modality === 'W' ? (lang === 'EN' ? 'Weekly' : 'साप्ताहिक') : (lang === 'EN' ? 'Monthly' : 'मासिक')}</td>
+            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #065f46; background: #f8fdfb; font-size: 8px; white-space: nowrap;">${r.installment > 0 ? formatCurrency(r.installment, lang) : '-'}</td>
+            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 700; font-size: 8px; white-space: nowrap;">
+              <div style="font-weight: 900; color: #064e3b; white-space: nowrap;">${formatCurrency(r.totalExpWithInterest, lang)}</div>
+              <div style="font-size: 6.5px; color: #64748b; white-space: nowrap;">(${formatCurrency(r.exp, lang)} + ${formatCurrency(r.expectedInterest, lang)})</div>
             </td>
-            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #15803d; font-size: 8px;">${formatCurrency(r.coll, lang)}</td>
-            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #be123c; font-size: 8px;">${formatCurrency(r.rem, lang)}</td>
-            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 700; color: #475569; font-size: 7.5px;">
-              ${r.int > 0 ? `<span style="color: #1d4ed8;">व्याज: ${formatCurrency(r.int, lang)}</span><br>` : ''}
-              ${r.pen > 0 ? `<span style="color: #b45309;">दंड: ${formatCurrency(r.pen, lang)}</span>` : ''}
+            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #15803d; font-size: 8px; white-space: nowrap;">${formatCurrency(r.coll, lang)}</td>
+            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #be123c; font-size: 8px; white-space: nowrap;">${formatCurrency(r.rem, lang)}</td>
+            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 700; color: #475569; font-size: 7.5px; white-space: nowrap;">
+              ${r.int > 0 ? `<span style="color: #1d4ed8; white-space: nowrap;">व्याज: ${formatCurrency(r.int, lang)}</span>` : ''}
+              ${r.int > 0 && r.pen > 0 ? '<br>' : ''}
+              ${r.pen > 0 ? `<span style="color: #b45309; white-space: nowrap;">दंड: ${formatCurrency(r.pen, lang)}</span>` : ''}
               ${r.int === 0 && r.pen === 0 ? '-' : ''}
             </td>
-            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #92400e; background: #fffbeb; font-size: 8px;">
+            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #92400e; background: #fffbeb; font-size: 8px; white-space: nowrap;">
               ${r.unpaidLoan > 0 ? formatCurrency(r.unpaidLoan, lang) : '-'}
             </td>
-            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #1e3a8a; background: #f0f7ff; font-size: 8px;">${r.totalPayable > 0 ? formatCurrency(r.totalPayable, lang) : '-'}</td>
-            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #6b21a8; background: #faf5ff; font-size: 8px;">${r.extraSubmitted > 0 ? `+${formatCurrency(r.extraSubmitted, lang)}` : '-'}</td>
-            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #166534; background: #f0fdf4; font-size: 8px;">
+            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #1e3a8a; background: #f0f7ff; font-size: 8px; white-space: nowrap;">${r.totalPayable > 0 ? formatCurrency(r.totalPayable, lang) : '-'}</td>
+            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #6b21a8; background: #faf5ff; font-size: 8px; white-space: nowrap;">${r.extraSubmitted > 0 ? `+${formatCurrency(r.extraSubmitted, lang)}` : '-'}</td>
+            <td style="padding: 3.5px 4px; border: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #166534; background: #f0fdf4; font-size: 8px; white-space: nowrap;">
               ${r.totalWithExtra > 0 ? formatCurrency(r.totalWithExtra, lang) : '-'}
-              ${r.unpaidLoan > 0 && r.totalWithExtra > 0 ? (
-                r.unpaidLoan >= r.totalWithExtra
-                  ? `<br><span style="font-size: 6.5px; color: #be123c;">-कर्ज: ${formatCurrency(r.unpaidLoan, lang)}</span>`
-                  : `<br><span style="font-size: 6.5px; color: #be123c;">-कर्ज: ${formatCurrency(r.unpaidLoan, lang)}</span>`
-              ) : ''}
+              ${r.unpaidLoan > 0 && r.totalWithExtra > 0 ? `<br><span style="font-size: 6.5px; color: #be123c; white-space: nowrap;">-कर्ज: ${formatCurrency(r.unpaidLoan, lang)}</span>` : ''}
             </td>
-            <td style="padding: 3.5px 3px; border: 1px solid #e2e8f0; text-align: center;">
-              <span style="display: inline-block; padding: 1px 3px; border-radius: 3px; font-size: 7px; font-weight: 800; background: ${r.statusBg}; color: ${r.statusColor};">
+            <td style="padding: 3.5px 3px; border: 1px solid #e2e8f0; text-align: center; white-space: nowrap;">
+              <span style="display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 7px; font-weight: 800; background: ${r.statusBg}; color: ${r.statusColor}; white-space: nowrap;">
                 ${r.statusText}
               </span>
             </td>
@@ -551,22 +562,23 @@ export const generateReportPDF = async (
 
     const tableHeaderHtml = `
       <thead style="background: #064e3b; color: #ffffff; font-weight: 900;">
-        <tr style="background: #064e3b; color: #ffffff; font-weight: 900;">
-          <th style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center; width: 25px; font-size: 8px;">#</th>
-          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: center; width: 55px; font-size: 8px;">${lang === 'EN' ? 'Acc No.' : 'खाते क्र.'}</th>
-          <th style="padding: 4.5px 5px; border: 1px solid #065f46; text-align: left; width: 110px; font-size: 8px;">${lang === 'EN' ? 'Customer Name' : 'खातेदाराचे नाव'}</th>
-          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: center; width: 75px; font-size: 8px;">${lang === 'EN' ? 'Mobile' : 'मोबाईल'}</th>
-          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: center; width: 60px; font-size: 8px;">${lang === 'EN' ? 'Scheme' : 'योजना'}</th>
-          <th style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center; width: 50px; font-size: 8px;">${lang === 'EN' ? 'Frequency' : 'पद्धत'}</th>
-          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 90px; font-size: 8px;">${lang === 'EN' ? 'Total (with Int) (₹)' : 'एकूण भिशी (व्याजासह) (₹)'}</th>
-          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 70px; font-size: 8px;">${lang === 'EN' ? 'Collected (₹)' : 'जमा (₹)'}</th>
-          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 70px; font-size: 8px;">${lang === 'EN' ? 'Remaining (₹)' : 'बाकी (₹)'}</th>
-          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 70px; font-size: 8px;">${lang === 'EN' ? 'Int/Pen (₹)' : 'व्याज/दंड (₹)'}</th>
-          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 70px; background: #043628; font-size: 8px;">${lang === 'EN' ? 'Loan (₹)' : 'कर्ज (₹)'}</th>
-          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 70px; background: #043628; font-size: 8px;">${lang === 'EN' ? 'Total Payable (₹)' : 'एकूण देय (₹)'}</th>
-          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 65px; background: #043628; font-size: 8px;">${lang === 'EN' ? 'Extra (₹)' : 'जादा जमा (₹)'}</th>
-          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 75px; background: #043628; font-size: 8px;">${lang === 'EN' ? 'Total Return (₹)' : 'एकूण परतावा (₹)'}</th>
-          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: center; width: 60px; font-size: 8px;">${lang === 'EN' ? 'Status' : 'स्थिती'}</th>
+        <tr style="background: #064e3b; color: #ffffff; font-weight: 900; line-height: 1.2;">
+          <th style="padding: 4.5px 2px; border: 1px solid #065f46; text-align: center; width: 22px; font-size: 8px; white-space: nowrap;">#</th>
+          <th style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center; width: 42px; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Acc No.' : 'खाते क्र.'}</th>
+          <th style="padding: 4.5px 5px; border: 1px solid #065f46; text-align: left; width: 108px; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Customer Name' : 'खातेदाराचे नाव'}</th>
+          <th style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center; width: 66px; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Mobile' : 'मोबाईल'}</th>
+          <th style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center; width: 70px; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Scheme' : 'भिशी'}</th>
+          <th style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center; width: 46px; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Modality' : 'पद्धत'}</th>
+          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 58px; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Installment (₹)' : 'हप्ता रक्कम (₹)'}</th>
+          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 92px; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Total Bishi (₹)' : 'एकूण भिशी (व्याजासह) (₹)'}</th>
+          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 62px; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Collected (₹)' : 'जमा (₹)'}</th>
+          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 62px; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Remaining (₹)' : 'बाकी (₹)'}</th>
+          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 68px; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Int/Pen (₹)' : 'व्याज/दंड (₹)'}</th>
+          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 60px; background: #043628; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Loan (₹)' : 'कर्ज (₹)'}</th>
+          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 64px; background: #043628; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Payable (₹)' : 'एकूण देय (₹)'}</th>
+          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 58px; background: #043628; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Extra (₹)' : 'जादा जमा (₹)'}</th>
+          <th style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; width: 74px; background: #043628; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Return (₹)' : 'एकूण परतावा (₹)'}</th>
+          <th style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center; width: 52px; font-size: 8px; white-space: nowrap;">${lang === 'EN' ? 'Status' : 'स्थिती'}</th>
         </tr>
       </thead>
     `;
@@ -624,25 +636,26 @@ export const generateReportPDF = async (
     const tableFooterHtml = isLastPage
       ? `
         <tfoot>
-          <tr style="background: #064e3b; color: #ffffff; font-weight: 900; font-size: 8px;">
-            <td style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center;">-</td>
-            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: center;">${lang === 'EN' ? 'TOTAL' : 'एकूण'}</td>
-            <td style="padding: 4.5px 5px; border: 1px solid #065f46;">${customers.length} ${lang === 'EN' ? 'Accounts' : 'खातेदार'}</td>
-            <td style="padding: 4.5px 4px; border: 1px solid #065f46;">-</td>
-            <td style="padding: 4.5px 4px; border: 1px solid #065f46;">-</td>
-            <td style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center;">-</td>
-            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right;">
-              <div>${formatCurrency(totalExpWithInterestSum, lang)}</div>
-              <div style="font-size: 6.5px; color: #a7f3d0;">(${formatCurrency(totalExp, lang)} + ${formatCurrency(totalExpectedInterestSum, lang)})</div>
+          <tr style="background: #064e3b; color: #ffffff; font-weight: 900; font-size: 8px; line-height: 1.2;">
+            <td style="padding: 4.5px 2px; border: 1px solid #065f46; text-align: center; white-space: nowrap;">-</td>
+            <td style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center; white-space: nowrap;">${lang === 'EN' ? 'TOTAL' : 'एकूण'}</td>
+            <td style="padding: 4.5px 5px; border: 1px solid #065f46; white-space: nowrap;">${customers.length} ${lang === 'EN' ? 'Accounts' : 'खातेदार'}</td>
+            <td style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center; white-space: nowrap;">-</td>
+            <td style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center; white-space: nowrap;">-</td>
+            <td style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center; white-space: nowrap;">-</td>
+            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; color: #a7f3d0; white-space: nowrap;">${totalInstallmentSum > 0 ? formatCurrency(totalInstallmentSum, lang) : '-'}</td>
+            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; white-space: nowrap;">
+              <div style="white-space: nowrap;">${formatCurrency(totalExpWithInterestSum, lang)}</div>
+              <div style="font-size: 6.5px; color: #a7f3d0; white-space: nowrap;">(${formatCurrency(totalExp, lang)} + ${formatCurrency(totalExpectedInterestSum, lang)})</div>
             </td>
-            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right;">${formatCurrency(totalColl, lang)}</td>
-            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; color: #fecdd3;">${formatCurrency(totalRem, lang)}</td>
-            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; color: #fed7aa;">${formatCurrency(totalInt + totalPen, lang)}</td>
-            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; color: #fef08a;">${totalUnpaidLoanSum > 0 ? formatCurrency(totalUnpaidLoanSum, lang) : '-'}</td>
-            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; color: #dbeafe;">${formatCurrency(totalPayableSum, lang)}</td>
-            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; color: #f3e8ff;">${formatCurrency(totalExtraSum, lang)}</td>
-            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; color: #bbf7d0;">${formatCurrency(totalReturnSum, lang)}</td>
-            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: center;">-</td>
+            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; white-space: nowrap;">${formatCurrency(totalColl, lang)}</td>
+            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; color: #fecdd3; white-space: nowrap;">${formatCurrency(totalRem, lang)}</td>
+            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; color: #fed7aa; white-space: nowrap;">${formatCurrency(totalInt + totalPen, lang)}</td>
+            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; color: #fef08a; white-space: nowrap;">${totalUnpaidLoanSum > 0 ? formatCurrency(totalUnpaidLoanSum, lang) : '-'}</td>
+            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; color: #dbeafe; white-space: nowrap;">${formatCurrency(totalPayableSum, lang)}</td>
+            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; color: #f3e8ff; white-space: nowrap;">${formatCurrency(totalExtraSum, lang)}</td>
+            <td style="padding: 4.5px 4px; border: 1px solid #065f46; text-align: right; color: #bbf7d0; white-space: nowrap;">${formatCurrency(totalReturnSum, lang)}</td>
+            <td style="padding: 4.5px 3px; border: 1px solid #065f46; text-align: center; white-space: nowrap;">-</td>
           </tr>
         </tfoot>
       `
