@@ -37,16 +37,22 @@ const ProtectedLayout: React.FC = () => {
   // Automatic Daily Website-Opening & 11:00 PM Backup Runner (Local + Google Drive Cloud)
   useEffect(() => {
     if (!currentAdmin) return;
+    let isMounted = true;
+    let isChecking = false;
 
     const performScheduledCheck = async () => {
+      if (!isMounted || isChecking) return;
+      isChecking = true;
       try {
         // 1. Sync latest cloud backup metadata from Firestore first (so cloud runs like 11 PM are recognized)
         await AutoBackupService.fetchCloudBackupMetadata().catch((err) => {
           console.warn('[App] fetchCloudBackupMetadata error:', err);
         });
+        if (!isMounted) return;
 
         // 2. Check and run Opening backup of the day (security backup when site is opened)
         const ranFirstOpen = await AutoBackupService.checkAndRunFirstOpenBackup((snapshot, filename) => {
+          if (!isMounted) return;
           showToast(
             language === 'EN'
               ? `Daily website-opening backup saved: ${filename}`
@@ -54,10 +60,12 @@ const ProtectedLayout: React.FC = () => {
             'success'
           );
         });
+        if (!isMounted) return;
 
         // 3. Run scheduled 11 PM check if first-open didn't just run
         if (!ranFirstOpen) {
           AutoBackupService.checkAndRunAutoBackup((snapshot, filename) => {
+            if (!isMounted) return;
             showToast(
               language === 'EN'
                 ? `Daily 11:00 PM backup saved: ${filename}`
@@ -68,6 +76,8 @@ const ProtectedLayout: React.FC = () => {
         }
       } catch (err) {
         console.error('[App] performScheduledCheck failed:', err);
+      } finally {
+        isChecking = false;
       }
     };
 
@@ -79,6 +89,7 @@ const ProtectedLayout: React.FC = () => {
     const intervalId = setInterval(performScheduledCheck, 60 * 1000);
 
     return () => {
+      isMounted = false;
       clearTimeout(timeoutId);
       clearInterval(intervalId);
     };

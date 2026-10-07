@@ -582,14 +582,22 @@ export const AutoBackupService = {
 
   // Pulls cloud backup metadata directly from Firestore
   fetchCloudBackupMetadata: async (): Promise<boolean> => {
+    // Add a global lock to prevent overlapping Firestore database metadata calls
+    if ((window as any)._isFetchingBackupMetadata) return false;
+    (window as any)._isFetchingBackupMetadata = true;
+
     try {
       const statsRef = doc(db, 'stats', 'summary');
       const snap = await getDoc(statsRef);
       if (snap.exists()) {
-        return AutoBackupService.syncCloudBackup(snap.data());
+        const result = AutoBackupService.syncCloudBackup(snap.data());
+        (window as any)._isFetchingBackupMetadata = false;
+        return result;
       }
     } catch (e) {
       console.warn('[Backup] fetchCloudBackupMetadata notice:', e);
+    } finally {
+      (window as any)._isFetchingBackupMetadata = false;
     }
     return false;
   },
